@@ -1,0 +1,57 @@
+function convert_format(sinfo, inpath, outpath) 
+%
+%  Converts from GE format to Analyze format
+%
+%  sinfo is the subject info structure 
+%
+%
+
+nsub = length(sinfo);
+
+if nargin < 2
+  inpath = './';
+  outpath = './';
+elseif nargin < 3
+  outpath = './';
+end
+
+for isub = 1:nsub
+  
+  s = sinfo(isub);
+  subj_root = s.id;
+  
+  % specify root output directory and make sure it exists
+  outroot = fullfile(outpath, subj_root);
+
+  if ~exist(outroot,'dir')
+    disp(sprintf('Creating directory: %s', outroot))
+    unix(['mkdir ' outroot]);
+  end
+
+
+  for iexam = 1:s.nexams
+
+    exam_root = sprintf('%05d', s.exam_nums(iexam));
+    datapath = fullfile(inpath, subj_root, exam_root);
+    
+    series=s.series_mappings{iexam};
+    nseries= size(series,1);
+
+    for mapping_idx = 1:nseries
+      indir = fullfile(datapath, char(series(mapping_idx,1)));
+      outdir = fullfile(outroot, char(series(mapping_idx,2)));
+      outstub = fullfile(outdir, [subj_root '_' char(series(mapping_idx,1))]);
+
+      disp(sprintf('Source: %s; Destination: %s', indir, outdir))
+      
+      % Check to make sure that output directory exists
+      if ~exist(outdir,'dir')
+	unix(['mkdir ' outdir]);
+      end
+      
+      GE_convert(indir,outstub);
+    end
+  end
+
+
+end

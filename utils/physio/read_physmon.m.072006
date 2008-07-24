@@ -1,0 +1,195 @@
+function [ri, p] = read_physmon(fname,p,data)
+% [runinfo, params] = read_physmon(fname,params,data)
+%
+% Reads physiological data monitoring file.
+% Note, these files do not contain information about the sampling rate, so this
+% has to be specified by the user.
+% The number of columns is equal to the number of channels, though the channel
+% IDs are not specified.  
+%
+% Specific channel assignments are assumed:
+%    1:  Cardiac
+%    2:  Respiration
+%    3:  Slice timing (receiver unblank)
+%    4:  Button presses
+%    5:  Event markers
+%
+% Channel information should really be more dynamic and user-specifiable, but
+% I'll deal with this when the need arises.
+%
+% If data has already been loaded once, it can be passed into the function
+% without having to be loaded again.
+%
+% Note:  The data file can have multiple runs
+
+% 1/10/02 PJ
+% 11/10/02 PJ Accommodated files without behavioral or stim event data
+% 05/27/04 PJ Accommodating different polarity of event and button press
+%             channels
+% 08/31/04 PJ Added optional removal of DC offset from event channels. Added
+%             handling of negative key press events, including separate trigger
+%             threshold
+% 09/02/04 PJ Added option of removing events exceeding a threshold run duration
+
+if nargin < 2
+  p = init_physmon_params;
+end
+
+if p.bipolar
+  error('Bipolar event marker option currently unsupported')
+end
+
+if p.loaddata | nargin < 3
+  disp(sprintf('Loading data from file: %s', fname));
+  data = load(fname);
+  disp('Finished loading data')
+end
+
+% Get offset in file to start of first sequence
+
+if ~isempty(p.event_chan)
+  if p.is_event_trig_pos
+    start_samp = min(find(data(:,p.event_chan) > p.pos_trig_thresh));
+  else
+    start_samp = min(find(data(:,p.event_chan) < p.neg_trig_thresh));
+  end
+else
+  if p.is_event_trig_pos
+    start_samp = min(find(data(:,p.slice_chan) > p.pos_trig_thresh));
+  else
+    start_samp = min(find(data(:,p.slice_chan) < p.neg_trig_thresh));
+  end
+end
+
+% Eliminate earlier samps
+data(1:start_samp-2,:) = [];
+
+if p.remove_dc
+  data(:,p.event_chan) = detrend(data(:,p.event_chan),0);
+end
+
+% Find key border onsets (pos/neg event sequences) and deviant marker offsets
+% (if bipolar)
+pos_idx = find(diff(data(:,p.event_chan) > p.pos_trig_thresh) == 1);
+
+% Find deviant marker onsets and key border offsets (if bipolar)
+neg_idx = find(diff(data(:,p.event_chan) < p.neg_trig_thresh) == 1);
+
+% Get all slice timing event onsets
+slice_idx = find(diff(data(:,p.slice_chan) > p.pos_trig_thresh) == 1);
+
+% Get all key press event onsets
+key_idx = [];
+if ~isempty(p.button_chan)
+  if p.remove_dc
+    data(:,p.button_chan) = detrend(data(:,p.button_chan),0);
+  end
+  if p.is_button_trig_pos
+    key_idx = find(diff(data(:, p.button_chan) > p.pos_trig_thresh) == 1);
+  else
+    key_idx = find(diff(data(:,p.button_chan) < p.neg_trig_thresh_key) == 1);
+  end
+end
+
+% Get all cardiac event onsets
+cardiac_idx = [];
+if ~isempty(p.cardiac_chan)
+  cardiac_idx = find(diff(data(:,p.cardiac_chan) < p.neg_trig_thresh) == 1);
+end
+
+% Determine the number of runs and their starting locations in the data matrix
+if ~isempty(p.event_chan)
+  start_idx = p.epi_start_to_first_stim - p.event_slop;
+  stop_idx = p.epi_start_to_first_stim + p.event_slop;
+  if p.is_event_trig_pos
+    run_offset_idxs = ...
+	pos_idx(find(ismember(diff(pos_idx),start_idx:stop_idx)));
+  else
+    run_offset_idxs = ...
+	neg_idx(find(ismember(diff(neg_idx),start_idx:stop_idx)));
+  end
+else
+  run_offset_idxs = [1 slice_idx(find(diff(slice_idx) > ...
+	p.slice_diff_thresh)+1)'];
+end
+
+nrun = length(run_offset_idxs);
+run_offset_idxs(end+1) = inf;
+for irun = 1:nrun
+  % Find all slice onsets in this run
+  curr_slice_idx = find((slice_idx >= run_offset_idxs(irun)) & (slice_idx < ...
+      run_offset_idxs(irun+1)));
+  
+  % Eliminate the dummy shots
+  num_dummy_slices = p.nslice_per_vol * p.ndummy_vol;
+  dummy_s = p.ndummy_vol * p.TR;
+  curr_slice_idx(1:num_dummy_slices) = [];
+  
+  ri(irun).slice_onsets = (slice_idx(curr_slice_idx)-run_offset_idxs(irun))/p.Fs - dummy_s;
+  
+  % Get indices of all positive and negative event markers for this run
+  curr_pos_idx = find((pos_idx >= run_offset_idxs(irun)) & (pos_idx < run_offset_idxs(irun+1)));
+  curr_neg_idx = find((neg_idx >= run_offset_idxs(irun)) & (neg_idx < run_offset_idxs(irun+1)));
+  
+  if p.bipolar
+    %
+    % NOTE: The bipolar part has not been debugged
+    %
+    
+    % For each positive and negative marker pair (single event), determine which
+    % came first
+  
+    % if value of idx_diff is negative, positive pulse came first
+    idx_diff = pos_idx(curr_pos_idx) - neg_idx(curr_neg_idx);		
+    ri(irun).pos_events = pos_idx(curr_pos_idx(find(sign(idx_diff) == -1)));
+    ri(irun).neg_events = neg_idx(curr_neg_idx(find(sign(idx_diff) == 1)));
+  else
+    ri(irun).pos_events = (pos_idx(curr_pos_idx)-run_offset_idxs(irun))/p.Fs - dummy_s;
+    ri(irun).neg_events = (neg_idx(curr_neg_idx)-run_offset_idxs(irun))/p.Fs - dummy_s;
+  end
+
+  %
+  % Extract the key press times
+  %
+  curr_key_idx = find((key_idx >= run_offset_idxs(irun)) & (key_idx < ...
+      run_offset_idxs(irun+1)));
+  ri(irun).key_events = (key_idx(curr_key_idx)-run_offset_idxs(irun))/p.Fs - dummy_s;
+  
+  % Check to see if we should discard events that occur after some time from
+  % run onsets
+  if ~isempty(p.max_run_dur)
+    ri(irun).pos_events(ri(irun).pos_events > p.max_run_dur) = [];
+    ri(irun).neg_events(ri(irun).neg_events > p.max_run_dur) = [];
+    ri(irun).key_events(ri(irun).key_events > p.max_run_dur) = [];
+  end
+  
+  %
+  % Extract the onsets of heart beat markers. Negative going pulses
+  %
+  curr_cardiac_idx = find((cardiac_idx >= run_offset_idxs(irun)) & ...
+      (cardiac_idx < run_offset_idxs(irun+1)));
+  ri(irun).cardiac = (cardiac_idx(curr_cardiac_idx)-run_offset_idxs(irun))/p.Fs - dummy_s;
+  
+  % Remove cardiac markers occuring prior to start of actual image acquisition
+  ri(irun).cardiac(find(ri(irun).cardiac < 0)) = [];
+  
+  run_start_samp = run_offset_idxs(irun) + p.Fs*dummy_s;
+  run_stop_samp = slice_idx(curr_slice_idx(end));
+
+  % Extract the respiratory data
+  ri(irun).respir = data(run_start_samp:run_stop_samp,p.respir_chan);
+  
+  % Filter to get rid of higher frequency cardiac info
+  if p.low_pass_cutoff
+    [b,a] = butter(5,p.low_pass_cutoff/p.Fs);
+    ri(irun).respir = filtfilt(b,a,ri(irun).respir);
+  end
+  
+end % for irun=
+
+if p.savedata
+  [outpath, name] = fileparts(fname);
+  outfname = fullfile(outpath, sprintf('%s%s.mat',name,p.outsuffix));
+  fprintf('Saving data to %s ...\n', outfname);
+  save(outfname,'ri')
+end

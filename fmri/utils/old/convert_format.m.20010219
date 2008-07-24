@@ -1,0 +1,122 @@
+function convert_format(sinfo, inpath, outpath, scan_offset) 
+%  convert_format(sinfo, inpath, outpath, scan_offset);
+%
+%  Converts from GE format to Analyze format
+%
+%  sinfo is the subject info structure.  See one of the get_*_sinfo.m files for format.
+%
+
+% 06/28/00 PJ Modified to accommodate new GE_convert calling structure.
+% Incompatible with xcult and schubert scripts
+%
+% 02/12/01 PJ -- implemented volume tossing during conversion step.  The
+% "starting volume" for each run will be incremented by the number of volumes
+% specified in scan_offset (default = 0) 
+%
+nsub = length(sinfo);
+
+if nargin < 2
+  inpath = './';
+  outpath = './';
+elseif nargin < 3
+  outpath = './';
+end
+
+if nargin < 4
+  scan_offset = 0;
+end
+
+if isempty(outpath)
+  outpath = './';
+end
+
+if isempty(inpath)
+  inpath = './';
+end
+
+for isub = 1:nsub
+  
+  s = sinfo(isub);
+  subj_root = s.id;
+  
+  % specify root output directory and make sure it exists
+  outroot = fullfile(outpath, subj_root);
+
+  if ~exist(outroot,'dir')
+    disp(sprintf('Creating directory: %s', outroot))
+    unix(['mkdir ' outroot]);
+  end
+
+
+  for iexam = 1:s.nexams
+
+    exam_root = sprintf('%05d', s.exam_nums(iexam));
+    datapath = fullfile(inpath, subj_root, exam_root);
+    
+    series=s.series_mappings{iexam};
+    nseries= size(series,1);
+
+    for mapping_idx = 1:nseries
+      indir = fullfile(datapath, char(series(mapping_idx,1)));
+
+      switch char(series(mapping_idx,2))
+	case {'epi','epi1','epi2','epi3','epi4','epi_12','epi_34'}
+	  epidir = fullfile(outroot, char(series(mapping_idx,2)));
+
+	  % Check to make sure that output directory exists
+	  if ~exist(epidir,'dir')
+	    disp(sprintf('Creating directory: %s', epidir))
+	    unix(['mkdir ' epidir]);
+	  end
+	
+	  % Check for number of EPI runs
+	  nruns = length(s.cond_order);
+	  
+	  if nruns > 1
+	    for irun = 1:nruns
+	    
+	      outdir = fullfile(epidir, sprintf('run%d', irun));
+
+	      % Check to make sure that output directory exists
+	      if ~exist(outdir,'dir')
+		disp(sprintf('Creating directory: %s', outdir))
+		unix(['mkdir ' outdir]);
+	      end
+	      
+	      nvol = s.nvol(irun);
+	      run_offset = sum(s.nvol(1:irun))-s.nvol(irun);
+	      start_num = run_offset+2+scan_offset; % 2 = increment 1 for
+                                                    % template, 1 to get to
+                                                    % first image
+
+	      outstub = fullfile(outdir, sprintf('%s_%s_r%d',subj_root, char(series(mapping_idx,1)), irun));
+	      GE_convertADW(indir,outstub, start_num, nvol-scan_offset);
+	    end
+	  else 
+	    outdir = epidir;
+	    outstub = fullfile(outdir, [subj_root '_' ...
+		  char(series(mapping_idx,1))]);
+	    disp(sprintf('Source: %s; Destination: %s', indir, outdir))
+	    start_num=2;
+	    nvol = sum(s.nvol);
+	    GE_convertADW(indir,outstub, start_num, nvol-scan_offset);
+	  end  % if nruns > 1
+	    
+%	case {'hires','coplanar', 'coplanar2'}
+        otherwise
+	  outdir = fullfile(outroot, char(series(mapping_idx,2)));
+
+	  outstub = fullfile(outdir, [subj_root '_' char(series(mapping_idx,1))]);
+	  disp(sprintf('Source: %s; Destination: %s', indir, outdir))
+      
+	  % Check to make sure that output directory exists
+	  if ~exist(outdir,'dir')
+	    disp(sprintf('Creating directory: %s', outdir))
+	    unix(['mkdir ' outdir]);
+	  end
+      
+	  GE_convertVolume(indir,1,outstub);
+      end % switch
+    end  % for mapping_idx = 1:nseries
+  end % for iexam = 1:s.nexams
+end % for isub = 1:nsub
