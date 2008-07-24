@@ -1,0 +1,64 @@
+README.mysql_functions
+
+06/26/05 Petr Janata
+This directory contains utility functions for interacting with the
+lab's mysql database. Currently, the project is under development and
+the scripts are subject to some change.  Specifically, a new protocol
+is being implemented in which a connection to the database is only
+established once.  All functions that then query the database should
+use the connection ID that is returned when the connection is established.
+
+#
+# UTILITY FUNCTIONS
+#
+
+mysql.m -- interface to mysql Mex functions
+mysql_make_conn.m -- establish a connection with a desired connection ID or 0 by default
+mysql_unique_fld_vals.m -- returns a list of unique field values for a specific field in a specific table
+extract_generic.m -- extracts data which is associated with a specific forfrom a response table
+read_audio_stim.m
+
+#
+# DEFINITIONS FILES AND TEMPLATES
+#
+enum_defs.m
+set_form_col_const.m -- dynamically maps field names to a structure of constants - useful for indexing
+set_stim_col_const.m -- dynamically maps field names from a stimulus table to a structure of constants
+resp_table_defs.m
+
+master_genre_map.m -- maps variants of genre names to a single genre name
+
+mysql_template.m
+mysql_func_template.m
+
+#
+# FORM-SPECIFIC FUNCTIONS
+#
+
+mysql_get_sinfo.m
+extract_bkgnd.m
+extract_panas.m
+extract_resp_table.m  -- Extracts a complete response table with a specific name
+mysql_get_expinfo.m
+mysql_group_attribs.m
+mysql_get_stim_attributes.m
+mysql_get_responses.m
+
+repack_formdata.m -- Creates a structure in which entries in response
+                     tables are organized into analyses. Analyses are
+                     specified by lists of forms. Numeric and text
+                     data are broken out into separate sub-structures.
+
+#
+# SPECIALIZED SCRIPTS
+#
+
+# ANALYSIS SCRIPTS
+mysql_demographics.m
+analyze_panas.m
+analyze_background.m
+
+# STIMULUS MAINTENANCE 
+mysql_integrate_playlist_txt.m
+mysql_cp_playlist2attrib.m
+genre_cleaner.m

@@ -1,0 +1,36 @@
+function result_st = ensemble_concat_datastruct(data_st,params)
+% result_st = ensemble_concat_datastruct(data_st,params);
+%
+% Concatenates a cell array of data structures in data_st and returns a single
+% data structure.  The function checks to make sure that the variables and
+% their orders match exactly across the different data structures.
+
+% 05/08/07 Petr Janata
+
+result_st = ensemble_init_data_struct;
+
+nstruct = length(data_st);
+
+% Copy the variables fromt the first data struct
+vars = data_st{1}.vars;
+nvars = length(vars);
+
+result_st.vars = vars;
+result_st.data = data_st{1}.data;
+
+if nstruct < 2
+  return
+end
+
+for istruct = 2:nstruct
+  for ivar = 1:nvars
+    if ~strcmp(data_st{istruct}.vars{ivar},vars{ivar})
+      fprintf('%s: variable mismatch: Found %s, expected %s\n', mfilename, ...
+	  data_st{istruct}.vars{ivar}, vars{ivar});
+      result_set = ensemble_init_data_struct;
+      return
+    else
+      result_st.data{ivar} = [result_st.data{ivar}; data_st{istruct}.data{ivar}];
+    end
+  end % for ivar
+end % for istruct

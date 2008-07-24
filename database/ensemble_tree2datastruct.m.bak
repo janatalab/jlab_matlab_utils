@@ -1,0 +1,75 @@
+function newstruct = ensemble_tree2datastruct(generic_struct,params)
+%
+%
+% converts a generic data structure to conform to the ensemble data
+% structure
+%
+% params struct isn't used yet. This might be useful for specifying
+% the type and names fields of the data struct but 
+%
+% 15, Mar. 2007 - Stefan Tomic
+
+fnames = fieldnames(generic_struct);
+
+
+newstruct = ensemble_init_data_struct;
+
+newstruct.vars = fnames';
+
+for ifld = 1:length(fnames)
+ 
+  fieldType = '';
+  struct_idx = 1;
+  
+  %determine the type of data for this field based on the first value
+  dataCell = generic_struct(1).(fnames{ifld});
+  if(isnumeric(dataCell))
+    fieldType = 'numeric';
+  elseif(isstruct(dataCell))
+    fieldType = 'struct';
+  elseif(ischar(dataCell))
+    fieldType = 'char';
+  elseif(iscell(dataCell))
+    fieldType = 'cell';
+  end
+  
+  %default the fieldType to cell if no data was found
+  if(isempty(fieldType))
+    fieldType = 'cell';
+  end
+  
+  for struct_idx = 1:length(generic_struct)
+  
+    dataCell = generic_struct(struct_idx).(fnames{ifld});
+
+    %first see if the data is empty
+    if(isempty(dataCell) | (iscell(dataCell) & (length(dataCell) == 1) & isempty(dataCell{:})))
+      
+      switch fieldType
+	
+       case 'numeric'
+	assignData = NaN;
+       case 'struct'
+	assignData = {ensemble_init_data_struct};
+       case 'char'
+	assignData = {''};
+       case 'cell'
+	assignData = {[]};
+      end
+	
+      
+    elseif(isstruct(dataCell))
+      %if the data is a struct, convert this into an ensemble data
+      %struct by a recursive call
+      assignData = {ensemble_tree2datastruct(dataCell)};
+    elseif(~isnumeric(dataCell))
+      assignData = {dataCell};
+    else
+      %the data is numeric
+      assignData = dataCell;
+    end
+    
+    newstruct.data{1,ifld}(struct_idx,1) = assignData; 
+  end
+
+end

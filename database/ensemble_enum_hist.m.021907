@@ -1,0 +1,484 @@
+function an_st = ensemble_enum_hist(data_st,params)
+% outdata = ensemble_enum_hist(data_st,params);
+%
+% Calculates and plots the distributions of the response tallies in the
+% different categories of an enum. The function will operate on all qids that
+% it finds in the input data that are of type enum
+%
+% Note: Currently, the script will not treat the same question appearing on
+% different forms as a different instance of the question. If you don't want
+% answers to the same question on different forms combined, you must filter the
+% data to only process forms with unique question IDs.  This behavior may
+% change in future versions.
+
+% 01/28/07 Petr Janata - adapted from quest_resp_dist.m and an earlier start on
+% ensemble_enum_hist which was much more oriented towards returning function
+% handles to sub-functions that performed the various steps.
+
+an_st = {};
+na = 0;
+
+try do_plot = params.display.figs.plot; catch do_plot = 1; end
+
+% Apply any specified filtering to the input data
+if isfield(params,'filt')
+  fprintf('Applying filtering criteria\n')
+  data_st = ensemble_filter(data_st, params.filt);
+end
+
+% Set the column constants
+incol = set_var_col_const(data_st.vars);
+
+%
+% Gather metadata on the questions
+%
+
+% Figure out whether questions are referred to by their qids or composite qids
+if isfield(incol,'question_id')
+  qids = unique(data_st.data{incol.question_id});
+elseif isfield(incol,'compqid')
+  qids = fix(unique(data_st.data{incol.compqid}));
+else
+  fprintf('Did not find question_id column in the input data\n');
+  return
+end
+
+qinfo = mysql_extract_metadata('table','question','question_id',qids);
+
+% Generate the compqid for each row in the data if necessary
+compqid_vect = [];
+if isfield(incol,'compqid')
+  compqid_vect = data_st.data{incol.compqid};
+elseif isfield(incol,'subquestion')
+  compqid_vect = make_compqid(data_st.data{incol.question_id}, ...
+      data_st.data{incol.subquestion});
+end
+
+% Figure out which of the questions in the qinfo structure are enums
+qinfo_enum_mask = ismember({qinfo.type},'enum');
+qinfo_enum_idxs = find(qinfo_enum_mask);
+nqid = length(qinfo_enum_idxs);
+
+% Figure out which of the questions are bitmasks that allow for selection of
+% multiple values (checkbox as opposed to radiogroup)
+qinfo_bitmask_mask = ismember({qinfo.html_field_type},'checkbox');
+
+qinfo_notbitmask_mask = qinfo_enum_mask & ~qinfo_bitmask_mask;
+
+% Create masks for all of the response data
+enum_compqids = [qinfo(qinfo_enum_mask).compqid];
+enum_mask = ismember(compqid_vect, enum_compqids);
+  
+notbitmask_compqids = [qinfo(qinfo_notbitmask_mask).compqid];
+notbitmask_mask = ismember(compqid_vect, notbitmask_compqids);
+
+% Copy all of the enum data to the data_vect
+data_vect = zeros(size(compqid_vect));
+data_vect(enum_mask) = data_st.data{incol.response_enum}(enum_mask);
+
+% Convert the data for all of the non-bitmask enums to category indices
+data_vect(notbitmask_mask) = enum2data(data_vect(notbitmask_mask));
+
+% Precalculate the subject masks
+subids = unique(data_st.data{incol.subject_id});
+nsub = length(subids);
+sub_mask_mtx = false(size(data_vect,1),nsub);
+
+fprintf('Calculating subject masks for %d subjects\n', nsub);
+for isub = 1:nsub
+  fprintf('.')
+  sub_mask_mtx(:,isub) = ismember(data_st.data{incol.subject_id}, subids(isub));
+end
+fprintf('\n');
+
+%
+% Set stuff up for writing to a file, if that's what we're going to do.
+%
+try print_tables = params.display.tables.print; catch print_tables=1; end
+try write2file = params.display.tables.write2file; catch write2file = 0; end
+
+  if print_tables
+  
+  if write2file
+    fid = fopen(params.display.tables.fname,'wt');
+    if fid == -1
+      error(sprintf('Problem opening logfile: %s\n',params.display.tables.fname))
+    end
+    fprintf('Writing tables to file: %s\n', params.display.tables.fname);
+  else
+    fid = 1;
+  end
+end
+
+%
+% Loop over all of the unique question/subquestion combinations or compqids
+%
+
+for iqid = 1:nqid
+  curr_qid_idx = qinfo_enum_idxs(iqid);
+  
+  % Copy the question info over to the display parameter structure in case we
+  % are going to display some of the data
+  params.display.qinfo = qinfo(curr_qid_idx);
+
+  % Make sure this question is an enum
+  if ~enum_mask(iqid)
+    continue
+  end
+
+  % Get the enum values
+  enum_values = qinfo(curr_qid_idx).enum_values;
+  ncat = length(enum_values);
+  
+  % Make a mask for the data corresponding to this question
+  qid_mask = ismember(compqid_vect,qinfo(curr_qid_idx).compqid);
+  
+  %
+  % Perform analyses that retain subject identity
+  %
+  na = na+1;
+  
+  an_st{na} = init_analysis_struct;
+  an_st{na}.type = 'enum_category_by_subject';
+  an_vars = {'subject_id','count','prop','nresp'};
+  an_st{na}.vars = an_vars;
+  an_cols = set_var_col_const(an_vars);
+  by_sub_an_cols = an_cols;
+  by_sub_an_idx = na;
+  nr = 0;  % set the tally of reports for this analysis to zero
+  
+  % Initialize output variables
+  for ia = 1:length(an_vars)
+    switch an_vars{ia}
+      case {'count','prop'}
+	an_st{na}.data{ia} = zeros(nsub,ncat);
+      case {'subject_id'}
+	an_st{na}.data{ia} = subids;
+      case {'nresp'}
+	an_st{na}.data{ia} = zeros(nsub,1);
+    end
+  end
+  
+  % Prepare an output data matrix that tallies the number of times each
+  % category was selected by a subject
+  
+  for isub = 1:nsub
+    sub_mask = sub_mask_mtx(:,isub);
+
+    % Tally the number of responses the subject made to this question
+    nresp = sum(sub_mask&qid_mask);
+    an_st{na}.data{an_cols.nresp}(isub) = nresp;
+    
+    if ~nresp
+      continue
+    end
+    
+    switch qinfo(curr_qid_idx).html_field_type
+      case {'radiogroup','menu'}
+	an_st{na}.data{an_cols.count}(isub,:) = hist(data_vect(sub_mask&qid_mask),1:ncat)';
+      otherwise
+	bitmask = data2bitmask(data_vect(sub_mask&qid_mask),ncat);
+	if size(bitmask,1) > 1
+	  sumvect = sum(bitmask);
+	else
+	  sumvect = bitmask;
+	end
+	an_st{na}.data{an_cols.count}(isub,:) = sumvect;
+    end
+  end % for isub
+
+  nresp_mtx = repmat(an_st{na}.data{an_cols.nresp},1,ncat);
+  nresp_mtx(nresp_mtx == 0) = NaN;
+  an_st{na}.data{an_cols.prop} = an_st{na}.data{an_cols.count} ./ nresp_mtx;
+
+  %
+  % Perform any reports of the data in which reporting is done on a per-subject basis
+  %
+  nr=nr+1;
+  an_st{na}.report{nr}.type = 'distrib_by_cat';
+  an_st{na}.report{nr}.figfun = @plot_distrib_by_cat;
+  if do_plot
+    an_st{na}.report{nr}.figs = ...
+	plot_distrib_by_cat(an_st{na}.data{an_cols.prop}, params.display); 
+  end
+  an_st{na}.meta.question = qinfo(curr_qid_idx);
+  
+  %
+  % Now perform the set of analyses that collapse across subjects
+  %
+  na = na+1;
+  
+  an_st{na} = init_analysis_struct;
+  an_st{na}.type = 'enum_category_across_subjects';
+  an_vars = {'prop','count'};
+  an_st{na}.vars = an_vars;
+  an_cols = set_var_col_const(an_vars);
+  nr = 0;
+
+  for ivar = 1:length(an_vars)
+    an_type = an_vars{ivar};
+    switch an_type
+      case 'prop'
+	data_col = by_sub_an_cols.prop;
+	plot_title = 'Average proportion of responses in each category';
+      case 'count'
+	data_col = by_sub_an_cols.count;
+	plot_title = 'Overall counts within in each category';
+	
+    end % switch an_type
+    data = an_st{by_sub_an_idx}.data{data_col};
+    
+    % Create a subanalysis structure so that we can accumulate distributional
+    % statistics for each category
+    sa_st = init_analysis_struct;
+    sa_st.type = 'distrib_stats';
+    sa_vars = {'mean','std','min','max','nitems'};
+    sa_cols = set_var_col_const(sa_vars);
+    sa_st.vars = sa_vars;
+    
+    % Loop over all of the things we want to calculate
+    for jvar = 1:length(sa_vars)
+      sa_str = sa_vars{jvar};
+      switch sa_str
+	case 'mean'
+	  if any(isnan(data)) fun = @nanmean; else fun = @mean; end
+	  result = fun(data);
+	case 'nitems'
+	  result = sum(~isnan(data(:,1)));
+	case 'std'
+	  if any(isnan(data)) fun = @nanstd; else fun = @std; end
+	  result = fun(data);
+	case 'min'
+	  if any(isnan(data)) fun = @nanmin; else fun = @min; end
+	  result = fun(data);
+	case 'max'
+	  if any(isnan(data)) fun = @nanmax; else fun = @max; end
+	  result = fun(data);
+	  
+      end % switch sa_str
+      
+      % Assign the result
+      sa_st.data{sa_cols.(sa_str)} = result;
+    end % for jvar
+    
+    % Assign the sub-analyses to the main analysis
+    an_st{na}.data{ivar} = sa_st;
+    
+    %
+    % Perform any reports of the data in which reporting is done on an across-subjects basis
+    %
+    nr=nr+1;
+    an_st{na}.report{nr}.type = 'distrib_by_cat';
+    an_st{na}.report{nr}.figfun = @plot_hist;
+    if do_plot
+      switch an_type
+	case 'prop'
+	  plot_title = 'Average proportion of responses in each category';
+	  ylim = [0 1];
+	case 'count'
+	  plot_title = 'Overall counts within in each category';
+	  ylim = []; % do it based on max at time of display
+      end
+      params.display.figs.ylim = ylim;
+      params.display.figs.title = plot_title;
+      an_st{na}.report{nr}.figs = plot_hist(an_st{na}.data{an_cols.(an_type)},params.display); 
+    end % if do_plot
+  end % for ivar=
+  an_st{na}.meta.question = qinfo(curr_qid_idx);
+  
+  %
+  % NOTE: THIS WHOLE SECTION IS REALLY DICEY
+  %  
+  if print_tables
+    fprintf(fid,'\nQuestion (%1.2f): %s\n', ...
+	qinfo(curr_qid_idx).compqid, qinfo(curr_qid_idx).question_text);
+    for ienum = 1:length(qinfo(curr_qid_idx).enum_values)
+      fprintf(fid,'%30s:\t%1.2f\n', qinfo(curr_qid_idx).enum_values{ienum}, ...
+	  an_st{na}.data{an_cols.prop}.data{sa_cols.mean}(ienum));
+    end
+  end % if print_tables
+end % for iqid
+
+if print_tables && write2file
+  fclose(fid);
+end
+
+end % function ensemble_enum_hist
+
+function an_st = init_analysis_struct
+  an_st.type = '';
+  an_st.vars = {};
+  an_st.data = {};
+  an_st.meta = [];
+  
+end % function an_st = init_analysis_struct
+
+function out_pp = plot_hist(data_st,params)
+  pp = params.figs;
+
+  % Parse some of the input parameters
+  try use_fig = params.use_fig;
+  catch 
+    try use_fig = pp.start_fignum; catch use_fig = []; end
+  end
+  
+  try use_axes = params.use_axes; catch use_axes = []; end
+  
+  try labelfontsize = params.axislabelfontsize; catch labelfontsize = 9; end
+  
+  col = set_var_col_const(data_st.vars);
+  
+  ncat = length(params.qinfo.enum_values);
+  nitems = data_st.data{col.nitems};
+
+  max_chars_per_line = 50;
+  
+  %
+  % Generate a figure that summarizes the distributions across categories
+  %
+  if isempty(use_fig)
+    figure
+  else
+    figure(use_fig)
+  end
+  
+  nax = 0;
+  
+  nax=nax+1;
+  if ~isempty(use_axes)
+    axes(use_axes)
+  end
+  
+  % Plot the data
+  bs = bar(1:ncat,data_st.data{col.mean});
+  add_errorbars(bs,data_st.data{col.std}'/sqrt(data_st.data{col.nitems}));
+  set(gca,'xtick',[],'xlim',[0 ncat+1])
+  set(gca,'activepositionproperty','outerposition')
+
+  ax(nax) = gca;
+  
+  % Set axes formatting
+  
+  % Add xtick labels as text objects so that we can rotate them
+  for icat = 1:ncat
+    label_text = cell2str(linewrap(params.qinfo.enum_values{icat},18),'\n');
+    text(icat,0,label_text,'rotation',-90, ...
+	'horizontalalign','left', ...
+	'verticalalign','middle', ...
+	'fontsize', labelfontsize);
+  end
+  
+  try ylim = pp.ylim; catch ylim=[]; end
+  if isempty(ylim)
+    ylim = [0 1.2*max(data_st.data{col.mean})];
+  end
+  set(gca,'ylim',ylim)
+  
+  try ylabel_str = pp.ylabel; catch ylabel_str = ''; end
+  ylabel(ylabel_str)
+  
+  if ~isfield(pp,'title')
+    pp.title = '';
+  end
+  title(pp.title)
+  
+  if ~isfield(pp,'add_nsub') || pp.add_nsub
+    th = add_nsub_txt(data_st.data{col.nitems});
+  end  
+
+  % Add a page header
+  try add_pagehdr = params.add_pagehdr; catch add_pagehdr = 1; end
+  if add_pagehdr
+    pp.pagehdr.title = sprintf(['%s\nQuestion (%1.2f): %s'], pp.title, params.qinfo.compqid, ...
+	cell2str(linewrap(params.qinfo.question_text,max_chars_per_line),'\n'));
+    nax = nax+1;
+    ax(nax)=add_fighdr(pp.pagehdr);
+    pp.fig.title = pp.pagehdr.title;
+  end
+  
+  if isfield(pp,'write2file') && pp.write2file
+    fprintf('Printing figure to file: %s\n', pp.figfname);
+    print(pp.figfname, pp.printargs{:})
+  end
+  
+  pp.fignum = gcf;
+  pp.axes = ax;
+  
+  out_pp = pp;
+end % plot_hist()
+
+function pp = plot_distrib_by_cat(data_st,params)
+  pp = params.figs;
+  max_chars_per_line = 50;
+
+  if ~isstruct(data_st)
+    tmp.vars = {'prop'};
+    tmp.data = {data_st};
+    data_st = tmp;
+  end
+  col = set_var_col_const(data_st.vars);
+  ncat = length(params.qinfo.enum_values);
+  nsub = size(data_st.data{col.prop},1);
+
+  %
+  % Generate a figure that shows distributions of responses across subjects
+  % separately for each enum category
+  %
+  if isfield(pp,'start_fignum')
+    figure(pp.start_fignum+nfig)
+  else
+    figure
+  end
+  
+  nax = 0;
+  ax = [];
+  
+  try ncol = pp.ncol; catch ncol = 3; end
+  try tick_interval = pp.tick_interval; catch tick_interval = 0.1; end
+  hist_scale = 0:tick_interval:1;
+  
+  for icat = 1:ncat
+    nax = nax+1;
+    ax(nax) = subplot(fix(ncat/ncol)+rem(ncat,ncol),ncol,icat);
+    hist_vals = hist(data_st.data{col.prop}(:,icat),hist_scale);
+    bar(hist_scale,hist_vals)
+    set(gca,'xtick',0:tick_interval:1,'xlim',[-0.05 1.05])
+    set(gca,'ylim',[0 1.1*max(hist_vals)])
+    title_str = params.qinfo.enum_values{icat};
+    if strcmpi(title_str,'parent')
+      title_str = [title_str ' '];
+    end
+    title(title_str)
+    if ~isfield(pp,'add_nsub') || pp.add_nsub
+      th = add_nsub_txt(nsub);
+    end  
+  end % for icat=
+  
+  pp.fig.fignum = gcf;
+
+  if ~isfield(pp,'title')
+    pp.title = '';
+  end
+
+  pp.pagehdr.title = sprintf(['%s\nQuestion (%1.2f): %s'], pp.title, params.qinfo.compqid,...
+      cell2str(linewrap(params.qinfo.question_text,max_chars_per_line),'\n'));
+  nax = nax+1;
+  ax(nax)=add_fighdr(pp.pagehdr);
+
+  pp.fig.title = pp.pagehdr.title;
+  pp.fig.axes = ax;
+
+  if isfield(pp,'write2file') && pp.write2file
+    fprintf('Printing figure to file: %s\n', pp.figfname);
+    print(pp.figfname, pp.printargs{:})
+  end
+
+  out_pp = pp;
+end % function pp = plot_distrib_by_cat(data_st,params)
+
+function th = add_nsub_txt(nsub,params)
+  th = text(0.95,0.95,sprintf('N=%d', nsub), ...
+      'units','norm', ...
+      'horizontalalign','right', ...
+      'verticalalign', 'top');
+end % function add_nsub_txt(nsub,params)

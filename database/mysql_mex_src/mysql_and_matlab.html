@@ -1,0 +1,245 @@
+<title>MySQL and Matlab</title>
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
+
+<html>
+
+<head>
+<title>Mathematical Finance Program, University of Toronto</title>
+<meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1">
+<link rel="shortcut icon" href="/include/mmficon.ico">
+<link rel="stylesheet" href="/include/mmf.css">
+</head>
+
+<body>
+
+<div id="header">
+<p class="mmf">MMF</p>
+<p class="mfp">Mathematical Finance Program</p>
+<p class="utlogo"><img src="/include/logo-text.png" alt="University of Toronto"></p>
+</div>
+
+<div id="maintext">
+
+<div class="navbar">
+<ul>
+  <li id="welcome"><a href="/">Welcome</a></li>
+  <li id="mastprog"><a href="/mastprog/">Master's Program</a>
+    <ul id="mastprog_list">
+      <li id="mastprog_prospstud"><a href="/mastprog/prospstud/">Prospective Students</a>
+         <ul id="mastprog_prospstud_list">
+            <li id="mastprog_prospstud_jobs"><a href="/mastprog/prospstud/jobs.html">Typical jobs</a></li>
+            <li id="mastprog_prospstud_faq"><a href="/mastprog/prospstud/faq.html">FAQ</a></li>
+         </ul>
+      </li>
+      <li id="mastprog_acadprog"><a href="/mastprog/acadprog/">Academic Program</a>
+        <ul id="mastprog_acadprog_list">
+          <li id="mastprog_acadprog_fall"><a href="/mastprog/acadprog/fall.html">Fall Session</a></li>
+          <li id="mastprog_acadprog_winter"><a href="/mastprog/acadprog/winter.html">Winter Session</a></li>
+          <li id="mastprog_acadprog_summer"><a href="/mastprog/acadprog/summer.html">Summer Term</a></li>
+        </ul>
+      </li>
+      <li id="mastprog_internproj"><a href="/mastprog/internproj/">Internships/Projects</a>
+        <ul id="mastprog_internproj_list">
+          <li id="mastprog_internproj_2004"><a href="/mastprog/internproj/2004.html">2004-05 Internships</a></li>
+          <li id="mastprog_internproj_2003"><a href="/mastprog/internproj/2003.html">2003-04 Internships</a></li>
+          <li id="mastprog_internproj_2002"><a href="/mastprog/internproj/2002.html">2002-03 Internships</a></li>
+        </ul>
+      </li>
+      <li id="mastprog_faculty"><a href="/mastprog/faculty/">Faculty</a></li>
+      <li id="mastprog_application"><a href="/mastprog/application/">Application Process</a>
+        <ul id="mastprog_application_list">
+          <li id="mastprog_application_tuition"><a href="/mastprog/application/tuition.html">Tuition</a></li>
+          <li id="mastprog_application_background"><a href="/mastprog/application/background.html">Background</a></li>
+          <li id="mastprog_application_english"><a href="/mastprog/application/english.html">English Language</a></li>
+          <li id="mastprog_application_form"><a href="/mastprog/application/form.html">Form</a></li>
+        </ul>
+      </li>
+    </ul>
+  </li>
+  <li id="resrchres"><a href="/resrchres/">Research Resources</a>
+    <ul id="resrchres_list">
+       <li id="resrchres_taq"><a href="/resrchres/taq/">TAQ</a>
+          <ul id="resrchres_taq_list">
+             <li id="resrchres_taq_trades"><a href="/resrchres/taq/trades.html"><tt>trades</tt></a></li>
+             <li id="resrchres_taq_quotes"><a href="/resrchres/taq/quotes.html"><tt>quotes</tt></a></li>
+             <li id="resrchres_taq_master"><a href="/resrchres/taq/master.html"><tt>master</tt></a></li>
+             <li id="resrchres_taq_dinfo"><a href="/resrchres/taq/dinfo.html"><tt>dinfo</tt></a></li>
+          </ul>
+       </li>
+       <li id="resrchres_crsp"><a href="/resrchres/crsp/">CRSP</a>
+          <ul id="resrchres_crsp_list">
+             <li id="resrchres_crsp_name"><a href="/resrchres/crsp/name.html"><tt>name</tt></a></li>
+             <li id="resrchres_crsp_share"><a href="/resrchres/crsp/share.html"><tt>share</tt></a></li>
+             <li id="resrchres_crsp_distrib"><a href="/resrchres/crsp/distrib.html"><tt>distrib</tt></a></li>
+             <li id="resrchres_crsp_price"><a href="/resrchres/crsp/price.html"><tt>price</tt></a></li>
+             <li id="resrchres_crsp_date"><a href="/resrchres/crsp/date.html"><tt>date</tt></a></li>
+          </ul>
+       </li>
+       <li id="resrchres_mysql"><a href="/resrchres/mysql/">MySQL and Matlab</a></li>
+    </ul>
+  </li>
+  <li id="studres"><a href="/studres/">Student Resources</a>
+    <ul>
+      <li id="studres_coursepages"><a>Course Pages</a></li>
+      <li id="studres_schedule"><a>Schedule</a></li>
+      <li id="studres_newsmail"><a>News and Mail</a></li>
+    </ul>
+  </li>
+  <li id="alumres"><a href="/alumres/">Alumni Resources</a>
+    <ul>
+      <li id="alumres_events"><a>Events</a></li>
+      <li id="alumres_jobs"><a>Job Bank</a></li>
+      <li id="alumres_ann"><a>Announcements</a></li>
+    </ul>
+  </li>
+  <li id="sponsors"><a href="/sponsors/">Sponsors</a></li>
+  <li id="contact"><a href="/contact.html">Contact Us</a></li>
+  <li id="sitemaplink"><a href="/sitemap.html">Site Map</a></li>
+</ul>
+
+</div>
+
+<style type="text/css">
+<!--
+   #resrchres { background-color: #DDDDBB; }
+   #resrchres_list { display: block; }
+-->
+</style>
+<style type="text/css">
+<!--
+   #resrchres_mysql { background-color: #EEEEDD; }
+   #resrchres_mysql_list { display: block; }
+-->
+</style>
+
+<title>MySQL and Matlab</title>
+
+<h1>MySQL and Matlab</h1>
+
+<p>Our data lab runs an open-source database server called MySQL, designed for
+robustness and speed. On the <a href="http://www.mysql.com">MySQL home page</a>
+you can read all about it.  To interface to the server, you need a client
+program which implements the specific MySQL protocol.  Then you can execute
+queries using standard Structured Query Language (SQL).</p>
+
+<p>For mathematical and statistical analysis, the best way to use the data is
+to download it directly into Matlab. We have written a MySQL client for Matlab
+that handles the interaction.  Here are binary versions for Linux and Windows,
+and source code and instructions in case you want to look at it or modify it.
+</p>
+
+<p>Author: <a href="http://www.math.toronto.edu/almgren/">Robert Almgren</a>.</p>
+
+<hr>
+<center><h2>Binary</h2>
+Be sure your browser is correctly set to download binary files!
+</center>
+<dl>
+<dt><a href="mysql.m"><tt>mysql.m</tt></a>
+<dd>This M-file contains the help text, displayed if you type
+<tt>help mysql</tt>. It is a short summary of how to use the
+client program.
+</dl>
+<h4>Linux x86</h4>
+<dl>
+<dt><a href="mysql.mexglx"><tt>mysql.mexglx</tt></a><br>
+<dd>This is compiled against Matlab Version 7 (Release 14), with
+gcc 3.3.4 on a Pentium 4. It may or may not work with other software
+and hardware; it almost certainly will not work with Matlab Version
+6 (Release 13).  Put this and <tt>mysql.m</tt> either into your working
+directory, or into a subdirectory <tt>matlab</tt> in your Unix
+home directory, or into $MATLAB/toolbox/local (<tt>$MATLAB</tt>
+is Matlab's home directory, usually <tt>/usr/local/matlab</tt>.)
+It has been statically linked against the MySQL libraries as
+described below, so you shouldn't need any other libraries.
+</dl>
+<h4>Windows</h4>
+<dl>
+<dt><a href="mysql.dll"><tt>mysql.dll</tt></a></dt>
+<dd>
+This is compiled against Matlab Version 4 (Release 14) and MySQL
+4.1.11, on x86 using Microsoft Visual C++ 2003.
+Put this and <tt>mysql.m</tt> into <tt>$MATLAB\toolbox\local</tt>,
+or keep them in your working directory.
+(<tt>$MATLAB</tt> means Matlab's home directory, usually something
+like <tt>C:\Program Files\MATLAB704</tt>.)
+<dt><a href="libmysql.dll"><tt>libmysql.dll</tt></a>
+<dd>This is the MySQL client library software, version 4.1.11
+from the <a href="http://www.mysql.com/downloads/">MySQL Download page</a>.
+Put this into <tt>C:\WINDOWS\system32</tt>.
+</dl>
+<p>
+Test it from inside Matlab with
+<pre>
+mysql('status')
+</pre>
+If it says "Not connected" then you are up and running!
+<hr>
+<h3>Additional useful files</h3>
+<dl>
+<dt><a href="datelabel.m"><tt>datelabel.m</tt></a>
+<dd>Make axis labels look like reasonable dates.
+It is like Matlab's <tt>dateaxis</tt> except that it works better (you
+can zoom in, then type <tt>datelabel</tt> again to get new labels).
+</dl>
+<hr>
+<center>
+<h2>Compiling from source code</h2>
+</center>
+<p>As far as I know, these source versions can be compiled against
+any reasonably recent versions of MySQL and of Matlab, and I don't
+know of any particular platform dependences although I have tried
+only Linux and Windows</p>
+<dl>
+<dt><a href="mysql.cpp"><tt>mysql.cpp</tt></a>
+<dd>The C++ source code.
+<dt><a href="mysql.m"><tt>mysql.m</tt></a>
+<dd>The help text.<p>
+</dl>
+
+<h4>Linux/Unix</h4>
+
+From the <a href="http://www.mysql.com/downloads/">MySQL Download page</a>,
+get either a full version, or the "Include files and libraries for
+development" if you use RPMs.  Then compile with
+<pre>
+mex -I/usr/include/mysql -L/usr/lib/mysql -lmysqlclient mysql.cpp
+</pre>
+from either the shell command line or the Matlab prompt.
+I have the MySQL include files and libraries in <tt>/usr/include/mysql</tt> and
+<tt>/usr/lib/mysql</tt> respectively; modify as necessary if your system is
+different. (Look for the include file <tt>mysql.h</tt> and the library
+<tt>libmysqlclient.a</tt>.) This will produce the file <tt>mysql.mexglx</tt>
+which you can install as described above.
+
+<h4>Windows</h4>
+
+From the <a href="http://www.mysql.com/downloads/">MySQL Download page</a> get
+the whole package including server, 18 Mb. Any recent version should be all
+right but this is most heavily tested against MySQL 4.0.x. I recommend the
+option "Without installer" for manual unpacking.  Unpack and install; I'll
+assume you're putting it in the default location <tt>C:\mysql</tt>.  Copy
+<tt>C:\mysql\lib\opt\libmySQL.dll</tt> into <tt>C:\WINDOWS\system32</tt>.<p>
+
+Be sure that you have a C++ compiler installed (I'm using
+Microsoft Visual Studio 7.0 .NET), and that you
+have auto-configured Matlab with
+"<tt>mex -setup</tt>".<p>
+
+Now from a Matlab command line, <tt>cd</tt> to the directory containing
+the source program, and compile it with
+<pre>
+mex -I"C:\mysql\include" -DWIN32 mysql.cpp "C:\mysql\lib\opt\libmySQL.lib"
+</pre>
+This will produce the file <tt>mysql.dll</tt> as above, which you may
+install as described there.
+
+</div>
+
+<div id="footer">
+Copyright &copy;2004 Mathematical Finance Program, University of Toronto
+</div>
+
+</body>
+</html>
+

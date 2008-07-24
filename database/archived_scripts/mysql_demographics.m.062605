@@ -1,0 +1,133 @@
+function [dg, subject_vars] = mysql_demographics(exp_list, host, db)
+% [dg, subject_vars] = mysql_demographics(exp_list, host, db);
+%
+% Gets subject demographic information for a list of experiments
+%
+% host -- machine running the mysql server
+% db -- database on the server
+% exp_list -- cell string of experiments to pull data for
+%
+
+% 01/25705 Petr Janata
+
+DEFAULT_DATABASE = 'experiment';
+DEFAULT_HOST = 'atonal.ucdavis.edu';
+
+dg = {};
+
+% List of subject variables to extract
+subject_vars = { ...
+      'subject_id'; ...
+      'gender'; ...
+      'ethnic_category'; ...
+      'racial_category'; ...
+      'dob' ...
+      };
+
+% Do some parameter checking
+if ~exist('db','var')
+  db = DEFAULT_DATABASE;
+end
+
+if ~exist('host','var')
+  host = DEFAULT_HOST;
+end
+
+if ~exist('exp_list','var')
+  exp_list = {};
+end
+
+if isstr(exp_list)
+  exp_list = {exp_list};
+end
+
+% Connect to host
+conn_id = mysql_make_conn(host);
+
+% Switch to the experiment database
+mysql('use',db);
+
+% Grab a list of all experiments, along with their IDs and response tables
+mysql_str = 'select experiment_id, experiment_title, response_table from experiment';
+[exp_id,exp_names,resp_tbl_list] = mysql(mysql_str);
+
+if isempty(exp_list)
+  exp_list = exp_names;
+  fprintf('\nSummarizing data for all available experiments:\n%s\n', cell2str(exp_names,'\n'));
+end
+
+% Identify the subset of experiments we want
+explist_idxs = find(ismember(exp_names,exp_list));
+
+if length(explist_idxs) ~= length(exp_list)
+  fprintf('mysql_demographics:  Did not find correct experiment list\n')
+  fprintf('Available experiments: \n%s\n', cell2str(exp_names,'\n'))
+  return
+end
+
+exp_subs = {};
+for iexp = 1:length(explist_idxs)
+  % Determine which response table we are getting subject IDs from
+  resp_tbl = resp_tbl_list{explist_idxs(iexp)};
+
+  % Get all the subject IDs in this response table
+  exp_subs = [exp_subs; unique(mysql(sprintf('select subject_id from %s', resp_tbl)))];
+  
+end
+
+sub_str = sprintf('''%s'',', exp_subs{:});
+sub_str(end) = [];
+
+sql_str = sprintf('select %s from subject where subject_id in (%s)', ...
+    cell2str(subject_vars,','), sub_str);
+
+% Get the data from the database
+[dg{1:length(subject_vars)}] = mysql(sql_str);
+
+% Extract variables from the data structure
+sub_ids = dg{:,strcmp(subject_vars,'subject_id')};
+gender = dg{:,strcmp(subject_vars,'gender')};
+ethnicity = dg{:,strcmp(subject_vars,'ethnic_category')};
+race = dg{:,strcmp(subject_vars,'racial_category')};
+age = dg{:,strcmp(subject_vars,'dob')};
+
+% Print some summary info
+fprintf('\nTotal number of subjects: %d\n\n', length(sub_ids));
+
+male_mask = ismember(gender,'M');
+female_mask = ismember(gender,'F');
+
+% Hispanic breakdown
+hispanic_mask = ismember(ethnicity,'HL');
+hispanic_unkwn_mask = ismember(ethnicity,'unknown');
+fprintf('\t%15s\t%15s\t%15s\n','Hispanic','Non-Hispanic','Unknown');
+fprintf('Male:\t%15d\t%15d\t%15d\n', ...
+    sum(male_mask & hispanic_mask), ...
+    sum(male_mask & ~(hispanic_mask | hispanic_unkwn_mask)), ...
+    sum(male_mask & hispanic_unkwn_mask));
+fprintf('Female:\t%15d\t%15d\t%15d\n', ...
+    sum(female_mask & hispanic_mask), ...
+    sum(female_mask & ~(hispanic_mask | hispanic_unkwn_mask)), ...
+    sum(female_mask & hispanic_unkwn_mask));
+fprintf('Total:\t%15d\t%15d\t%15d\n', sum(hispanic_mask), sum(~(hispanic_mask | hispanic_unkwn_mask)), sum(hispanic_unkwn_mask));
+
+
+% Do racial breakdown
+race_cat = unique(race);
+header = sprintf('\n\n');
+for ir = 1:length(race_cat)
+  header = sprintf('%s\t%8s', header,race_cat{ir});
+  males_by_race(ir) = sum(ismember(race,race_cat{ir})&male_mask);
+  females_by_race(ir) = sum(ismember(race,race_cat{ir})&female_mask);
+end
+header = sprintf('%s\t%8s', header, 'Total');
+males_by_race(end+1) = sum(males_by_race);
+females_by_race(end+1) = sum(females_by_race);
+
+fprintf('%s\n', header);
+fprintf('Male:%s\n', sprintf('\t%8d',males_by_race));
+fprintf('Female:%s\n', sprintf('\t%8d',females_by_race));
+fprintf('Total:%s\n', sprintf('\t%8d',males_by_race+females_by_race))
+
+% Close the mysql connection
+mysql('close');

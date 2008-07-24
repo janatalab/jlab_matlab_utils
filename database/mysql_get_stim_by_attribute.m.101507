@@ -1,0 +1,93 @@
+function [data, vars] = mysql_get_stim_by_attribute(varargin)
+% [data, vars] = mysql_get_stim_by_attribute(varargin);
+%
+% Given a list of attribute names, this returns the list of stimuli that are associated
+% with those attributes.
+%
+% Input arguments:
+%   'name','attrib_name' - a string or cell array of strings containing the
+%                          attribute names to be matched.
+%   'conn_id' - database connection ID to use
+%   'host' - database host
+%   'database' - database on host to use
+%   'params' - a structure containing the above parameters as fields
+
+% 07/12/07 Petr Janata
+
+data = {};
+vars = {};
+
+% Parse the input arguments
+narg = length(varargin);
+for iarg = 1:2:narg
+  switch varargin{iarg}
+    case 'params'
+      params = varargin{iarg+1};
+      
+    case 'conn_id'
+      params.conn_id = varargin{iarg+1};
+      
+    case 'host'
+      params.host = varargin{iarg+1};
+      
+    case 'database'
+      params.database = varargin{iarg+1};
+      
+    case {'name','attrib_name'}
+      params.attrib_names = check_cell(varargin{iarg+1});
+      
+  end % switch 
+end % for iarg
+ 
+try attrib_names = check_cell(params.attrib_names); catch attrib_names = {}; end
+if isempty(attrib_names)
+  fprintf('%s: no attribute names specified\n', mfilename);
+  return
+end
+
+% Check for connection to database
+try conn_id = params.mysql.conn_id; 
+catch   
+  tmp_conn_id = 1;
+  conn_id = 0;
+end
+
+if mysql_check_conn(conn_id)
+  try host = params.host; catch host = []; end
+  try database = params.database; catch database = []; end
+  mysql_make_conn(host,database,conn_id);
+end
+
+% Form the SQL query
+attrib_name_str = sprintf('"%s",', attrib_names{:});
+attrib_name_str = attrib_name_str(1:end-1);
+
+%
+% NOTE: EXTRACT VARS SUPPORT NEEDS TO BE GENERALIZED
+%
+extract_vars = {'stimulus.stimulus_id','stimulus.name','attribute.name'};
+extract_vars_str = cell2str(extract_vars,',');
+
+mysql_str = sprintf(['SELECT %s FROM stimulus ' ...
+      'LEFT JOIN stimulus_x_attribute USING (stimulus_id) ' ...
+      'LEFT JOIN attribute USING (attribute_id) ' ...
+      'WHERE attribute.name IN (%s);'], extract_vars_str, attrib_name_str);
+									 
+[data{1:length(extract_vars)}] = mysql(conn_id, mysql_str);
+
+% If variables to extract contain periods, we need to remove those
+for ivar = 1:length(extract_vars)
+  varname =  extract_vars{ivar};
+  vars{ivar} = varname(findstr(varname,'.')+1:end);
+end
+
+if exist('tmp_conn_id','var')
+  mysql(conn_id,'close');
+end
+end % mysql_get_stim_by_attribute
+
+function var = check_cell(var)
+  if ~iscell(var)
+    var = {var};
+  end
+end
