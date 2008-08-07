@@ -34,11 +34,16 @@ end;
 user = '';
 passwd = '';
 switch host
-  case ...
-	{'127.0.0.1','localhost','atonal','atonal.ucdavis.edu','atonal.cmb.ucdavis.edu'}
+  case 	{'127.0.0.1','localhost','atonal','atonal.ucdavis.edu','atonal.cmb.ucdavis.edu'}
 
-    mysql_researcher_login; %populates user and passwd variables. This script
-                            %should sit in a location that is not publically visible.
+   switch db
+    case {'ensemble_main','ensemble_tarp'}
+     mysql_researcher_login; %populates user and passwd variables. This script
+			     %should sit in a location that is not publically visible.
+    case 'ensemble_dev'
+     mysql_researcher_dev_login;
+   end
+
 end
 
 if mysql(conn_id,'status')
