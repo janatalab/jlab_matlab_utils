@@ -18,6 +18,18 @@ function result = ensemble_load_expinfo(indata,params)
 %               with remove_incomplete_sessions to specify experiment
 %               completion relative to a particular form ID rather than an
 %               end_datetime entry in the session table.
+%
+% 08/06/08 JG - Added getDefaultParams feature
+%
+
+if( isstr( indata ) && strcmp( indata, 'getDefaultParams' ) )
+	result.ensemble.experiment_title = 'use local settings';
+	result.ensemble.host = 'use local settings';
+	result.ensemble.database = 'use local settings';
+	result.ensemble.conn_id = -1;
+	return;
+end
+
 
 % Initialize the output data struct
 result = ensemble_init_data_struct;
