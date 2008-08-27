@@ -28,8 +28,10 @@ function analysis_list = ensemble_jobman(analysis_list,params)
 % 16 Feb 2007 - First version, built on code by PJ, Stefan Tomic
 % 01 May 2007 - PJ Added better host, database, conn_id support
 % 11/27/07 - improved conn_id support
-% 8/14/07 - ST added another try/catch and rethrow to close the db
-%           connection if an error occurred
+% 8/25/08  - ST, if conn_id is empty, conn_local is now set to
+%            false. Reverted last version, since 'dbstop if error' didn't take
+%            you to the desired breakpoint
+
 
 %if conn_id is set in params, then open a mysql connection
 %this mysql connection may be used by analysis functions that
@@ -38,7 +40,7 @@ conn_local = false;
 try host = params.ensemble.host; catch host = []; end
 try database = params.ensemble.database; catch database = []; end
 try conn_id = params.ensemble.conn_id; 
-catch conn_id = []; conn_local = true; 
+catch conn_id = []; conn_local = false; 
 end
 
 % If connection ID is not empty, check to see if it is open
@@ -51,116 +53,97 @@ if ~isempty(conn_id)
   end
 end
 
-try
+if(isfield(params,'run_analyses'))
+  idxs = params.run_analyses;
+else
+  idxs = 1:length(analysis_list);
+end
+
+for ia = idxs
+  analysis_name = analysis_list{ia}.name;
   
-  if(isfield(params,'run_analyses'))
-    idxs = params.run_analyses;
-  else
-    idxs = 1:length(analysis_list);
-  end
-
-  for ia = idxs
-    analysis_name = analysis_list{ia}.name;
+  fprintf('\nPerforming analysis %d/%d: %s\n', ia, length(analysis_list), analysis_name);
+  indata = {};
+  
+  %assign the input data structure for the function based on the
+  %required fieldname
+  if isfield(analysis_list{ia},'requires') && ~isempty(analysis_list{ia}.requires)
     
-    fprintf('\nPerforming analysis %d/%d: %s\n', ia, length(analysis_list), analysis_name);
-    indata = {};
-    
-    %assign the input data structure for the function based on the
-    %required fieldname
-    if isfield(analysis_list{ia},'requires') && ~isempty(analysis_list{ia}.requires)
-      
-      for requiredIdx = 1:length(analysis_list{ia}.requires)
-	requiredData = analysis_list{ia}.requires{requiredIdx};
-	anSearchCrit.name = requiredData.name;
-	anListIdx = ensemble_find_analysis_struct(analysis_list,anSearchCrit);
-	if(isempty(anListIdx))
-	  error(sprintf('Analysis %s specifies a non-existent required analysis %s',...
-			analysis_list{ia}.name,anSearchCrit.name));
-	end
+    for requiredIdx = 1:length(analysis_list{ia}.requires)
+      requiredData = analysis_list{ia}.requires{requiredIdx};
+      anSearchCrit.name = requiredData.name;
+      anListIdx = ensemble_find_analysis_struct(analysis_list,anSearchCrit);
+      if(isempty(anListIdx))
+	error(sprintf('Analysis %s specifies a non-existent required analysis %s',...
+		      analysis_list{ia}.name,anSearchCrit.name));
+      end
 	
-	if(isfield(analysis_list{anListIdx},'results') )
-	  %search for the required data type
+      if(isfield(analysis_list{anListIdx},'results') )
+	%search for the required data type
 
-	  dataList = analysis_list{anListIdx}.results;
+	dataList = analysis_list{anListIdx}.results;
+
+	%see if 'vars' was specified, in which case we need to
+        %search for the variable to return
+	if(isfield(requiredData,'vars') && ~isempty(requiredData.vars))
+	  %find the index of the result we need
+	  dataListIdx = strmatch(requiredData.vars,dataList.vars);
 	  
-	  %see if 'vars' was specified, in which case we need to
-	  %search for the variable to return
-	  if(isfield(requiredData,'vars') && ~isempty(requiredData.vars))
-	    %find the index of the result we need
-	    dataListIdx = strmatch(requiredData.vars,dataList.vars);
+	  %if result data struct was found then assign to indata
+	  %otherwise, throw an error indicating the data is not there.
+	  if(~isempty(dataListIdx))
+	    indata{requiredIdx} = analysis_list{anListIdx}.results.data{dataListIdx};
 	  
-	    %if result data struct was found then assign to indata
-	    %otherwise, throw an error indicating the data is not there.
-	    if(~isempty(dataListIdx))
-	      indata{requiredIdx} = analysis_list{anListIdx}.results.data{dataListIdx};
-	  
-	    else
-	      error([sprintf('Analysis %s specifies a non-existent required',analysis_list{ia}.name)...
-		     sprintf(' datatype %s for analysis %s',requiredData.vars,analysis_list{anListIdx}.name)]);
-	    end
-	
 	  else
-	    %if the 'vars' field of the required data list was not
-	    %specified, then return the whole results data structure
-	    indata{requiredIdx} = analysis_list{anListIdx}.results;
+	    error([sprintf('Analysis %s specifies a non-existent required',analysis_list{ia}.name)...
+		   sprintf(' datatype %s for analysis %s',requiredData.vars,analysis_list{anListIdx}.name)]);
 	  end
 	
-	  
 	else
-	  
-	  %results field wasn't populated so required data wasn't available
-	  error(sprintf('Required data for analysis ''%s'' was not available.',analysis_list{ia}.name));
-	
+	  %if the 'vars' field of the required data list was not
+          %specified, then return the whole results data structure
+	  indata{requiredIdx} = analysis_list{anListIdx}.results;
 	end
+	
+	  
+      else
+	
+	%results field wasn't populated so required data wasn't available
+	error(sprintf('Required data for analysis ''%s'' was not available.',analysis_list{ia}.name));
       
       end
+      
+    end
        
-    end %if isfield(analysis_list{ia},'requires')
+  end %if isfield(analysis_list{ia},'requires')
   
-    %if there was only one required data struct, then don't pass this
-    %as a cell
-    if(length(indata) == 1)
-      indata = indata{1};
-    end
+  %if there was only one required data struct, then don't pass this
+  %as a cell
+  if(length(indata) == 1)
+    indata = indata{1};
+  end
   
-    % Call the function that is registered with this analysis
-    fh = analysis_list{ia}.fun;
+  % Call the function that is registered with this analysis
+  fh = analysis_list{ia}.fun;
   
-    if(isfield(analysis_list{ia},'params'))
-      analysisParams = analysis_list{ia}.params;
-    else
-      analysisParams = [];
-    end
+  if(isfield(analysis_list{ia},'params'))
+    analysisParams = analysis_list{ia}.params;
+  else
+    analysisParams = [];
+  end
   
-   
-    result = fh(indata,analysisParams);      
-        
-    analysis_list{ia}.results = result;
+  result = fh(indata,analysisParams);      
   
-    %    check_conn_exit(params)
-    %    err = lasterror;
-    %    fprintf('Failed on analysis %d ...\n%s\nReturning completed analyses ...\n', ia, err.message);
-    %    return
+  analysis_list{ia}.results = result;
+  
+  %    check_conn_exit(params)
+  %    err = lasterror;
+  %    fprintf('Failed on analysis %d ...\n%s\nReturning completed analyses ...\n', ia, err.message);
+  %    return
      
-  end % for ia - analysis list
+end % for ia - analysis list
 
-catch
- 
-  %need to close the database connection if the above code fails
-  %then we can rethrow the error
-  %if conn_local
-  %  mysql(conn_id,'close');
-  %end
-  
-  %rethrow(lasterror) doesn't display the whole error stack, so we use
-  %disperror instead
-  err.message = disperror;
-  err.id = '';
-  rethrow(err);
-
-end
-  
 if conn_local
   mysql(conn_id,'close');
 end
-
+end
