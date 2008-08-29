@@ -1,0 +1,19 @@
+function [pversion,nfile,NChan,NMeg,NReference,NEeg,NAnalog,NBad_chan,bad_chan,NEpoch,Epoch,nfreq,obs_labels] = rd_meg_anal_hdr(pfid);
+
+pversion = fread(pfid,1,'integer*2');
+nfile = fread(pfid,1,'integer*2');
+NChan = fread(pfid,[1,nfile],'integer*2');
+NMeg = fread(pfid,[1,nfile],'integer*2');
+NReference = fread(pfid,[1,nfile],'integer*2');
+NEeg = fread(pfid,[1,nfile],'integer*2');
+NAnalog = fread(pfid,[1,nfile],'integer*2');
+NBad_chan = fread(pfid,[1,nfile],'integer*2');
+bad_chan = fread(pfid,[100,nfile],'integer*2');
+bad_chan = bad_chan';
+NEpoch = fread(pfid,[1,nfile],'integer*2');
+Epoch = fread(pfid,[1,nfile],'real*4');
+nfreq = fread(pfid,[1,nfile],'integer*2');
+slabels = fread(pfid,1,'integer*2');
+obs_labels = fread(pfid,[nfile,slabels],'char*1');
+obs_labels = setstr(obs_labels);
+status = 1;
