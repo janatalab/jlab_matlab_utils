@@ -15,13 +15,29 @@ function result_st = ensemble_concat_datastruct(data_st,params)
 
 % 05/08/07 Petr Janata
 % 03/12/08 Petr Janata
+% 08/28/08 Fred Barrett - convert data_st from struct to cell array of
+% structs, if isstruct(data_st)
 
 result_st = ensemble_init_data_struct;
 try result_st.name=params.outDataName;
 catch result_st.name='concat_datastruct';
 end
+try result_st.type=params.outDataType;
+catch results_st.type='concat_datastruct';
+end
 
 nstruct = length(data_st);
+
+% ensemble_jobman will collect requries and present them as a
+% multi-dimensional struct. this script expects a cell array of structs, so
+% the following few lines converts isstruct(data_st) into iscell(data_st)
+if isstruct(data_st)
+  old_data = data_st;
+  data_st = {};
+  for id=1:nstruct
+    data_st{id} = old_data(id);
+  end
+end
 
 % See if we want to group the input data structures by their type. If we do,
 % then the type becomes the type of the returning data structure (result_st).
