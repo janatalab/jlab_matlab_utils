@@ -28,6 +28,6 @@ data_st.name = '';
 data_st.type = '';
 data_st.vars = {};
 data_st.data = {};
-data_st.report = [];
-data_st.meta = [];
+data_st.report = struct();
+data_st.meta = struct();;
 

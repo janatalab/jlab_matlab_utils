@@ -581,7 +581,7 @@ if isfield(params.export,'by_stimulus')
         for istim = 1:nstim
             outRow = outRow + 1;
             % set id vars
-            outData.data{outCols.subject_id}{outRow} = subid;
+            outData.data{outCols.subject_id}(outRow) = subid;
             outData.data{outCols.sNum}(outRow) = isub;
             outData.data{outCols.stimulus_id}(outRow) = stim(istim);
             % set subject-level scores
