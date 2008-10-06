@@ -76,6 +76,19 @@ switch config
     p.pulse_dir = 'neg';
     p.Fs_pulse = 50;
     p.Fs_resp = 50;
+
+  case 'biopac'
+    p.trig_thres = 2.5;
+    p.trig_dir = 'pos';
+    p.trig_is_vol = 1;
+
+    % Channel assignments
+    p.scr_chan = 1;
+    p.respir_chan = 2;
+    p.cardiac_chan = 4;
+    p.slice_chan = 7;
+    p.block_chan = 9;
+    p.event_chan = 14;
     
   otherwise
     fprintf('Unknown configuration: %s\n', config)
