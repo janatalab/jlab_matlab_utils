@@ -13,6 +13,8 @@ function an_st = ensemble_data_by_question(data_st,params)
 %                       compqid
 
 % 02/04/07 Petr Janata
+% 10/07/08 PJ - generalized to handle other databases
+
 
 an_st = ensemble_init_data_struct;
 an_st.type = 'data_by_compqid'; 
@@ -26,6 +28,9 @@ if ~isfield(incol,'compqid') & ~all(isfield(incol,{'question_id','subquestion'})
 	' information in the input data']);
   return
 end
+
+% Extract info regarding the database we should be talking to
+try database = params.ensemble.database; catch database = 'ensemble_main'; end
 
 % Apply any specified filtering to the input data
 if isfield(params,'filt')
@@ -62,7 +67,8 @@ end
 nqid = length(compqids);
 
 % Extract the question info and attach it to the output metadata
-qinfo = mysql_extract_metadata('table','question','question_id',unique(fix(compqids)));
+qinfo = mysql_extract_metadata('database', database, 'table','question', ...
+    'question_id',unique(fix(compqids)));
 qinfo = qinfo(ismember([qinfo.compqid],compqids));
 an_st.meta.question = qinfo;
 
