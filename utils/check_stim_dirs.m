@@ -27,7 +27,7 @@ function new_stimlist = check_stim_dirs(stimlist,varargin)
 %
 % December 29, 2006 Petr Janata
 % April 30,2008 - Added escaping of irregular directory name
-%                 characters(space, parmenthesis, etc.)
+%                 characters(space, parenthesis, etc.)
 
 destroot = '';
 srcroot = '';
