@@ -11,8 +11,10 @@ function an_st = ensemble_enum_stats(data_st,params)
 % answers to the same question on different forms combined, you must filter the
 % data to only process forms with unique question IDs.  This behavior may
 % change in future versions.
+
 %
 % 02/02/07 Petr Janata - adapted from ensemble_enum_hist
+% 10/07/08 PJ - generalized to handle other databases
 
 an_st = ensemble_init_data_struct;
 an_st.type = 'enum_stats_by_compqid'; 

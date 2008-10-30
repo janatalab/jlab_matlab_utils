@@ -1,19 +1,24 @@
-function stimulusDataStruct = ensemble_get_stiminfo(respDataStruct,params)
+function stimulusDataStruct = ensemble_get_stiminfo(indata,params)
 % Obtains stimulus and attribute meta data for stim IDs in the response table.
 %
-% ensemble_get_stiminfo(resp)
+% ensemble_get_stiminfo({respDataStruct,stimids},params)
 %
-%
-%
-% resp - the response table containing stim IDs to retrieve meta data
-%
+% The first input argument can be either
+% respDataStruct - the response table data structure containing stim IDs to retrieve meta data
+% stimids - vector of stimulus IDs to obtain information on
 % 
 %
+
 % 9 Feb, 2007 - First Version, Stefan Tomic
 % 15 Mar, 2007 - Edited function to conform to ensemble data structures, S.T.
 % 05/18/07 PJ - Added conn_id support
 % 8/13/07 ST - minor fix to make vars a row cell array instead of
 %              column cell array
+% 10/07/08 PJ - enabled passing in of stimids to make this function more useful
+
+% Handle database and connection defaults
+
+try database = params.ensemble.database; catch database = 'ensemble_main'; end
 
 try
   conn_id = params.ensemble.conn_id;
@@ -22,20 +27,26 @@ catch
   tmp_conn_id = 1;
 end
 
-%obtain a list of unique stimulus IDs that are in the response table
-stimIDCol = strmatch('stimulus_id',respDataStruct.vars,'exact');
-stimIDCol = unique( stimIDCol(~isnan(stimIDCol)) );
+if isstruct(indata)
+  %obtain a list of unique stimulus IDs that are in the response table
+  stimIDCol = strmatch('stimulus_id',indata.vars,'exact');
+  stimIDCol = unique( stimIDCol(~isnan(stimIDCol)) );
 
-%throw an error if no stimulus IDs were provided
-if(isempty(stimIDCol))
-  error(['Cannot get stimulus information. Stimulus IDs not provided' ...
-	 ' from response data']);
+  %throw an error if no stimulus IDs were provided
+  if(isempty(stimIDCol))
+    error(['Cannot get stimulus information. Stimulus IDs not provided' ...
+	  ' from response data']);
+  end
+
+  stimIDAll = indata.data{stimIDCol};
+  stimIDList = unique(stimIDAll(~isnan(stimIDAll)));
+else
+  stimIDList = unique(indata);
 end
 
-stimIDAll = respDataStruct.data{stimIDCol};
-stimIDList = unique(stimIDAll(~isnan(stimIDAll)));
-
-stimMeta = mysql_extract_metadata('table','stimulus', ...
+% Extract the stimulus data
+stimMeta = mysql_extract_metadata('database', database, ...
+    'table','stimulus', ...
     'stimulus_id',stimIDList, ...
     'conn_id', conn_id);
 
