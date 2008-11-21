@@ -1,0 +1,94 @@
+	#
+	# set display slowdown factor (1, 2 or 4)
+	#
+	# display every point, every other point, every fourth point, default
+	# is 1 (display every point)...
+	#
+
+slowdown 2
+
+	#
+	# CODES 
+	#
+	# codes:
+	#	serial: "/dev/ttya" -> com1
+	#		"/dev/ttyb" -> com2
+	#
+	#	baud: 9600, 19200, 38400
+	#
+
+#serial "/dev/ttyb"
+#baud 38400
+
+	#
+	# SAMPLE PERIOD
+	#
+	# usage: srate   hertz
+	#        speriod usecs
+	#
+
+srate 256 
+#speriod 8000
+
+	#
+	# FILE FORMAT
+	#
+
+format erpss
+
+	#
+	# GAIN
+	#
+	# For Grass amps, this should be set to 1 (+/- 5v as amp output).
+	# For SA amps, this should be set to 2 (+/- 2.5v as amp output).
+
+gain 2
+
+	#
+	# SCAN DESCRIPTION
+	# 
+	# channel is the channel to sample (indexed from 1)
+	#
+	# description is the channel description
+	#
+	# order of listing gives order in output file and screen.  the info is
+	# parsed in english reading order (left-to-right, top-to-bottom).
+	#
+
+scan {
+  #
+  #  channel  description    channel  description   channel  description
+  #
+	1	"FC7"	2	"F7"  	3	"FC5"
+	4	"F5" 	5	"FC3"	6	"F3"
+	7	"FC1"	8	"F1"	9	"FP3"
+	10	"FF3"	11	"FP1"	12	"FF1"
+	13	"FPZ"	14	"FZ"	15	"FP2"
+	16	"FF2"	17	"FC2"	18	"F2"
+	19	"FC4"	20	"F4"	21	"F6"
+	22	"FF4"	23	"F8"	24	"FP4"
+	25	"CT7"	26	"T3"	27	"CT5"
+	28	"C5"	29	"CP3"	30	"C3"
+	31	"CP1"	32	"C1"	33	"T5"
+	34	"P5"	35	"P3"	36	"P1"
+	37	"PZ"	38	"CZ"	39	"C2"
+	40	"C4"	41	"CP2"	42	"CP4"
+	43	"CT6"	44	"CT8"	45	"C6"
+	46	"T4"    47	"FC6"	48	"FC8 "
+	49	"IN3"	50	"OL"	51	"O1"
+	52	"PO3"	53      "INZ"	54	"OZ"
+	55	"POZ"	56	"P2"	57	"P4"
+	58	"PO4"	59	"O2"	60	"P6"
+	61	"OR"	62	"T6"	63	"REOG"
+	64	"LEOG"  
+}
+
+	#
+	# ansillary info
+	#
+experiment   "yow"
+experimenter "todd"
+subject      "ejg"
+
+
+
