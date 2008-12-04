@@ -68,7 +68,6 @@ outdata.data{sinfo_idx}.type = 'sinfo';
 outdata.data{sinfo_idx}.data = sinfo;
 
 % get flags
-try USE_NORMED = defs.smooth.USE_NORMED; catch USE_NORMED = 1; end
 try USE_SPM = defs.smooth.USE_SPM; catch USE_SPM = 0; end
 try USE_FSL = defs.smooth.USE_FSL; catch USE_FSL = 0; end
 
@@ -181,37 +180,21 @@ for isub=1:nsub_proc
       if ~isempty(flist) || using_resid
 
 	    if USE_SPM
-          if USE_NORMED
-            for ifl=1:length(flist)
-              [fpath fname fext] = fileparts(flist{ifl});
-              ofname = fullfile(fpath,sprintf('w%s%s',fname,fext));
-              smooth_flist = [smooth_flist; ofname];
-              sfname = fullfile(fpath,sprintf('sw%s%s',fname,fext));
-              outdata.data{epi_idx}.data{epicol.subject_id} = ...
-                  [outdata.data{epi_idx}.data{epicol.subject_id}; subid];
-              outdata.data{epi_idx}.data{epicol.session} = ...
-                  [outdata.data{epi_idx}.data{epicol.session}; isess];
-              outdata.data{epi_idx}.data{epicol.ensemble_id} = ...
-                  [outdata.data{epi_idx}.data{epicol.ensemble_id}; sess.ensemble_id];
-              outdata.data{epi_idx}.data{epicol.run} = ...
-                  [outdata.data{epi_idx}.data{epicol.run}; irun];
-              outdata.data{epi_idx}.data{epicol.path} = ...
-                  [outdata.data{epi_idx}.data{epicol.path}; sfname];
-            end
-          else
-            smooth_flist = [smooth_flist; flist];
-            for ifl=1:length(flist)
-              outdata.data{epi_idx}.data{epicol.subject_id} = ...
-                  [outdata.data{epi_idx}.data{epicol.subject_id}; subid];
-              outdata.data{epi_idx}.data{epicol.session} = ...
-                  [outdata.data{epi_idx}.data{epicol.session}; isess];
-              outdata.data{epi_idx}.data{epicol.ensemble_id} = ...
-                  [outdata.data{epi_idx}.data{epicol.ensemble_id}; sess.ensemble_id];
-              outdata.data{epi_idx}.data{epicol.run} = ...
-                  [outdata.data{epi_idx}.data{epicol.run}; irun];
-              outdata.data{epi_idx}.data{epicol.path} = ...
-                  [outdata.data{epi_idx}.data{epicol.path}; flist(:,ifl)];
-            end
+          for ifl=1:length(flist)
+            [fpath fname fext] = fileparts(flist{ifl});
+            ofname = fullfile(fpath,sprintf('%s%s',fname,fext));
+            smooth_flist = [smooth_flist; ofname];
+            sfname = fullfile(fpath,sprintf('s%s%s',fname,fext));
+            outdata.data{epi_idx}.data{epicol.subject_id} = ...
+                [outdata.data{epi_idx}.data{epicol.subject_id}; subid];
+            outdata.data{epi_idx}.data{epicol.session} = ...
+                [outdata.data{epi_idx}.data{epicol.session}; isess];
+            outdata.data{epi_idx}.data{epicol.ensemble_id} = ...
+                [outdata.data{epi_idx}.data{epicol.ensemble_id}; sess.ensemble_id];
+            outdata.data{epi_idx}.data{epicol.run} = ...
+                [outdata.data{epi_idx}.data{epicol.run}; irun];
+            outdata.data{epi_idx}.data{epicol.path} = ...
+                [outdata.data{epi_idx}.data{epicol.path}; sfname];
           end
 
 	      % Delete any previous smoothed images for good measure

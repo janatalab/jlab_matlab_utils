@@ -26,18 +26,20 @@ r.type = 'fmri_anal';  % Identify the type of this reporting instance
 r.report_on_fly = 1;
 
 %%% INITIALIZE VARIABLES
-try WRITE2FILE = defs.init.WRITE2FILE; catch WRITE2FILE = 1; end
+try WRITE2FILE = defs.present.WRITE2FILE; catch WRITE2FILE = 1; end
 
 % Parse out the input data
 for idata = 1:length(indata)
   switch indata(idata).type
-    case {'sinfo'}
-      sinfo = indata(idata);
-      proc_subs = defs.sinfo(:).id;
     case {'paths'}
       pathdata = indata(idata);
       pcol = set_var_col_const(pathdata.vars);
   end
+end
+
+if isfield(defs,'sinfo')
+  sinfo = defs.sinfo;
+  proc_subs = {sinfo(:).id};
 end
 
 % check for required vars
@@ -85,20 +87,19 @@ ecdparams.outDataName = 'presentation_data';
 nsub_proc = length(proc_subs);
 
 for isub=1:nsub_proc
-  subidx = strmatch(proc_subs{isub},{sinfo.id},'exact');
-  subid = sinfo(subidx).id;
+  subid = sinfo(isub).id;
   msg = sprintf('\t\tPROCESSING SUBJECT (%d/%d): %s\n', isub, nsub_proc,subid);
   r = update_report(r,msg);
 
   % Determine number of sessions for this subject
-  nsess = length(sinfo(subidx).sessinfo);
+  nsess = length(sinfo(isub).sessinfo);
   
   %
   % START OF THE SESSION LOOP
   %
   
   for isess = 1:nsess
-    sess = sinfo(subidx).sessinfo(isess);
+    sess = sinfo(isub).sessinfo(isess);
     
     if isfield(sess,'use_session') && ~sess.use_session
       msg = sprintf('\t\t\tSkipping session %d\n', isess);
@@ -116,19 +117,22 @@ for isub=1:nsub_proc
     
     % init session vars
     sdata = ensemble_init_data_struct();    
-    pres = sinfo(subidx).sessinfo(isess).pres;
+    pres = sinfo(isub).sessinfo(isess).pres;
     
     % get behav_indir/outdir
     sfilt = struct();
     sfilt.include.all.subject_id = {subid};
     sfilt.include.all.session = isess;
-    spaths = ensemble_filter(pathdata,spaths);
+    spaths = ensemble_filter(pathdata,sfilt);
     
-    indx = strmatch('behav_indir',spaths.data{pcol.path});
+    indx = strmatch('behav_indir',spaths.data{pcol.path_type});
     behav_indir = spaths.data{pcol.path}{indx};
 
-    outdx = strmatch('behav_outdir',spaths.data{pcol.path});
+    outdx = strmatch('behav_outdir',spaths.data{pcol.path_type});
     behav_outdir = spaths.data{pcol.path}{outdx};
+    
+    andx = strmatch('anal_outdir',spaths.data{pcol.path_type});
+    anal_outdir = spaths.data{pcol.path}{andx};
     
     % Determine how many runs we're dealing with
     runs = sess.use_epi_runs;
@@ -142,7 +146,7 @@ for isub=1:nsub_proc
       presfname = fullfile(behav_indir,pres.logfiles{runs(irun),1});
       targruns  = pres.logfiles{runs(irun),2};
 
-      pdata = presentation_parse(presfname,pres);
+      pdata = presentation_parse(presfname,pres.params);
       if isempty(pdata)
         msg = sprintf('No Presentation Data Returned, SKIPPING\n');
         r = update_report(r,msg);
@@ -194,7 +198,7 @@ for isub=1:nsub_proc
         end
         outdata.data{pdata_idx}.data{pdcol.presdata}.data = ...
             ensemble_concat_datastruct(...
-            {sdata,outdata.data{pdata_idx}.data{pdcol.presdata}.data},...
+            {sdata,outdata.data{pdata_idx}.data{pdcol.presdata}},...
             ecdparams);
       end
     end
@@ -204,6 +208,22 @@ for isub=1:nsub_proc
       mat_fname = fullfile(behav_outdir,sprintf('%s_sess%d_present.mat',...
           subid,isess));
       save(mat_fname,'-struct','sdata');
+      outdata.data{ppaths_idx}.data{ppcol.subject_id} = [...
+          outdata.data{ppaths_idx}.data{ppcol.subject_id}; subid];
+      outdata.data{ppaths_idx}.data{ppcol.session} = [...
+          outdata.data{ppaths_idx}.data{ppcol.session}; isess];
+      outdata.data{ppaths_idx}.data{ppcol.ensemble_id} = [...
+          outdata.data{ppaths_idx}.data{ppcol.ensemble_id}; sess.ensemble_id];
+      outdata.data{ppaths_idx}.data{ppcol.path} = [...
+          outdata.data{ppaths_idx}.data{ppcol.path}; mat_fname];
+      
+      xdefs = defs.present.export_params;
+      xdefs.export.fname = fullfile(anal_outdir,...
+          sprintf('%s_sess%d_present.csv',subid,isess));
+      xdefs.sas.fname = fullfile(anal_outdir,...
+          sprintf('%s_sess%d_present.sas',subid,isess));
+      
+      ensemble_export_sastxt(sdata,xdefs);
     end
     
   end % for isess

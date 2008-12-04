@@ -142,7 +142,7 @@ if SYMLINK_COPLANARS
   cocol = set_var_col_const(outdata.data{cop_idx}.vars);
 end
 
-if SYMLINK_EPIS
+if SYMLINK_EPIS || MAKE_4D_NIFTI
   outdata.vars = [outdata.vars 'epi'];
   epi_idx = length(outdata.vars);
   outdata.data{epi_idx} = ensemble_init_data_struct();
