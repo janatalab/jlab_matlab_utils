@@ -10,7 +10,14 @@ function an_st = ensemble_extract_nd_matrix(data_st,params)
 %
 % params should contain the following fields:
 % .matrix_dims - specifies which variables in data_st will be used to construct
-%                the matrix.
+%                the dimensions of the matrix.
+% .dependent_var - specifies which variable provides the values in the matrix.
+%                  If this variable is numeric then a numeric matrix is
+%                  returned, otherwise a cell array.
+%
+% Optionally, one can specify:
+% .post_process_func - a cell-array of strings that specifies further
+% transformations on the matrix before the data are returned.
 %
 % NOTE: Currently does not support dynamic handling of response type (radio,
 % checkbox, written).  Only handles radio button enums.
@@ -27,19 +34,25 @@ ancols = set_var_col_const(an_st.vars);
 %
 % Make sure parameters have been specified
 %
-if ~isfield(params,'matrix_dims') || isempty(params.matrix_dims)
-  fprintf('%s: No matrix dimension variables specified\n', mfilename);
+if ~all(isfield(params,{'matrix_dims','dependent_var'})) || isempty(params.matrix_dims) ...
+      || isempty(params.dependent_var)
+  fprintf('%s: No matrix dimension or dependent variables specified\n', mfilename);
   return
 end
+
+if iscell(params.dependent_var)
+  params.dependent_var = params.dependent_var{1};
+end
+all_vars = [params.matrix_dims {params.dependent_var}];
 
 %
 % See how many variables we want in our output matrix and make sure they all exist
 %
-have_var_mask = ismember(params.matrix_dims, data_st.vars);
+have_var_mask = ismember(all_vars, data_st.vars);
 if ~all(have_var_mask)
   fprintf('%s: Could not find %d variables in the datastruct: %s\n', ...
       mfilename, sum(~have_var_mask), ...
-      cell2str(params.matrix_dims(~have_var_mask),','))
+      cell2str(all_vars(~have_var_mask),','))
   return
 end
 
@@ -54,21 +67,23 @@ if isfield(params,'filt')
 end
 
 %
-% Inspect the variables to determine if the output matrix is likely to be a
-% numeric or cell array.  Also, figure out how many unique values there are
-% along each dimension
+% Based on the dependent variable, determine if the output matrix is likely to be a
+% numeric or cell array.  
 %
 make_numeric = 1;
-dimension_vals = cell(1,num_dims);
 
+% Are we still numeric
+if ~isnumeric(data_st.data{datacols.(params.dependent_var)})
+  make_numeric = 0;
+end  
+
+%
+% Figure out how many unique values there are along each dimension
+%
+dimension_vals = cell(1,num_dims);
 for idim = 1:num_dims
   % Make a copy of the current data
   curr_data = data_st.data{datacols.(params.matrix_dims{idim})};
-  
-  % Are we still numeric
-  if ~isnumeric(curr_data)
-    make_numeric = 0;
-  end
   
   % Number of unique values along dimension
   dimension_vals{idim} = unique(curr_data);
@@ -89,21 +104,40 @@ else
   data_matrix = cell(cellfun('length', dimension_vals));
 end
 
-%
-% Now extract the data. This is a bit tricky because we have to make it
-% recursive to handle an arbitrary number of dimensions.
-% 
-
 [dim_idxs{1:num_dims}] = deal(0);
 curr_dim = 1;
 dim_names = params.matrix_dims;
 
 % Figure out what input data we're going to pass in
-indata = enum2data(data_st.data{datacols.response_enum});
+indata = data_st.data{datacols.(params.dependent_var)};
 curr_mask = ones(size(indata));
 
+
+%
+% Now extract the data. This is a bit tricky because the function that does
+% this has to be recursive to handle an arbitrary number of dimensions.
+% 
 data_matrix = burrow(curr_mask, dimension_vals, curr_dim, dim_names, dim_idxs, ...
     indata, data_matrix, data_st);
+
+%
+% See if we want to do any post-processing
+%
+try func_list = params.post_process_func; catch func_list = {}; end
+if ~isempty(func_list)
+  mod_data = data_matrix;
+  for ifunc = 1:length(func_list)
+    fh = str2func(func_list{ifunc});
+    try mod_data = fh(mod_data);
+    catch
+      fprintf(['%s: Post processing step (%s) failed. Returning data to ' ...
+	    'original state\n'], mfilename, func_list{ifunc});
+      mod_data = data_matrix;
+      break
+    end
+  end
+  data_matrix = mod_data;
+end
 
 % Finalize the output structure
 an_st.data{ancols.data_matrix} = data_matrix;
@@ -136,13 +170,22 @@ function outdata = burrow(curr_mask, dimension_vals, curr_dim, dim_names, ...
       % grab the data
       
       composite_mask = all(curr_mask,2);
-      
-      % If we are building a numeric array, make sure we have only a single value
+      curr_outdata_idx = sub2ind(size(outdata),dim_idxs{:});
+      % If we are building a numeric array, make sure we have only a single
+      % value, otherwise convert to a cell array
       num_values = sum(composite_mask);
       if isnumeric(outdata) && num_values > 1
-	fprintf('%s: Have to convert numeric array to cell array\n', mfilename)
-      elseif num_values == 1
-	outdata(sub2ind(size(outdata),dim_idxs{:})) = indata(composite_mask);
+	fprintf('%s: Have to convert numeric array to cell array because more than one value was found\n', mfilename)
+	outdata = num2cell(outdata);
+      end
+      
+      % Copy the data
+      if num_values > 0
+	if ~isnumeric(outdata)
+	  outdata{curr_outdata_idx} = indata(composite_mask);
+	else
+	  outdata(curr_outdata_idx) = indata(composite_mask);
+	end
       end
     end
   end % for iidx = 1:num_dims

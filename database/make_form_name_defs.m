@@ -1,5 +1,7 @@
 function [form_id_const, form_name_id_const_map, form_name_list] = make_form_name_defs(params)
-% Generates the form_name_defs file.
+% Generates the form_name_defs file if params.write2file is true. Otherwise it
+% returns a set of variables that allow one to get form IDs by name.
+%
 % [form_id_const, form_name_id_const_map, form_name_list] = make_form_name_defs(params);
 %
 %  Constants are now fields of a form_name_const structure.  form_name_list is a
@@ -12,6 +14,7 @@ function [form_id_const, form_name_id_const_map, form_name_list] = make_form_nam
 %          characters
 % 10/15/07 PJ - Turned into a function, fixed handling of multiple databases
 %          and added returning of the variables
+% 12/11/08 PJ - Turned off writing of form_name_defs.m file by default
 
 if nargin && isfield(params,'ensemble')
   try HOST = params.ensemble.host; catch HOST = ''; end
@@ -21,11 +24,14 @@ if nargin && isfield(params,'ensemble')
   catch DATABASE_SCRIPT_PATH = '.'; 
   end
   
+  try write2file = params.write2file; catch write2file = 0; end
+  
 else
   HOST = '';
   DB = '';
   CONN_ID = 0;
   DATABASE_SCRIPT_PATH = '/afs/cmb.ucdavis.edu/share/matlab/janata/database/';
+  write2file = 0;
 end
 
 mysql_make_conn(HOST,DB,CONN_ID);
@@ -33,23 +39,26 @@ mysql_make_conn(HOST,DB,CONN_ID);
 mysql_str = sprintf('SELECT form_name, form_id FROM form');
 [names, ids] = mysql(CONN_ID, mysql_str);
 
-fname = fullfile(DATABASE_SCRIPT_PATH, 'form_name_defs.m');
+if write2file
+  fname = fullfile(DATABASE_SCRIPT_PATH, 'form_name_defs.m');
 
-% Make a backup copy of the defs file if it already exists
-if exist(fname)
-  unix_str = sprintf('mv form_name_defs.m form_name_defs.m.%s', datestr(datenum(now),29));
-  unix(unix_str);
+  % Make a backup copy of the defs file if it already exists
+  if exist(fname)
+    unix_str = sprintf('mv form_name_defs.m form_name_defs.m.%s', datestr(datenum(now),29));
+    unix(unix_str);
+  end
+
+  fid = fopen(fname, 'wt');
+  if fid == -1
+    error(sprintf('Could not open file: %s\n', fname))
+  end
+
+  fprintf('Writing %s\n', fname);
+
+  fprintf(fid, ...
+      ['%% Automatically generated mapping of form names to form numbers.\n%%\n%%'...
+	' form_name_defs.m\n%%\n%% Generated on %s by make_form_name_defs.m\n\n'], datestr(datenum(now)));
 end
-
-fid = fopen(fname, 'wt');
-if fid == -1
-  error(sprintf('Could not open file: %s\n', fname))
-end
-
-fprintf('Writing %s\n', fname);
-
-fprintf(fid,['%% Automatically generated mapping of form names to form numbers.\n%%\n%%'...
-' form_name_defs.m\n%%\n%% Generated on %s by make_form_name_defs.m\n\n'], datestr(datenum(now)));
 
 nforms = length(ids);
 
@@ -65,31 +74,47 @@ for iform = 1:nforms
   
   form_name_list{iform,1} = orig_name;
   form_name_list{iform,2} = new_name;
-  fprintf(fid,'form_id_const.%s = %d;\n', new_name, ids(iform));
+  if write2file
+    fprintf(fid,'form_id_const.%s = %d;\n', new_name, ids(iform));
+  end
   form_id_const.(new_name) = ids(iform);
 end
 
 % Write a list of form name mappings
-fprintf(fid, '\n\nform_name_id_const_map = { ...\n');
+if write2file
+  fprintf(fid, '\n\nform_name_id_const_map = { ...\n');
+end
+
 for iform = 1:nforms
-  fprintf(fid,'''%s'', ''%s''; ...\n', strrep(form_name_list{iform,1},'''',''''''), form_name_list{iform,2});
+  if write2file
+    fprintf(fid,'''%s'', ''%s''; ...\n', strrep(form_name_list{iform,1},'''',''''''), form_name_list{iform,2});
+  end
   form_name_id_const_map{iform,1} = ...
       strrep(form_name_list{iform,1},'''','''''');
   form_name_id_const_map{iform,2} = form_name_list{iform,2};
 end
-fprintf(fid, '};\n');
+if write2file
+  fprintf(fid, '};\n');
+end
 
 % Write the list of form names to a variable at the end of the file
-fprintf(fid, '\n\nform_name_list = { ...\n');
+if write2file
+  fprintf(fid, '\n\nform_name_list = { ...\n');
+end
 for iform = 1:nforms
-  fprintf(fid,'''%s''; ...\n', strrep(form_name_list{iform,1},'''',''''''));
+  if write2file
+    fprintf(fid,'''%s''; ...\n', strrep(form_name_list{iform,1},'''',''''''));
+  end
   new_form_name_list{iform,1} = strrep(form_name_list{iform,1},'''','''''');
 end
-fprintf(fid, '};\n');
+
+if write2file
+  fprintf(fid, '};\n');
+  fclose(fid);
+end
 
 form_name_list = new_form_name_list;
 
-fclose(fid);
 
 % Close the mysql connection
 mysql('close');
