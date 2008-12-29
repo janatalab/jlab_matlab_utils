@@ -18,6 +18,9 @@ switch p.source
   case 'mate'
     physio = read_mate(flist,p);
     
+  case 'biopac'
+    physio = read_biopac(flist,p);
+    
   otherwise
     fprintf('Unknown source of physio data: %s\n', p.source);
 end
