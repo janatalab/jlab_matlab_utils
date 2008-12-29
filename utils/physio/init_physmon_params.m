@@ -12,6 +12,7 @@ function p = init_physmon_params(config)
 % 10/25/04 PJ  Added .neg_trig_thresh_key
 % 07/20/06 PJ  Modified to handle multiple acquisition systems
 
+p.source = config;
 p.loaddata = 1;
 p.savedata = 0;
 p.outsuffix = '';
@@ -63,7 +64,6 @@ switch config
     p.low_pass_cutoff = 5;		
 					
   case 'mate'
-    p.source = 'mate';
     
     % Scanner trigger related variables
     p.trig_thresh = -2.5;
@@ -78,18 +78,12 @@ switch config
     p.Fs_resp = 50;
 
   case 'biopac'
-    p.trig_thres = 2.5;
-    p.trig_dir = 'pos';
-    p.trig_is_vol = 1;
+    p.thresh = 2.5;
+    p.dir = 'pos';
 
-    % Channel assignments
-    p.scr_chan = 1;
-    p.respir_chan = 2;
-    p.cardiac_chan = 4;
-    p.slice_chan = 7;
-    p.block_chan = 9;
-    p.event_chan = 14;
-    
+    % cutoff frequency for filtering respiratory data. Leave empty if no filtering is desired
+    p.low_pass_cutoff = 5;		
+					
   otherwise
     fprintf('Unknown configuration: %s\n', config)
 end
