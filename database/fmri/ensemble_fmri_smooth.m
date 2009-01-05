@@ -21,11 +21,14 @@ r.report_on_fly = 1;
 
 % Parse out the input data
 for idata = 1:length(indata)
-  switch indata(idata).type
+  switch indata{idata}.type
     case 'sinfo'
-      sinfo = indata(idata);
+      sinfo = indata{idata};
+      sinfo = sinfo.data;
+      proc_subs = {sinfo(:).id};
+      nsub_proc = length(proc_subs);
     case {'epi','realign_epi'}
-      epidata = indata(idata);
+      epidata = indata{idata};
       epicol = set_var_col_const(epidata.vars);
       outdata.vars = [outdata.vars 'epi'];
       epi_idx = length(outdata.vars);
@@ -37,19 +40,6 @@ for idata = 1:length(indata)
       outdata.data{epi_idx}.data{3} = [];
       outdata.data{epi_idx}.data{4} = [];
       outdata.data{epi_idx}.data{5} = {};
-% % % % % SMOOTH THE COPLANAR IMAGES?
-%     case 'coplanar'
-%       coplanar = indata(idata);
-%       cocol = set_var_col_const(coplanar.vars);
-%       outdata.vars = [outdata.vars 'coplanar'];
-%       cop_idx = length(outdata.vars);
-%       outdata.data{cop_idx} = ensemble_init_data_struct();
-%       outdata.data{cop_idx}.type='coplanar';
-%       outdata.data{cop_idx}.vars = coplanar.vars;
-%       outdata.data{cop_idx}.data{1} = {};
-%       outdata.data{cop_idx}.data{2} = [];
-%       outdata.data{cop_idx}.data{3} = [];
-%       outdata.data{cop_idx}.data{4} = {};
   end
 end
 
@@ -57,8 +47,27 @@ end
 check_vars = {'sinfo'};
 check_required_vars;
 
-sinfo = sinfo.data;
-proc_subs = {sinfo(:).id};
+if (iscell(indata) && ~isempty(indata) && isfield(indata{1},'task') && ...
+        ~isempty(strmatch('return_outdir',indata{1}.task))) || ...
+        (isstruct(indata) && isfield(indata,'task') && ...
+        ~isempty(strmatch('return_outdir',indata.task)))
+  outdata = defs.paths.outroot;
+  if length(nsub_proc) == 1
+    outdata = fullfile(outdata,proc_subs{1});
+    if length(sinfo(1).sessinfo) == 1
+      sdir = fullfile(outdata,'session1');
+      if exist(sdir,'dir')
+        outdata = sdir;
+      end
+    else
+      % multiple sessions, save in the current outdir
+    end
+  else
+    % multiple subjects, save in defs.paths.outroot
+  end
+  if ~exist(outdata,'dir'), outdata = ''; end
+  return
+end
 
 % outdata
 outdata.vars = [outdata.vars 'sinfo'];
@@ -94,8 +103,6 @@ end
 %
 % START OF THE SUBJECT LOOP
 %
-
-nsub_proc = length(proc_subs);
 
 for isub=1:nsub_proc
 

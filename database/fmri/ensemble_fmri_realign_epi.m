@@ -27,29 +27,47 @@ r.report_on_fly = 1;
 
 % Parse out the input data
 for idata = 1:length(indata)
-  switch indata(idata).type
+  switch indata{idata}.type
     case 'epi'
-      epidata = indata(idata);
+      epidata = indata{idata};
+      epicol = set_var_col_const(epidata.vars);
     case 'sinfo'
-      sinfo = indata(idata);
+      sinfo = indata{idata};
+      sinfo = sinfo.data;
+      proc_subs = {sinfo(:).id};
+      nsub_proc = length(proc_subs);
   end
 end
 
 % check for required vars
-check_vars = {'sinfo','epidata','pathdata'};
+check_vars = {'sinfo','epidata'};
 check_required_vars;
 
-if ~exist('epidata','var')
-  msg = sprintf('\nCOULD NOT FIND VALID EPI DATA STRUCT\n');
-  r = update_report(r,msg);
-  return
-elseif ~exist('sinfo','var')
-  msg = sprintf('\nCOULD NOT FIND VALID SINFO DATA STRUCT\n');
-  r = update_report(r,msg);
+if (iscell(indata) && ~isempty(indata) && isfield(indata{1},'task') && ...
+        ~isempty(strmatch('return_outdir',indata{1}.task))) || ...
+        (isstruct(indata) && isfield(indata,'task') && ...
+        ~isempty(strmatch('return_outdir',indata.task)))
+  outdata = defs.paths.outroot;
+  if length(nsub_proc) == 1
+    outdata = fullfile(outdata,proc_subs{1});
+    if length(sinfo(1).sessinfo) == 1
+      sdir = fullfile(outdata,'session1');
+      if exist(sdir,'dir')
+        outdata = sdir;
+        sdir = fullfile(outdata,'epi');
+        if exist(sdir,'dir')
+          outdata = sdir;
+        end
+      end
+    else
+      % multiple sessions, save in the current outdir
+    end
+  else
+    % multiple subjects, save in defs.paths.outroot
+  end
+  if ~exist(outdata,'dir'), outdata = ''; end
   return
 end
-
-sinfo = sinfo.data;
 
 % outdata
 outdata.vars = epidata.vars;

@@ -30,21 +30,46 @@ try WRITE2FILE = defs.present.WRITE2FILE; catch WRITE2FILE = 1; end
 
 % Parse out the input data
 for idata = 1:length(indata)
-  switch indata(idata).type
-    case {'paths'}
-      pathdata = indata(idata);
-      pcol = set_var_col_const(pathdata.vars);
+  if isfield(indata{idata},'type')
+    switch indata{idata}.type
+      case {'paths'}
+        pathdata = indata{idata};
+        pcol = set_var_col_const(pathdata.vars);
+    end
   end
 end
 
 if isfield(defs,'sinfo')
   sinfo = defs.sinfo;
   proc_subs = {sinfo(:).id};
+  nsub_proc = length(proc_subs);
 end
 
 % check for required vars
 check_vars = {'sinfo','pathdata'};
 check_required_vars;
+
+if (iscell(indata) && ~isempty(indata) && isfield(indata{1},'task') && ...
+        ~isempty(strmatch('return_outdir',indata{1}.task))) || ...
+        (isstruct(indata) && isfield(indata,'task') && ...
+        ~isempty(strmatch('return_outdir',indata.task)))
+  outdata = defs.paths.outroot;
+  if length(nsub_proc) == 1
+    outdata = fullfile(outdata,proc_subs{1});
+    if length(sinfo(1).sessinfo) == 1
+      sdir = fullfile(outdata,'session1');
+      if exist(sdir,'dir')
+        outdata = sdir;
+      end
+    else
+      % multiple sessions, save in the current outdir
+    end
+  else
+    % multiple subjects, save in defs.paths.outroot
+  end
+  if ~exist(outdata,'dir'), outdata = ''; end
+  return
+end
 
 outdata.vars = [outdata.vars 'sinfo'];
 sinfo_idx = length(outdata.vars);
@@ -83,8 +108,6 @@ ecdparams.outDataName = 'presentation_data';
 %
 % START OF THE SUBJECT LOOP
 %
-
-nsub_proc = length(proc_subs);
 
 for isub=1:nsub_proc
   subid = sinfo(isub).id;

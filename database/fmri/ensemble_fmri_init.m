@@ -44,13 +44,14 @@ r.report_on_fly = 1;
 if isfield(defs,'subids')
   proc_subs = defs.subids;
   if ~ischar(proc_subs) && ~iscell(proc_subs)
-    fprintf(1,'please provide valid subids');
+    warning(1,'please provide valid subids');
     return
   elseif ~iscell(proc_subs)
     proc_subs = {proc_subs};
+    nsub_proc = length(proc_subs);
   end
 else
-  fprintf(1,'please provide valid subids');
+  warning(1,'please provide valid subids');
   return
 end
 
@@ -94,6 +95,17 @@ end
 % check for required vars
 check_vars = {'sinfo'};
 check_required_vars;
+
+if (iscell(indata) && ~isempty(indata) && isfield(indata{1},'task') && ...
+        ~isempty(strmatch('return_outdir',indata{1}.task))) || ...
+        (isstruct(indata) && isfield(indata,'task') && ...
+        ~isempty(strmatch('return_outdir',indata.task)))
+  outdata = exp_outroot;
+  if length(nsub_proc) == 1
+    outdata = fullfile(outdata,proc_subs{1});
+  end
+  return
+end
 
 outdata.vars = [outdata.vars 'sinfo'];
 sinfo_idx = length(outdata.vars);
@@ -162,8 +174,6 @@ outcols = set_var_col_const(outdata.vars);
 %
 % START OF THE SUBJECT LOOP
 %
-
-nsub_proc = length(proc_subs);
 
 for isub=1:nsub_proc
   subidx = strmatch(proc_subs{isub},{sinfo.id},'exact');
