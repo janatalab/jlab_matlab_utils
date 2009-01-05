@@ -40,6 +40,7 @@ function [structsAreEqual,firstViolation,violationReason] = compare_structs(stru
 % Author(s)
 % 2007 - Stefan Tomic, first version
 % 10/8/2008 - Stefan Tomic, extracted from check_anal_exist and added tag,value functionality
+% 12/30/2008 - Fred Barrett, added support for multi-dimensional cell arrays as field values
 %
 
 numberTypes = {'int8','uint8','int16','uint16','int32','uint32','int64','uint64','double'};
@@ -155,20 +156,54 @@ for iField = 1:struct1_nFields
     [fieldsAreEqual,subFieldViolation,violationReason] = compare_structs(struct1_val,struct2_val,'values',checkValues,'substruct',checkSubstruct,'types',checkTypes);
  
    case 'cell'
-    %only cell array of strings is supported
-    [c,ia,ib] = intersect(struct1_val,struct2_val);
+    % compare cell sizes
+    sa = size(struct1_val);
+    sb = size(struct2_val);
     
-    %make sure all elements are in common and in the same order
-    if(length(c) == length(struct1_val) ...
-       && length(c) == length(struct2_val) ...
-       && all(ia == ib))
+    % if cells are not the same exact size, they will be treated as unequal
+    % note, transposed cell arrays will not be treated as equal
+    try sm = (sa == sb);
+    catch
+     fieldsAreEqual = 0;
+    end
+    if ~all(sm)
+     fieldsAreEqual = 0;
+    end
+
+    if(length(sa) > 2)
+     error(['struct1_val is more than 2 dimensions, this size is '...
+         'not yet supported']);
+    end
+
+    if (all(sa > 1))
+      warning('multi-dimensional array, pretending structs match');
+      fieldsAreEqual = 1;
+    elseif ~any([iscellstr(struct1_val),iscellstr(struct2_val),...
+            ischar(struct1_val),ischar(struct2_val)])
+      warning('nested structs, pretending they match');
       fieldsAreEqual = 1;
     else
-      fieldsAreEqual = 0;
+        %only cell array of strings is supported
+        [c,ia,ib] = intersect(struct1_val,struct2_val);
+
+        %make sure all elements are in common and in the same order
+        if(length(c) == length(struct1_val) ...
+           && length(c) == length(struct2_val) ...
+           && all(ia == ib))
+          fieldsAreEqual = 1;
+        else
+          fieldsAreEqual = 0;
+        end
     end
-        
+
+   case 'logical'
+    if struct1_val == struct2_val
+     fieldsAreEqual = 1;
+    else
+     fieldsAreEqual = 0;
+    end
    otherwise
-    error(sprintf('Fieldtype %s not supported.',fieldType));
+    error(sprintf('Fieldtype %s not supported.',struct1_fieldType));
     
   end
 

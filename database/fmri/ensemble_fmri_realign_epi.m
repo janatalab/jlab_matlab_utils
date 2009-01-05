@@ -27,17 +27,25 @@ r.report_on_fly = 1;
 
 % Parse out the input data
 for idata = 1:length(indata)
-  switch indata{idata}.type
-    case 'epi'
-      epidata = indata{idata};
-      epicol = set_var_col_const(epidata.vars);
-    case 'sinfo'
-      sinfo = indata{idata};
-      sinfo = sinfo.data;
-      proc_subs = {sinfo(:).id};
-      nsub_proc = length(proc_subs);
+  if isfield(indata{idata},'type')
+    switch indata{idata}.type
+      case 'epi'
+        epidata = indata{idata};
+        epicol = set_var_col_const(epidata.vars);
+      case 'sinfo'
+        sinfo = indata{idata};
+        sinfo = sinfo.data;
+    end
   end
 end
+
+if ~exist('sinfo','var')
+  if isfield(defs,'sinfo')
+    sinfo = defs.sinfo;
+  end
+end
+proc_subs = {sinfo(:).id};
+nsub_proc = length(proc_subs);
 
 % check for required vars
 check_vars = {'sinfo','epidata'};

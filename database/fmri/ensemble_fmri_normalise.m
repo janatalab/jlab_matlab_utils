@@ -33,51 +33,59 @@ outdata.type = 'normalise';
 
 % Parse out the input data
 for idata = 1:length(indata)
-  switch indata{idata}.type
-    case 'sinfo'
-      sinfo = indata{idata};
-      sinfo = sinfo.data;
-      proc_subs = {sinfo(:).id};
-      nsub_proc = length(proc_subs);
-    case {'epi','realign_epi'}
-      epidata = indata{idata};
-      epicol = set_var_col_const(epidata.vars);
-      outdata.vars = [outdata.vars 'epi'];
-      epi_idx = length(outdata.vars);
-      outdata.data{epi_idx} = ensemble_init_data_struct();
-      outdata.data{epi_idx}.type='epi';
-      outdata.data{epi_idx}.vars = epidata.vars;
-      outdata.data{epi_idx}.data{1} = {};
-      outdata.data{epi_idx}.data{2} = [];
-      outdata.data{epi_idx}.data{3} = [];
-      outdata.data{epi_idx}.data{4} = [];
-      outdata.data{epi_idx}.data{5} = {};
-    case 'hires'
-      hires = indata{idata};
-      hicol = set_var_col_const(hires.vars);
-      outdata.vars = [outdata.vars 'hires'];
-      hires_idx = length(outdata.vars);
-      outdata.data{hires_idx} = ensemble_init_data_struct();
-      outdata.data{hires_idx}.type='hires';
-      outdata.data{hires_idx}.vars = hires.vars;
-      outdata.data{hires_idx}.data{1} = {};
-      outdata.data{hires_idx}.data{2} = [];
-      outdata.data{hires_idx}.data{3} = [];
-      outdata.data{hires_idx}.data{4} = {};
-    case 'coplanar'
-      coplanar = indata{idata};
-      cocol = set_var_col_const(coplanar.vars);
-      outdata.vars = [outdata.vars 'coplanar'];
-      cop_idx = length(outdata.vars);
-      outdata.data{cop_idx} = ensemble_init_data_struct();
-      outdata.data{cop_idx}.type='coplanar';
-      outdata.data{cop_idx}.vars = coplanar.vars;
-      outdata.data{cop_idx}.data{1} = {};
-      outdata.data{cop_idx}.data{2} = [];
-      outdata.data{cop_idx}.data{3} = [];
-      outdata.data{cop_idx}.data{4} = {};
+  if isfield(indata{idata},'type')
+      switch indata{idata}.type
+        case 'sinfo'
+          sinfo = indata{idata};
+          sinfo = sinfo.data;
+        case {'epi','realign_epi'}
+          epidata = indata{idata};
+          epicol = set_var_col_const(epidata.vars);
+          outdata.vars = [outdata.vars 'epi'];
+          epi_idx = length(outdata.vars);
+          outdata.data{epi_idx} = ensemble_init_data_struct();
+          outdata.data{epi_idx}.type='epi';
+          outdata.data{epi_idx}.vars = epidata.vars;
+          outdata.data{epi_idx}.data{1} = {};
+          outdata.data{epi_idx}.data{2} = [];
+          outdata.data{epi_idx}.data{3} = [];
+          outdata.data{epi_idx}.data{4} = [];
+          outdata.data{epi_idx}.data{5} = {};
+        case 'hires'
+          hires = indata{idata};
+          hicol = set_var_col_const(hires.vars);
+          outdata.vars = [outdata.vars 'hires'];
+          hires_idx = length(outdata.vars);
+          outdata.data{hires_idx} = ensemble_init_data_struct();
+          outdata.data{hires_idx}.type='hires';
+          outdata.data{hires_idx}.vars = hires.vars;
+          outdata.data{hires_idx}.data{1} = {};
+          outdata.data{hires_idx}.data{2} = [];
+          outdata.data{hires_idx}.data{3} = [];
+          outdata.data{hires_idx}.data{4} = {};
+        case 'coplanar'
+          coplanar = indata{idata};
+          cocol = set_var_col_const(coplanar.vars);
+          outdata.vars = [outdata.vars 'coplanar'];
+          cop_idx = length(outdata.vars);
+          outdata.data{cop_idx} = ensemble_init_data_struct();
+          outdata.data{cop_idx}.type='coplanar';
+          outdata.data{cop_idx}.vars = coplanar.vars;
+          outdata.data{cop_idx}.data{1} = {};
+          outdata.data{cop_idx}.data{2} = [];
+          outdata.data{cop_idx}.data{3} = [];
+          outdata.data{cop_idx}.data{4} = {};
+      end
   end
 end
+
+if ~exist('sinfo','var')
+  if isfield(defs,'sinfo')
+    sinfo = defs.sinfo;
+  end
+end
+proc_subs = {sinfo(:).id};
+nsub_proc = length(proc_subs);
 
 % check for required vars
 check_vars = {'sinfo'};

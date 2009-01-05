@@ -21,27 +21,35 @@ r.report_on_fly = 1;
 
 % Parse out the input data
 for idata = 1:length(indata)
-  switch indata{idata}.type
-    case 'sinfo'
-      sinfo = indata{idata};
-      sinfo = sinfo.data;
-      proc_subs = {sinfo(:).id};
-      nsub_proc = length(proc_subs);
-    case {'epi','realign_epi'}
-      epidata = indata{idata};
-      epicol = set_var_col_const(epidata.vars);
-      outdata.vars = [outdata.vars 'epi'];
-      epi_idx = length(outdata.vars);
-      outdata.data{epi_idx} = ensemble_init_data_struct();
-      outdata.data{epi_idx}.type='epi';
-      outdata.data{epi_idx}.vars = epidata.vars;
-      outdata.data{epi_idx}.data{1} = {};
-      outdata.data{epi_idx}.data{2} = [];
-      outdata.data{epi_idx}.data{3} = [];
-      outdata.data{epi_idx}.data{4} = [];
-      outdata.data{epi_idx}.data{5} = {};
+  if isfield(indata{idata},'type')
+    switch indata{idata}.type
+      case 'sinfo'
+        sinfo = indata{idata};
+        sinfo = sinfo.data;
+      case {'epi','realign_epi'}
+        epidata = indata{idata};
+        epicol = set_var_col_const(epidata.vars);
+        outdata.vars = [outdata.vars 'epi'];
+        epi_idx = length(outdata.vars);
+        outdata.data{epi_idx} = ensemble_init_data_struct();
+        outdata.data{epi_idx}.type='epi';
+        outdata.data{epi_idx}.vars = epidata.vars;
+        outdata.data{epi_idx}.data{1} = {};
+        outdata.data{epi_idx}.data{2} = [];
+        outdata.data{epi_idx}.data{3} = [];
+        outdata.data{epi_idx}.data{4} = [];
+        outdata.data{epi_idx}.data{5} = {};
+    end
   end
 end
+
+if ~exist('sinfo','var')
+  if isfield(defs,'sinfo')
+    sinfo = defs.sinfo;
+  end
+end
+proc_subs = {sinfo(:).id};
+nsub_proc = length(proc_subs);
 
 % check for required vars
 check_vars = {'sinfo'};
