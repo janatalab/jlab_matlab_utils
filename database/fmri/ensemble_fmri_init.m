@@ -84,7 +84,7 @@ catch REPLACE_BAD_VOLS = 0; end
 try ROTATE_EPI = defs.init.ROTATE_EPI;
 catch ROTATE_EPI = 0; end
 try USE_SPM = defs.init.USE_SPM; catch USE_SPM = 0; end
-try CLOBBER = defs.init.CLOBBER; catch CLOBBER = 0; end
+try CLOBBER = defs.init.CLOBBER; catch CLOBBER = 1; end
 try WRITE2FILE = defs.init.WRITE2FILE; catch WRITE2FILE = 0; end
 
 % set up data structs

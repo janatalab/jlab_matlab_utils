@@ -28,48 +28,51 @@ r.report_on_fly = 1;
 % Parse out the input data
 for idata = 1:length(indata)
   if isfield(indata{idata},'type')
-      switch indata{idata}.type
-        case 'sinfo'
-          sinfo = indata{idata};
-          sinfo = sinfo.data;
-        case {'epi','realign_epi'}
-          epidata = indata{idata};
-          epicol = set_var_col_const(epidata.vars);
-          outdata.vars = [outdata.vars 'epi'];
-          epi_idx = length(outdata.vars);
-          outdata.data{epi_idx} = ensemble_init_data_struct();
-          outdata.data{epi_idx}.type='epi';
-          outdata.data{epi_idx}.vars = epidata.vars;
-          outdata.data{epi_idx}.data{1} = {};
-          outdata.data{epi_idx}.data{2} = [];
-          outdata.data{epi_idx}.data{3} = [];
-          outdata.data{epi_idx}.data{4} = [];
-          outdata.data{epi_idx}.data{5} = {};
-        case 'hires'
-          hires = indata{idata};
-          hicol = set_var_col_const(hires.vars);
-          outdata.vars = [outdata.vars 'hires'];
-          hires_idx = length(outdata.vars);
-          outdata.data{hires_idx} = ensemble_init_data_struct();
-          outdata.data{hires_idx}.type='hires';
-          outdata.data{hires_idx}.vars = hires.vars;
-          outdata.data{hires_idx}.data{1} = {};
-          outdata.data{hires_idx}.data{2} = [];
-          outdata.data{hires_idx}.data{3} = [];
-          outdata.data{hires_idx}.data{4} = {};
-        case 'coplanar'
-          coplanar = indata{idata};
-          cocol = set_var_col_const(coplanar.vars);
-          outdata.vars = [outdata.vars 'coplanar'];
-          cop_idx = length(outdata.vars);
-          outdata.data{cop_idx} = ensemble_init_data_struct();
-          outdata.data{cop_idx}.type='coplanar';
-          outdata.data{cop_idx}.vars = coplanar.vars;
-          outdata.data{cop_idx}.data{1} = {};
-          outdata.data{cop_idx}.data{2} = [];
-          outdata.data{cop_idx}.data{3} = [];
-          outdata.data{cop_idx}.data{4} = {};
-      end
+    switch indata{idata}.type
+      case 'sinfo'
+        sinfo = indata{idata};
+        sinfo = sinfo.data;
+      case {'epi','realign_epi'}
+        epidata = indata{idata};
+        epicol = set_var_col_const(epidata.vars);
+        outdata.vars = [outdata.vars 'epi'];
+        epi_idx = length(outdata.vars);
+        outdata.data{epi_idx} = ensemble_init_data_struct();
+        outdata.data{epi_idx}.type='epi';
+        outdata.data{epi_idx}.vars = epidata.vars;
+        outdata.data{epi_idx}.data{1} = {};
+        outdata.data{epi_idx}.data{2} = [];
+        outdata.data{epi_idx}.data{3} = [];
+        outdata.data{epi_idx}.data{4} = [];
+        outdata.data{epi_idx}.data{5} = {};
+      case 'hires'
+        hires = indata{idata};
+        hicol = set_var_col_const(hires.vars);
+        outdata.vars = [outdata.vars 'hires'];
+        hires_idx = length(outdata.vars);
+        outdata.data{hires_idx} = ensemble_init_data_struct();
+        outdata.data{hires_idx}.type='hires';
+        outdata.data{hires_idx}.vars = hires.vars;
+        outdata.data{hires_idx}.data{1} = {};
+        outdata.data{hires_idx}.data{2} = [];
+        outdata.data{hires_idx}.data{3} = [];
+        outdata.data{hires_idx}.data{4} = {};
+      case 'coplanar'
+        coplanar = indata{idata};
+        cocol = set_var_col_const(coplanar.vars);
+        outdata.vars = [outdata.vars 'coplanar'];
+        cop_idx = length(outdata.vars);
+        outdata.data{cop_idx} = ensemble_init_data_struct();
+        outdata.data{cop_idx}.type='coplanar';
+        outdata.data{cop_idx}.vars = coplanar.vars;
+        outdata.data{cop_idx}.data{1} = {};
+        outdata.data{cop_idx}.data{2} = [];
+        outdata.data{cop_idx}.data{3} = [];
+        outdata.data{cop_idx}.data{4} = {};
+      case {'paths'}
+        pathdata = indata{idata};
+        pcol = set_var_col_const(pathdata.vars);
+    end
   end
 end
 
@@ -82,32 +85,44 @@ proc_subs = {sinfo(:).id};
 nsub_proc = length(proc_subs);
 
 % check for required vars
-check_vars = {'sinfo'};
+check_vars = {'sinfo','pathdata'};
 check_required_vars;
 
 if (iscell(indata) && ~isempty(indata) && isfield(indata{1},'task') && ...
         ~isempty(strmatch('return_outdir',indata{1}.task))) || ...
         (isstruct(indata) && isfield(indata,'task') && ...
         ~isempty(strmatch('return_outdir',indata.task)))
-  outdata = defs.paths.outroot;
-  if length(nsub_proc) == 1
-    outdata = fullfile(outdata,proc_subs{1});
-    if length(sinfo(1).sessinfo) == 1
-      sdir = fullfile(outdata,'session1');
-      if exist(sdir,'dir')
-        outdata = sdir;
-        sdir = fullfile(outdata,'epi');
-        if exist(sdir,'dir')
-          outdata = sdir;
+  if exist('pathdata','var') && length(pathdata.data{1}) > 0
+    if length(nsub_proc) == 1
+      pfilt = struct();
+      pfilt.include.all.subject_id = proc_subs;
+      lpathdata = ensemble_filter(pathdata,pfilt);
+      if ~isempty(lpathdata.data{1})
+        sfilt = pfilt;
+        sfilt.include.all.path_type = {'epi_outdir'};
+        spathdata = ensemble_filter(lpathdata,sfilt);
+        if length(spathdata.data{1}) == 1
+          % one epi outdir, save outdata = epi_outdir
+          outdata = spathdata.data{pcol.path}{1};
+        else
+          sfilt = pfilt;
+          sfilt.include.all.path_type = {'sess_outdir'};
+          spathdata = ensemble_filter(lpathdata,sfilt);
+          if length(spathdata.data{1}) == 1;
+            outdata = spathdata.data{pcol.path}{1};
+          else
+            sfilt = pfilt;
+            sfilt.include.all.path_type = {'sub_outdir'};
+            spathdata = ensemble_filter(lpathdata,sfilt);
+            if length(spathdata.data{1}) == 1;
+              outdata = spathdata.data{pcol.path}{1};            
+            end
+          end
         end
       end
-    else
-      % multiple sessions, save in the current outdir
     end
-  else
-    % multiple subjects, save in defs.paths.outroot
   end
-  if ~exist(outdata,'dir'), outdata = ''; end
+  if ~exist('outdata','var') || ~exist(outdata,'dir'), outdata = ''; end
   return
 end
 
@@ -122,18 +137,14 @@ outdata.data{sinfo_idx}.data = sinfo;
 coreg_list = defs.fmri.general.coreg_list;
 
 % get flags
-try USE_SPM = defs.realign.USE_SPM; catch USE_SPM = 0; end
-try USE_FSL = defs.realign.USE_FSL; catch USE_FSL = 0; end
+try USE_SPM = defs.coreg.USE_SPM; catch USE_SPM = 0; end
+try USE_FSL = defs.coreg.USE_FSL; catch USE_FSL = 0; end
 
 if USE_FSL && ~USE_SPM
-  msg = sprintf('FSL not supported yet ...\n');
-  r = update_report(r,msg);
-  return
+  error('FSL not supported yet ...\n');
 elseif ~USE_FSL && ~USE_SPM
-  msg = sprintf(['\t\tyou must specify either SPM or FSL to carry out '...
+  error(['\t\tyou must specify either SPM or FSL to carry out '...
       'the analyses\n']);
-  r = update_report(r,msg);
-  return
 end
 
 % Set stuff up for specifying an SPM job.  Specify jobs on a subject level

@@ -1,4 +1,4 @@
-function outdata = ensemble_fmri_evaluate_contrasts(indata,defs)
+function [outdata] = ensemble_fmri_evaluate_contrasts(indata,defs)
 
 % evaluates contrasts for level1 models
 % 
@@ -17,39 +17,63 @@ r.report_on_fly = 1;
 
 % Parse out the input data
 for idata = 1:length(indata)
-  switch indata(idata).type
-    case 'sinfo'
-      sinfo = indata(idata).data;
-    case 'modelspec'
-      modelspec = indata(idata);
-      mocol = set_var_col_const(modelspec.vars);
+  if isfield(indata{idata},'type')
+    switch indata{idata}.type
+      case 'sinfo'
+        sinfo = indata{idata}.data;
+        proc_subs = {sinfo(:).id};
+        nsub_proc = length(proc_subs);
+      case 'modelspec'
+        modelspec = indata{idata};
+        mocol = set_var_col_const(modelspec.vars);
+      case {'paths'}
+        pathdata = indata{idata};
+        pcol = set_var_col_const(pathdata.vars);
+    end
   end
-% % %   OUTDATA STRUCT FOR MAPS/MASKS/ETC???
 end
 
 % check for required vars
-good = true;
-check_vars = {'sinfo','modelspec'};
-for icv=1:length(check_vars)
-  if ischar(check_vars{icv})
-    if ~exist(check_vars{icv},'var')
-      msg = sprintf('\nCOULD NOT FIND VALID %s DATA STRUCT\n',check_vars{icv});
-      r = update_report(r,msg);
-      good = false;
-    end
-  elseif iscell(check_vars{icv}) && good
-    % check that at least one of the vars exists, otherwise ~good
-    conditional = check_vars{icv};
-    good=false;
-    for iccv=1:length(conditional)
-      if exist(conditional{iccv},'var')
-        good = true;
+check_vars = {'sinfo','modelspec','pathdata'};
+check_required_vars;
+
+if (iscell(indata) && ~isempty(indata) && isfield(indata{1},'task') && ...
+        ~isempty(strmatch('return_outdir',indata{1}.task))) || ...
+        (isstruct(indata) && isfield(indata,'task') && ...
+        ~isempty(strmatch('return_outdir',indata.task)))
+  if exist('pathdata','var') && length(pathdata.data{1}) > 0
+    if length(nsub_proc) == 1
+      pfilt = struct();
+      pfilt.include.all.subject_id = proc_subs;
+      lpathdata = ensemble_filter(pathdata,pfilt);
+      if ~isempty(lpathdata.data{1})
+        sfilt = pfilt;
+        sfilt.include.all.path_type = {'anal_outdir'};
+        spathdata = ensemble_filter(lpathdata,sfilt);
+        if length(spathdata.data{1}) == 1
+          % one epi outdir, save outdata = epi_outdir
+          outdata = spathdata.data{pcol.path}{1};
+        else
+          sfilt = pfilt;
+          sfilt.include.all.path_type = {'sess_outdir'};
+          spathdata = ensemble_filter(lpathdata,sfilt);
+          if length(spathdata.data{1}) == 1;
+            outdata = spathdata.data{pcol.path}{1};
+          else
+            sfilt = pfilt;
+            sfilt.include.all.path_type = {'sub_outdir'};
+            spathdata = ensemble_filter(lpathdata,sfilt);
+            if length(spathdata.data{1}) == 1;
+              outdata = spathdata.data{pcol.path}{1};            
+            end
+          end
+        end
       end
     end
   end
+  if ~exist('outdata','var') || ~exist(outdata,'dir'), outdata = ''; end
+  return
 end
-
-nsub_proc = length(sinfo(:));
 
 % outdata
 % sinfo

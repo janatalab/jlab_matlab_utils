@@ -39,6 +39,9 @@ for idata = 1:length(indata)
         outdata.data{epi_idx}.data{3} = [];
         outdata.data{epi_idx}.data{4} = [];
         outdata.data{epi_idx}.data{5} = {};
+      case {'paths'}
+        pathdata = indata{idata};
+        pcol = set_var_col_const(pathdata.vars);
     end
   end
 end
@@ -52,28 +55,44 @@ proc_subs = {sinfo(:).id};
 nsub_proc = length(proc_subs);
 
 % check for required vars
-check_vars = {'sinfo'};
+check_vars = {'sinfo','pathdata'};
 check_required_vars;
 
 if (iscell(indata) && ~isempty(indata) && isfield(indata{1},'task') && ...
         ~isempty(strmatch('return_outdir',indata{1}.task))) || ...
         (isstruct(indata) && isfield(indata,'task') && ...
         ~isempty(strmatch('return_outdir',indata.task)))
-  outdata = defs.paths.outroot;
-  if length(nsub_proc) == 1
-    outdata = fullfile(outdata,proc_subs{1});
-    if length(sinfo(1).sessinfo) == 1
-      sdir = fullfile(outdata,'session1');
-      if exist(sdir,'dir')
-        outdata = sdir;
+  if exist('pathdata','var') && length(pathdata.data{1}) > 0
+    if length(nsub_proc) == 1
+      pfilt = struct();
+      pfilt.include.all.subject_id = proc_subs;
+      lpathdata = ensemble_filter(pathdata,pfilt);
+      if ~isempty(lpathdata.data{1})
+        sfilt = pfilt;
+        sfilt.include.all.path_type = {'epi_outdir'};
+        spathdata = ensemble_filter(lpathdata,sfilt);
+        if length(spathdata.data{1}) == 1
+          % one epi outdir, save outdata = epi_outdir
+          outdata = spathdata.data{pcol.path}{1};
+        else
+          sfilt = pfilt;
+          sfilt.include.all.path_type = {'sess_outdir'};
+          spathdata = ensemble_filter(lpathdata,sfilt);
+          if length(spathdata.data{1}) == 1;
+            outdata = spathdata.data{pcol.path}{1};
+          else
+            sfilt = pfilt;
+            sfilt.include.all.path_type = {'sub_outdir'};
+            spathdata = ensemble_filter(lpathdata,sfilt);
+            if length(spathdata.data{1}) == 1;
+              outdata = spathdata.data{pcol.path}{1};            
+            end
+          end
+        end
       end
-    else
-      % multiple sessions, save in the current outdir
     end
-  else
-    % multiple subjects, save in defs.paths.outroot
   end
-  if ~exist(outdata,'dir'), outdata = ''; end
+  if ~exist('outdata','var') || ~exist(outdata,'dir'), outdata = ''; end
   return
 end
 
@@ -89,13 +108,11 @@ try USE_SPM = defs.smooth.USE_SPM; catch USE_SPM = 0; end
 try USE_FSL = defs.smooth.USE_FSL; catch USE_FSL = 0; end
 
 if USE_FSL && ~USE_SPM
-  msg = sprintf('FSL not supported yet ...\n');
-  r = update_report(r,msg);
+  error('FSL not supported yet ...\n');
   return
 elseif ~USE_FSL && ~USE_SPM
-  msg = sprintf(['\t\tyou must specify either SPM or FSL to carry out '...
+  error(['\t\tyou must specify either SPM or FSL to carry out '...
       'the analyses\n']);
-  r = update_report(r,msg);
   return
 end
 

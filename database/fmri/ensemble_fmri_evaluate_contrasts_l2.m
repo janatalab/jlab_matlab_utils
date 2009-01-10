@@ -12,16 +12,30 @@ r.report_on_fly = 1;
 
 % Parse out the input data
 for idata = 1:length(indata)
-  switch indata(idata).type
-    case 'level2model'
-      modelspec = indata(idata);
-      mocol = set_var_col_const(modelspec.vars);
+  if isfield(indata{idata},'type')
+    switch indata{idata}.type
+      case 'level2model'
+        modelspec = indata{idata};
+        mocol = set_var_col_const(modelspec.vars);
+    end
   end
 end
 
 % check for required vars, quit if they can't be found
 check_vars = {'modelspec'};
 check_required_vars;
+
+if (iscell(indata) && ~isempty(indata) && isfield(indata{1},'task') && ...
+        ~isempty(strmatch('return_outdir',indata{1}.task))) || ...
+        (isstruct(indata) && isfield(indata,'task') && ...
+        ~isempty(strmatch('return_outdir',indata.task)))
+  if isfield(defs,'paths') && isfield(defs.paths,'analpath')
+    outdata = defs.paths.analpath;
+    check_dir(outdata);
+  end
+  if ~exist('outdata','var') || ~exist(outdata,'dir'), outdata = ''; end
+  return
+end
 
 % get model
 try curr_model = defs.model;
@@ -36,13 +50,11 @@ try USE_SPM = defs.evaluate_contrasts_l2.USE_SPM; catch USE_SPM = 0; end
 try USE_FSL = defs.evaluate_contrasts_l2.USE_FSL; catch USE_FSL = 0; end
 
 if USE_FSL && ~USE_SPM
-  msg = sprintf('FSL not supported yet ...\n');
-  r = update_report(r,msg);
+  error('FSL not supported yet ...\n');
   return
 elseif ~USE_FSL && ~USE_SPM
-  msg = sprintf(['\t\tyou must specify either SPM or FSL to carry out '...
+  error(['\t\tyou must specify either SPM or FSL to carry out '...
       'the analyses\n']);
-  r = update_report(r,msg);
   return
 end
 

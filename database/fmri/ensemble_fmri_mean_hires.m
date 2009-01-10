@@ -6,6 +6,15 @@ function outdata = ensemble_fmri_mean_hires(indata,defs)
 % 
 % FB 2008.09.10
 
+if (iscell(indata) && ~isempty(indata) && isfield(indata{1},'task') && ...
+        ~isempty(strmatch('return_outdir',indata{1}.task))) || ...
+        (isstruct(indata) && isfield(indata,'task') && ...
+        ~isempty(strmatch('return_outdir',indata.task)))
+
+  outdata = ''; % return nothing, ens_job_|| will use the default
+  return
+end
+
 global r
 
 r = init_results_struct;
@@ -18,10 +27,12 @@ outdata.type = 'meanhires';
 
 % Parse out the input data
 for idata = 1:length(indata)
-  switch indata(idata).type
-    case 'hires'
-      hires = indata(idata);
-      hicol = set_var_col_const(hires.vars);
+  if isfield(indata{idata},'type')
+    switch indata{idata}.type
+      case 'hires'
+        hires = indata{idata};
+        hicol = set_var_col_const(hires.vars);
+    end
   end
 end
 
@@ -34,6 +45,18 @@ end
 % check for required vars
 check_vars = {'sinfo','hires'};
 check_required_vars;
+
+if (iscell(indata) && ~isempty(indata) && isfield(indata{1},'task') && ...
+        ~isempty(strmatch('return_outdir',indata{1}.task))) || ...
+        (isstruct(indata) && isfield(indata,'task') && ...
+        ~isempty(strmatch('return_outdir',indata.task)))
+  if isfield(defs,'paths') && isfield(defs.paths,'groupanat')
+    outdata = defs.paths.groupanat;
+    check_dir(outdata);
+  end
+  if ~exist('outdata','var') || ~exist(outdata,'dir'), outdata = ''; end
+  return
+end
 
 % outdata
 outdata.vars = [outdata.vars 'sinfo'];

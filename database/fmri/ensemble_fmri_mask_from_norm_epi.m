@@ -28,47 +28,70 @@ outdata.type = 'normed_epi_mask';
 
 % Parse out the input data
 for idata = 1:length(indata)
-  switch indata(idata).type
-    case 'sinfo'
-      sinfo = indata(idata);
-    case {'epi','realign_epi'}
-      epidata = indata(idata);
-      epicol = set_var_col_const(epidata.vars);
-    case 'hires'
-      hires = indata(idata);
-      hicol = set_var_col_const(hires.vars);
-    case 'coplanar'
-      coplanar = indata(idata);
-      cocol = set_var_col_const(coplanar.vars);
+  if isfield(indata{idata},'type')
+    switch indata{idata}.type
+      case 'sinfo'
+        sinfo = indata{idata};
+        sinfo = sinfo.data;
+        proc_subs = {sinfo(:).id};
+        nsub_proc = length(proc_subs);
+      case {'epi','realign_epi'}
+        epidata = indata{idata};
+        epicol = set_var_col_const(epidata.vars);
+      case 'hires'
+        hires = indata{idata};
+        hicol = set_var_col_const(hires.vars);
+      case 'coplanar'
+        coplanar = indata{idata};
+        cocol = set_var_col_const(coplanar.vars);
+      case {'paths'}
+        pathdata = indata{idata};
+        pcol = set_var_col_const(pathdata.vars);
+    end
   end
 end
 
 % check for required vars
-good = true;
 check_vars = {'sinfo','epidata',{'hires','coplanar'}};
-for icv=1:length(check_vars)
-  if ischar(check_vars{icv})
-    if ~exist(check_vars{icv},'var')
-      msg = sprintf('\nCOULD NOT FIND VALID %s DATA STRUCT\n',check_vars{icv});
-      r = update_report(r,msg);
-      good = false;
-    end
-  elseif iscell(check_vars{icv}) && good
-    % check that at least one of the vars exists, otherwise ~good
-    conditional = check_vars{icv};
-    good=false;
-    for iccv=1:length(conditional)
-      if exist(conditional{iccv},'var')
-        good = true;
+check_required_vars;
+
+if (iscell(indata) && ~isempty(indata) && isfield(indata{1},'task') && ...
+        ~isempty(strmatch('return_outdir',indata{1}.task))) || ...
+        (isstruct(indata) && isfield(indata,'task') && ...
+        ~isempty(strmatch('return_outdir',indata.task)))
+  if exist('pathdata','var') && length(pathdata.data{1}) > 0
+    if length(nsub_proc) == 1
+      pfilt = struct();
+      pfilt.include.all.subject_id = proc_subs;
+      lpathdata = ensemble_filter(pathdata,pfilt);
+      if ~isempty(lpathdata.data{1})
+        sfilt = pfilt;
+        sfilt.include.all.path_type = {'anat_outdir'};
+        spathdata = ensemble_filter(lpathdata,sfilt);
+        if length(spathdata.data{1}) == 1
+          % one epi outdir, save outdata = epi_outdir
+          outdata = spathdata.data{pcol.path}{1};
+        else
+          sfilt = pfilt;
+          sfilt.include.all.path_type = {'sess_outdir'};
+          spathdata = ensemble_filter(lpathdata,sfilt);
+          if length(spathdata.data{1}) == 1;
+            outdata = spathdata.data{pcol.path}{1};
+          else
+            sfilt = pfilt;
+            sfilt.include.all.path_type = {'sub_outdir'};
+            spathdata = ensemble_filter(lpathdata,sfilt);
+            if length(spathdata.data{1}) == 1;
+              outdata = spathdata.data{pcol.path}{1};            
+            end
+          end
+        end
       end
     end
   end
+  if ~exist('outdata','var') || ~exist(outdata,'dir'), outdata = ''; end
+  return
 end
-
-if ~good, return, end
-
-sinfo = sinfo.data;
-proc_subs = {sinfo(:).id};
 
 % outdata
 outdata.vars = [outdata.vars 'sinfo'];

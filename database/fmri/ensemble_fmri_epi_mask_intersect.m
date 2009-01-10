@@ -9,6 +9,15 @@ function outdata = ensemble_fmri_epi_mask_intersect(indata,defs)
 % 
 % FB 2008.08.27
 
+if (iscell(indata) && ~isempty(indata) && isfield(indata{1},'task') && ...
+        ~isempty(strmatch('return_outdir',indata{1}.task))) || ...
+        (isstruct(indata) && isfield(indata,'task') && ...
+        ~isempty(strmatch('return_outdir',indata.task)))
+
+  outdata = ''; % return nothing, ens_job_|| will use the default
+  return
+end
+
 global r;
 
 outdata = ensemble_init_data_struct();
@@ -21,10 +30,12 @@ r.report_on_fly = 1;
 
 % Parse out the input data
 for idata = 1:length(indata)
-  switch indata(idata).type
-    case 'epi_mask'
-      emdata = indata(idata);
-      emcol = set_var_col_const(emdata.vars);
+  if isfield(indata{idata},'type')
+    switch indata{idata}.type
+      case 'epi_mask'
+        emdata = indata{idata};
+        emcol = set_var_col_const(emdata.vars);
+    end
   end
 end
 
@@ -33,28 +44,20 @@ if isfield(defs,'sinfo') && isstruct(defs.sinfo)
 end
 
 % check for required vars
-good = true;
 check_vars = {'sinfo','emdata'};
-for icv=1:length(check_vars)
-  if ischar(check_vars{icv})
-    if ~exist(check_vars{icv},'var')
-      msg = sprintf('\nCOULD NOT FIND VALID %s DATA STRUCT\n',check_vars{icv});
-      r = update_report(r,msg);
-      good = false;
-    end
-  elseif iscell(check_vars{icv}) && good
-    % check that at least one of the vars exists, otherwise ~good
-    conditional = check_vars{icv};
-    good=false;
-    for iccv=1:length(conditional)
-      if exist(conditional{iccv},'var')
-        good = true;
-      end
-    end
-  end
-end
+check_required_vars;
 
-if ~good, return, end
+if (iscell(indata) && ~isempty(indata) && isfield(indata{1},'task') && ...
+        ~isempty(strmatch('return_outdir',indata{1}.task))) || ...
+        (isstruct(indata) && isfield(indata,'task') && ...
+        ~isempty(strmatch('return_outdir',indata.task)))
+  if isfield(defs,'paths') && isfield(defs.paths,'groupanat')
+    outdata = defs.paths.groupanat;
+    check_dir(outdata);
+  end
+  if ~exist('outdata','var') || ~exist(outdata,'dir'), outdata = ''; end
+  return
+end
 
 % outdata
 outdata.vars = [outdata.vars 'sinfo'];

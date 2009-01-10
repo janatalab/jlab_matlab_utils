@@ -22,18 +22,24 @@ r.report_on_fly = 1;
 
 % Parse out the input data
 for idata = 1:length(indata)
-  switch indata(idata).type
-    case 'meanhires'
-      meanhires = indata(idata);
-      mhicol = set_var_col_const(meanhires.vars);
-    case 'hires'
-      hires = indata(idata);
-      hicol = set_var_col_const(hires.vars);
+  if isfield(indata{idata},'type')
+    switch indata{idata}.type
+      case 'meanhires'
+        meanhires = indata{idata};
+        mhicol = set_var_col_const(meanhires.vars);
+      case 'hires'
+        hires = indata{idata};
+        hicol = set_var_col_const(hires.vars);
+      case 'paths'
+        pathdata = indata{idata};
+        pacol = set_var_col_const(pathdata.vars);
+    end
   end
 end
 
 if isfield(defs,'sinfo') && isstruct(defs.sinfo)
   sinfo=defs.sinfo;
+  proc_subs = {sinfo(:).id};
   nsub_proc = length(sinfo(:));
 end
 
@@ -55,8 +61,46 @@ if isfield(defs,'model') && isfield(defs.model,'model_id')
 end
 
 % check for required vars, quit if they can't be found
-check_vars = {'sinfo','plots',{'hires','meanhires'}};
+check_vars = {'sinfo','plots','pathdata',{'hires','meanhires'}};
 check_required_vars;
+
+if (iscell(indata) && ~isempty(indata) && isfield(indata{1},'task') && ...
+        ~isempty(strmatch('return_outdir',indata{1}.task))) || ...
+        (isstruct(indata) && isfield(indata,'task') && ...
+        ~isempty(strmatch('return_outdir',indata.task)))
+  if exist('pathdata','var') && length(pathdata.data{1}) > 0
+    if length(nsub_proc) == 1
+      pfilt = struct();
+      pfilt.include.all.subject_id = proc_subs;
+      lpathdata = ensemble_filter(pathdata,pfilt);
+      if ~isempty(lpathdata.data{1})
+        sfilt = pfilt;
+        sfilt.include.all.path_type = {'anal_outdir'};
+        spathdata = ensemble_filter(lpathdata,sfilt);
+        if length(spathdata.data{1}) == 1
+          % one epi outdir, save outdata = epi_outdir
+          outdata = spathdata.data{pacol.path}{1};
+        else
+          sfilt = pfilt;
+          sfilt.include.all.path_type = {'sess_outdir'};
+          spathdata = ensemble_filter(lpathdata,sfilt);
+          if length(spathdata.data{1}) == 1;
+            outdata = spathdata.data{pacol.path}{1};
+          else
+            sfilt = pfilt;
+            sfilt.include.all.path_type = {'sub_outdir'};
+            spathdata = ensemble_filter(lpathdata,sfilt);
+            if length(spathdata.data{1}) == 1;
+              outdata = spathdata.data{pacol.path}{1};            
+            end
+          end
+        end
+      end
+    end
+  end
+  if ~exist('outdata','var') || ~exist(outdata,'dir'), outdata = ''; end
+  return
+end
 
 try PLOT_SINGLE_SUB = defs.display.PLOT_SINGLE_SUB;
   catch PLOT_SINGLE_SUB = 0; end
@@ -92,13 +136,11 @@ try USE_SPM = defs.display.USE_SPM; catch USE_SPM = 0; end
 try USE_FSL = defs.display.USE_FSL; catch USE_FSL = 0; end
 
 if USE_FSL && ~USE_SPM
-  msg = sprintf('FSL not supported yet ...\n');
-  r = update_report(r,msg);
+  error('FSL not supported yet ...\n');
   return
 elseif ~USE_FSL && ~USE_SPM
-  msg = sprintf(['\t\tyou must specify either SPM or FSL to carry out '...
+  error(['\t\tyou must specify either SPM or FSL to carry out '...
       'the analyses\n']);
-  r = update_report(r,msg);
   return
 end
 

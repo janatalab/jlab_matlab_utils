@@ -12,26 +12,40 @@ r.report_on_fly = 1;
 
 % Parse out the input data
 for idata = 1:length(indata)
-  switch indata(idata).type
-    case 'modelspec'
-      modelspec = indata(idata);
-      mocol = set_var_col_const(modelspec.vars);
-    case 'epi_mask_intersect'
-      emidata = indata(idata);
-      emicol = set_var_col_const(emidata.vars);
+  if isfield(indata{idata},'type')
+    switch indata{idata}.type
+      case 'modelspec'
+        modelspec = indata{idata};
+        mocol = set_var_col_const(modelspec.vars);
+      case 'epi_mask_intersect'
+        emidata = indata{idata};
+        emicol = set_var_col_const(emidata.vars);
+    end
   end
 end
 
 if isfield(defs,'sinfo') && isstruct(defs.sinfo)
   sinfo = defs.sinfo;
-  nsub_proc = length(sinfo(:));
+  proc_subs = {sinfo(:).id};
+  nsub_proc = length(proc_subs);
 end
 
 % check for required vars, quit if they can't be found
 check_vars = {'sinfo','modelspec','emidata'};
 check_required_vars;
 
-% outdata
+if (iscell(indata) && ~isempty(indata) && isfield(indata{1},'task') && ...
+        ~isempty(strmatch('return_outdir',indata{1}.task))) || ...
+        (isstruct(indata) && isfield(indata,'task') && ...
+        ~isempty(strmatch('return_outdir',indata.task)))
+  if isfield(defs,'paths') && isfield(defs.paths,'analpath')
+    outdata = defs.paths.analpath;
+    check_dir(outdata);
+  end
+  if ~exist('outdata','var') || ~exist(outdata,'dir'), outdata = ''; end
+  return
+end
+
 % sinfo
 outdata.vars = [outdata.vars; 'sinfo'];
 sinfo_idx = length(outdata.vars);
@@ -81,13 +95,11 @@ try USE_SPM = defs.build_model_l2.USE_SPM; catch USE_SPM = 0; end
 try USE_FSL = defs.build_model_l2.USE_FSL; catch USE_FSL = 0; end
 
 if USE_FSL && ~USE_SPM
-  msg = sprintf('FSL not supported yet ...\n');
-  r = update_report(r,msg);
+  error('FSL not supported yet ...\n');
   return
 elseif ~USE_FSL && ~USE_SPM
-  msg = sprintf(['\t\tyou must specify either SPM or FSL to carry out '...
+  error(['\t\tyou must specify either SPM or FSL to carry out '...
       'the analyses\n']);
-  r = update_report(r,msg);
   return
 end
 
@@ -255,11 +267,15 @@ for isub=1:nsub_proc
         anal_type = ...
             fieldnames(jobs{level2_job_idx}.stats{cidx}.factorial_design.des);
         type_str = anal_type{1};
+        % FOR SOME REASON, <UNDEFINED> IS GETTING THROUGH AS A FILENAME,
+        % AND SPM JUST SPITS THIS BACK AND ERRORS OUT. SINCE FILENAMES ARE
+        % COMING FROM XCON, I MUST FIGURE OUT WHY THE FILENAMES ARE NOT
+        % GETTING GENRATED/STORED/FOUND, AND FIX THAT
 	
         switch type_str
           case 't1'
             scans = jobs{level2_job_idx}.stats{cidx}.factorial_design.des.(type_str).scans;
-            conidx = strmatch(level2(il).src_contrast,{xCon.name});
+            conidx = strmatch(level2(il).src_contrast,{xCon.name},'exact');
             if ~isempty(conidx)
               % Recently patched versions of SPM5 seem to store the full path
               % and filename in the fname field, so check to see if this is the
@@ -269,7 +285,7 @@ for isub=1:nsub_proc
               else
                 scan_fname = fullfile(model_indir, xCon(conidx).Vcon.fname);
               end
-	      
+
               if iscell(scans)
                 scans = [scans; scan_fname];
               else

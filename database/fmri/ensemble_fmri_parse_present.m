@@ -53,21 +53,30 @@ if (iscell(indata) && ~isempty(indata) && isfield(indata{1},'task') && ...
         ~isempty(strmatch('return_outdir',indata{1}.task))) || ...
         (isstruct(indata) && isfield(indata,'task') && ...
         ~isempty(strmatch('return_outdir',indata.task)))
-  outdata = defs.paths.outroot;
-  if length(nsub_proc) == 1
-    outdata = fullfile(outdata,proc_subs{1});
-    if length(sinfo(1).sessinfo) == 1
-      sdir = fullfile(outdata,'session1');
-      if exist(sdir,'dir')
-        outdata = sdir;
+  if exist('pathdata','var') && length(pathdata.data{1}) > 0
+    if length(nsub_proc) == 1
+      pfilt = struct();
+      pfilt.include.all.subject_id = proc_subs;
+      lpathdata = ensemble_filter(pathdata,pfilt);
+      if ~isempty(lpathdata.data{1})
+        sfilt = pfilt;
+        sfilt.include.all.path_type = {'sess_outdir'};
+        spathdata = ensemble_filter(lpathdata,sfilt);
+        if length(spathdata.data{1}) == 1
+          % one session, save outdata = sess_outdir
+          outdata = spathdata.data{pcol.path}{1};
+        else
+          sfilt = pfilt;
+          sfilt.include.all.path_type = {'sub_outdir'};
+          spathdata = ensemble_filter(lpathdata,sfilt);
+          if length(spathdata.data{1}) == 1;
+            outdata = spathdata.data{pcol.path}{1};
+          end
+        end
       end
-    else
-      % multiple sessions, save in the current outdir
     end
-  else
-    % multiple subjects, save in defs.paths.outroot
   end
-  if ~exist(outdata,'dir'), outdata = ''; end
+  if ~exist('outdata','var') || ~exist(outdata,'dir'), outdata = ''; end
   return
 end
 

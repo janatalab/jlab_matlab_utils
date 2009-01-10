@@ -16,31 +16,70 @@ r.report_on_fly = 1;
 
 % Parse out the input data
 for idata = 1:length(indata)
-  switch indata(idata).type
-    case 'sinfo'
-      sinfo = indata(idata).data;
-    case {'epi','realign_epi'}
-      epidata = indata(idata);
-      epicol = set_var_col_const(epidata.vars);
-    case 'paths'
-      pathdata = indata(idata);
-      pacol = set_var_col_const(pathdata.vars);
-      outdata
-    case 'coplanar'
-      coplanar = indata(idata);
-      cocol = set_var_col_const(coplanar.vars);
-    case 'modelspec'
-      modelspec = indata(idata);
-      mocol = set_var_col_const(modelspec.vars);
+  if isfield(indata{idata},'type')
+      switch indata{idata}.type
+        case 'sinfo'
+          sinfo = indata{idata}.data;
+          proc_subs = {sinfo(:).id};
+        case {'epi','realign_epi'}
+          epidata = indata{idata};
+          epicol = set_var_col_const(epidata.vars);
+        case 'paths'
+          pathdata = indata{idata};
+          pacol = set_var_col_const(pathdata.vars);
+        case 'coplanar'
+          coplanar = indata{idata};
+          cocol = set_var_col_const(coplanar.vars);
+        case 'modelspec'
+          modelspec = indata{idata};
+          mocol = set_var_col_const(modelspec.vars);
+      end
   end
-% % %   OUTDATA STRUCT FOR MAPS/MASKS/ETC???
 end
 
 % check for required vars, quit if they can't be found
 check_vars = {'sinfo','epidata','pathdata'};
 check_required_vars;
 
-nsub_proc = length(sinfo(:));
+nsub_proc = length(proc_subs);
+
+if (iscell(indata) && ~isempty(indata) && isfield(indata{1},'task') && ...
+        ~isempty(strmatch('return_outdir',indata{1}.task))) || ...
+        (isstruct(indata) && isfield(indata,'task') && ...
+        ~isempty(strmatch('return_outdir',indata.task)))
+  if exist('pathdata','var') && length(pathdata.data{1}) > 0
+    if length(nsub_proc) == 1
+      pfilt = struct();
+      pfilt.include.all.subject_id = proc_subs;
+      lpathdata = ensemble_filter(pathdata,pfilt);
+      if ~isempty(lpathdata.data{1})
+        sfilt = pfilt;
+        sfilt.include.all.path_type = {'anal_outdir'};
+        spathdata = ensemble_filter(lpathdata,sfilt);
+        if length(spathdata.data{1}) == 1
+          % one epi outdir, save outdata = epi_outdir
+          outdata = spathdata.data{pacol.path}{1};
+        else
+          sfilt = pfilt;
+          sfilt.include.all.path_type = {'sess_outdir'};
+          spathdata = ensemble_filter(lpathdata,sfilt);
+          if length(spathdata.data{1}) == 1;
+            outdata = spathdata.data{pacol.path}{1};
+          else
+            sfilt = pfilt;
+            sfilt.include.all.path_type = {'sub_outdir'};
+            spathdata = ensemble_filter(lpathdata,sfilt);
+            if length(spathdata.data{1}) == 1;
+              outdata = spathdata.data{pacol.path}{1};            
+            end
+          end
+        end
+      end
+    end
+  end
+  if ~exist('outdata','var') || ~exist(outdata,'dir'), outdata = ''; end
+  return
+end
 
 % outdata
 % sinfo
