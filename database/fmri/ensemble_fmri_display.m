@@ -8,7 +8,7 @@ function [outdata] = ensemble_fmri_display(indata,defs)
 % 09/13/08 FB - adapted from autobio_display
 
 clear global SO
-global SO
+global SO defaults
 global CLOBBER_PS FTHRESH_MULT TTHRESH_MULT tp
 global r
 
@@ -61,9 +61,10 @@ if isfield(defs,'model') && isfield(defs.model,'model_id')
 end
 
 % check for required vars, quit if they can't be found
-check_vars = {'sinfo','plots','pathdata',{'hires','meanhires'}};
+check_vars = {'sinfo','plots',{'hires','meanhires'}};
 check_required_vars;
 
+% return outdir if that task is requested
 if (iscell(indata) && ~isempty(indata) && isfield(indata{1},'task') && ...
         ~isempty(strmatch('return_outdir',indata{1}.task))) || ...
         (isstruct(indata) && isfield(indata,'task') && ...
@@ -98,7 +99,8 @@ if (iscell(indata) && ~isempty(indata) && isfield(indata{1},'task') && ...
       end
     end
   end
-  if ~exist('outdata','var') || ~exist(outdata,'dir'), outdata = ''; end
+  if ~exist('outdata','var') || (ischar(outdata) && ~exist(outdata,'dir')) ...
+          || ~ischar(outdata), outdata = ''; end
   return
 end
 
@@ -134,24 +136,35 @@ try DEFAULT_CONTOUR_WIDTH = defs.display.DEFAULT_CONTOUR_WIDTH;
   catch DEFAULT_CONTOUR_WIDTH = 1.5; end
 try USE_SPM = defs.display.USE_SPM; catch USE_SPM = 0; end
 try USE_FSL = defs.display.USE_FSL; catch USE_FSL = 0; end
-
+try ORTHO_PMOD_MODEL = defs.display.ORTHO_PMOD_MODEL;
+  catch ORTHO_PMODMODEL = 0; end
+  
 if USE_FSL && ~USE_SPM
   error('FSL not supported yet ...\n');
-  return
-elseif ~USE_FSL && ~USE_SPM
+elseif (~USE_FSL && ~USE_SPM) || (USE_FSL && USE_SPM)
   error(['\t\tyou must specify either SPM or FSL to carry out '...
       'the analyses\n']);
-  return
-end
-
-if ismember(model_id, [1:3])
-  ORTHO_PMOD_MODEL = 1;
-else
-  ORTHO_PMOD_MODEL = 0;
+elseif USE_SPM
+  if isfield(defs,'fmri') && isfield(defs.fmri,'spm') && ...
+          isfield(defs.fmri.spm,'defaults')
+    defaults = defs.fmri.spm.defaults;
+  else
+    error('USE_SPM but no defs.fmri.spm.defaults set ... \n');
+  end
 end
 
 % some path stuff
 rootpath = defs.paths.outroot;
+
+if isfield(defs,'conjunctions')
+  if ~isfield(defs,'conj_idx') || ~isnumeric(defs.conj_idx)
+    warning('defs.conj_idx not properly specified, assuming 1\n');
+    conj_idx = 1;
+  else
+    conj_idx = defs.conj_idx;
+  end
+  conjunctions = defs.conjunctions;
+end
 
 if isfield(defs,'display') && isstruct(defs.display) && ...
         isfield(defs.display,'tp');
@@ -186,6 +199,10 @@ try threshold_p_group = defs.display.threshold_p_group;
 catch threshold_p_group = 0.01; end
 try threshold_p_indiv = defs.display.threshold_p_indiv;
 catch threshold_p_indiv = 0.01; end
+try threshold_voxels = defs.display.threshold_voxels;
+catch threshold_voxels = 0; end
+try threshold_desc = defs.display.threshold_desc;
+catch threshold_desc = 'none'; end
 
 %
 % Load colormaps that we might want to use
@@ -203,6 +220,8 @@ newhot4 = brighten(tmp(1:35,:),0.7); % magenta
 
 my_colormap = colorcube;
 my_colormap = hsv;
+
+conjunct = [1 0 0; 0 1 0; 1 1 0; 0 0 1; 1 0 1; 0 1 1; 1 1 1];
 
 % Set up some general figure parameters
 figdir = fullfile(rootpath,'figures',sprintf('model_%02d', model_id)); check_dir(figdir);
@@ -269,7 +288,117 @@ for iplot = 1:nplots
         SO.img(nimg).vol = spm_vol(hires_fname);
         SO.img(nimg).range = [];
 	
-        if isempty(strmatch(plot,'Hires4Subject','exact'))
+        if ~isempty(strmatch(plot,'conjunctions','exact'))
+
+            if ~exist('conjunctions') || ~exist('conj_idx')
+              error('conjunctions specified, but not provided in defs\n');
+            end
+            conj_name = conjunctions{conj_idx}.name;
+            conjunction_info = conjunctions{conj_idx}.mappings;
+
+	        model_fname = fullfile(stats_dir,'SPM.mat');
+	    
+	        msg = sprintf('Loading %s\n', model_fname);
+            r = update_report(r,msg);
+  	        load(model_fname);
+
+            nitems = size(conjunction_info,1);
+            for im = 1:nitems
+              cond_name = conjunction_info{im,1};  % condition
+              cont_name = conjunction_info{im,2};  % contrast name
+              pval = conjunction_info{im,3};  % p-value
+              color_str = conjunction_info{im,4}; % color string
+
+              job.swd = stats_dir;
+              job.title = cond_name;
+              job.Im = []; % contrasts for masking
+        	  job.u = pval;
+          
+              job.thresDesc = threshold_desc;
+              job.k = threshold_voxels;
+              job.Ic = strmatch(cont_name,{SPM.xCon.name},'exact');	  
+      	      if isempty(job.Ic)
+                msg = sprintf('No contrast matching: %s/conj\n', cont_name);
+                r = update_report(r,msg);
+                continue
+              elseif length(job.Ic) > 1
+                msg = sprintf('Many contrasts match: %s, using 1st\n', ...
+                    cont_name);
+                r = update_report(r,msg);
+                job.Ic = job.Ic(1);
+              end
+
+              [SPM,xSPM] = spm_getSPM(job);
+              
+              % Initialize an output volume if this is the first volume
+              if im == 1
+                conj_dir = fullfile(stats_dir,'Conjunctions');
+                check_dir(conj_dir);
+                V.fname = fullfile(conj_dir, conj_name); 
+                V.dim = SPM.xVol.DIM;
+                V.mat = SPM.xVol.M;
+
+                X = zeros([V.dim; nitems]');
+              end
+
+              % Check to see if any voxels survived the thresholding
+              if isempty(xSPM.XYZ)
+                continue
+              end
+
+              tmp = zeros(V.dim');
+              tmp(sub2ind(SPM.xVol.DIM',xSPM.XYZ(1,:),xSPM.XYZ(2,:),xSPM.XYZ(3,:))) = 1;
+              if color_str == 'w'
+                X(:,:,:,im) = tmp*7;
+              elseif color_str == 'k'
+                X(:,:,:,im) = tmp*0;
+              else
+                X(:,:,:,im) = tmp*(2^(find('rgb' == color_str)-1));
+              end
+
+              nimg = length(SO.img)+1;
+              vals = xSPM.Z;
+              SO.img(nimg).range = [1 1.75]*xSPM.u;
+              SO.img(nimg).vol = slice_overlay('blobs2vol', xSPM.XYZ, vals, xSPM.M);
+              SO.img(nimg).type = 'split';
+              SO.img(nimg).prop = .32;
+              SO.img(nimg).contours = [0.5 1.5];
+
+              if ADD_CBAR
+                SO.cbar(end+1) = nimg;
+              end
+
+              cmap_idxs = [1:32]+8; % [1:32]
+              switch color_str
+                case 'r'
+                  SO.img(nimg).cmap = newhot1(cmap_idxs,:);
+                case 'g'
+                  SO.img(nimg).cmap = newhot2(cmap_idxs,:);
+                case 'b'
+                  SO.img(nimg).cmap = newhot3(cmap_idxs,:);
+              end
+
+              if ADD_MASK_CONTOUR
+                add2stack_mask(anatdir);
+              end
+            end % for im = 1:nitems
+
+            nimg = length(SO.img)+1;
+            SO.img(nimg).vol = slice_overlay('matrix2vol', sum(X,4), xSPM.M);
+            SO.img(nimg).type = 'split';
+            SO.img(nimg).prop = .2;
+            SO.img(nimg).range = [1 2^3-1];
+            SO.img(nimg).cmap = conjunct;
+
+            if ADD_MASK_CONTOUR
+              add2stack_mask(anatdir);
+            end
+
+%             if ADD_FAV_CONTOUR
+%               add_fav_contour;
+%             end
+
+        elseif isempty(strmatch(plot,'Hires4Subject','exact'))
 	      % Load the SPM.mat file for the proper model so that we can access the
 	      % xCon structure to get info about which image belongs to which contrast
 	      model_fname = fullfile(stats_dir,'SPM.mat');
@@ -278,100 +407,150 @@ for iplot = 1:nplots
           r = update_report(r,msg);
 	      load(model_fname);
 
-	      tdf = size(SPM.xX.X,1);  % Get the total degrees of freedom
-	    
-	      % Check to make sure that all the contrasts have been evaluated
-	      if any(cellfun('isempty',{SPM.xCon.Vcon}))
-	        msg = sprintf('Evaluating unevaluated contrasts ... \n');
-            r = update_report(r,msg);
-	        SPM = spm_contrasts(SPM,1:length(SPM.xCon));
-	        msg = sprintf('Saving updated SPM structure: %s\n', model_fname);
-            r = update_report(r,msg);
-	        save(model_fname, 'SPM');
+    	  % Specify a job for spm_getSPM()
+%     	  job.spmmat = {model_fname};
+          job.swd = stats_dir;
+  	      job.title = plot;
+  	      job.Im = []; % contrasts for masking
+  	      switch plot
+% 	        case {'Tonreg_F'}
+%               job.conspec.thresh = ...
+% 	  	          finv(1-threshold_p_indiv,tonreg_eff_df,SPM.xX.erdf);
+%   	        case {'PermProb'}  % Add this image directly
+%     	  	  nimg = length(SO.img)+1;;
+%               V = spm_vol(fullfile(stats_dir,'PermProb.img'));
+%               SO.img(nimg).vol = V;
+%               Y = spm_read_vols(spm_vol(V));
+%               Y(Y<0.95) = NaN;
+%               [Y,XYZ] = clust_filt(Y,10); % 5,10
+%               SO.img(nimg).vol = slice_overlay('matrix2vol',Y,V.mat);
+%               SO.img(nimg).type = 'split';
+%               SO.img(nimg).range = [0.95 1];
+%               SO.img(nimg).prop = 1;
+%               SO.img(nimg).cmap = newhot1;
+%               if ADD_CBAR, SO.cbar(end+1) = length(SO.img); end
+%               continue
+% 	      
+%  	        case {'TonregRatio'} % Add this image directly
+%                 nimg = length(SO.img)+1;
+%                 if defs.fmri.perm.scale_F  % this flag is set in init_fmri_info.m
+%                   fstub = 'F_Auto_NoAuto_scaled.img';
+%                 else
+%                   fstub = 'F_Auto_NoAuto.img';
+%                 end
+%                 fprintf('Loading tonreg ratio file: %s\n', fullfile(stats_dir,fstub));
+%                 V = spm_vol(fullfile(stats_dir,fstub));
+%                 Y = spm_read_vols(V);
+%                 [Y,XYZ] = clust_filt(Y,10); % 5
+%                 SO.img(nimg).vol = slice_overlay('matrix2vol',Y,V.mat);
+%                 SO.img(nimg).type = 'split';
+%                 SO.img(nimg).range = log10(tonreg_range);
+%                 SO.img(nimg).prop = 1;
+%                 SO.img(nimg).cmap = jet;
+%                 if ADD_CBAR, SO.cbar(end+1) = length(SO.img); end
+%                 continue
+% 		
+            otherwise
+        	  job.u = threshold_p_indiv;
           end
-	
-	      xCon = SPM.xCon;
-	    end % for isess
-	
-	    switch plot
-          case 'Hires4Subject'
-            ADD_MASK_CONTOUR = 0;
-            % Take no further action besides plotting
-          otherwise
-            con_idx = strmatch(plot,{xCon.name},'exact');
+          
+          job.thresDesc = threshold_desc;
+          job.k = threshold_voxels;
+  	      job.Ic = strmatch(plot,{SPM.xCon.name},'exact');	  
+  	      if isempty(job.Ic)
+  	        msg = sprintf('No contrast matching: %s\n', plot);
+  	        r = update_report(r,msg);
+  	        continue
+          elseif length(job.Ic) > 1
+  	        msg = sprintf('Many contrasts match: %s, using 1st\n', plot);
+  	        r = update_report(r,msg);
+            job.Ic = job.Ic(1);
+          end
+
+  	      [SPM,xSPM] = spm_getSPM(job);
+	  
+	      % Check to see if any voxels survived the thresholding
+	      if isempty(xSPM.XYZ)
+	        continue
+          end
 	    
-            if isempty(con_idx)
-              msg = sprintf('No contrast matching: %s\n', plot);
-              r = update_report(r,msg);
-              continue
-            end
-	    
-            threshold = get_threshold(xCon(con_idx),tdf,threshold_p_indiv);
-            nimg = add2stack_split(xCon(con_idx),stats_dir,threshold);
-            SO.img(nimg).cmap = newhot1;
+	      % Add the job to the stack
+	      nimg = add2stack_spm(xSPM);
 
-            if ADD_CBAR, SO.cbar(end+1) = length(SO.img); end
+	      % Add the appropriate colormap
+% 	      if icont == 1
+	        cmap = newhot1;
+%           else
+% 	        cmap = newhot3;
+%           end	    
+	      SO.img(nimg).cmap = cmap;
 
-            if ADD_SPLIT_CONTOUR
-              add2stack_contour(xCon(con_idx),stats_dir,threshold,'r');
-            end
-        end % switch plot
+	      if ADD_CBAR, SO.cbar(end+1) = length(SO.img); end
 
-        if ADD_MASK_CONTOUR
-            add2stack_mask(stats_dir);
+	      if ADD_SPLIT_CONTOUR
+	        add2stack_contour(xCon(con_idx),stats_dir,threshold,'r');
+          end
+	    end % ~if isempty(strmatch(plot,'conjunctions
+	  
+	    if ADD_MASK_CONTOUR
+	      add2stack_mask(stats_dir);
+        else
+  	      ADD_MASK_CONTOUR = 0;
         end
-	
-        % Render the image
-        show_it(tp)
-
-        xfm_type = tp.transform_types{tp.transform_idx};
-        % Add a title to the figure
-        t = axes('position',[0 0.925 0.5 ...
-	      0.05],'units','norm','visible','off');
-        switch plots{iplot}
-          case 'cues_primes_targets'
-            title_str = sprintf(['Subject: %s\nModel: %s,\t' ...
-              'F-map: Cues(red),Primes(blue),Targets(green), p-crit: %1.4f'], ...
-            subid, model_proto_name, threshold_p_indiv);
-          case 'motion_linear'
-            title_str = sprintf(['Subject: %s\nModel: %s,\t' ...
-              'F-map: Motion(red), Linear(green), p-crit: %1.4f'], ...
-            subid, model_proto_name, threshold_p_indiv);
-          case 'Hires4Subject'
-            title_str = sprintf('%s, %s sections, %s', subid,...
-              xfm_type, sinfo(isub).sessinfo(1).date);
-          otherwise
-            title_str = sprintf(['Subject: %s, Session %d\nModel: %s,\t%s,\tp-crit: %1.4f'], ...
-              subid, isess, model_proto_name, plot, threshold_p_indiv);
-        end
-        text(0.1,0.5, title_str,'horizontalalign','left','fontsize',18);
         
-        if PRINT_TO_FILE
+	    % Render the image
+	    show_it(tp)
+
+  	    xfm_type = tp.transform_types{tp.transform_idx};
+	    % Add a title to the figure
+	    t = axes('position',[0 0.925 0.5 0.05],'units','norm','visible','off');
+	    switch plot
+	      case 'cues_primes_targets'
+	        title_str = sprintf(['Subject: %s\nModel: %s,\tF-map: '...
+                'Cues(red),Primes(blue),Targets(green), p-crit: %1.4f'], ...
+		  	    subid, model_proto_name, threshold_p_indiv);
+  	      case 'motion_linear'
+  	        title_str = sprintf(['Subject: %s\nModel: %s,\t' ...
+  		      'F-map: Motion(red), Linear(green), p-crit: %1.4f'], ...
+  		  	  subid, model_proto_name, threshold_p_indiv);
+	      case 'Hires4Subject'
+	        title_str = sprintf('%s, %s sections, %s', subid,...
+              xfm_type, sinfo(sub_idx).sessinfo(1).date);
+          otherwise
+	        title_str = sprintf(['Subject: %s, Session %d\nModel: %s,\t%s,'...
+              '\tp-crit: %1.4f'], subid, isess, model_proto_name, ...
+              plot, threshold_p_indiv);
+        end
+	    text(0.1,0.5, title_str,'horizontalalign','left','fontsize',18);
+        
+	    if PRINT_TO_FILE
           if ALLSUB_TO_ONE
-            outstr = sprintf('allsubs_%s_%s',  plot, xfm_type);
-            if ~strmatch(plot,'Hires4Subject','exact')
-              outstr = [outstr '_' model_proto_name];
+	        outstr = sprintf('allsubs_%s_%s',  plot, xfm_type);
+	        if ~strmatch(plot,'Hires4Subject','exact')
+	          outstr = [outstr '_' model_proto_name];
             end
-            figdir = fullfile(rootpath,'figures', outstr);
-            print_to_file(figdir, isub~=1);
-
+	        figdir = fullfile(rootpath,'figures', outstr);
+	        print_to_file(figdir, isub~=1);
           else
-            switch plot
-              case 'Hires4Subject'
-                outstr = sprintf('%s_%s_%s', subid, plot, xfm_type);
+	        switch plot
+	          case 'Hires4Subject'
+                outstr = sprintf('%s_%s_%s',subid,plot,xfm_type);
+              case 'conjunctions'
+                outstr = sprintf('%s_conj_%d_%s_%s',model_proto_name,...
+                    conj_idx,xfm_type,subid);
               otherwise
-                outstr = sprintf('%s_%s_%s', subid, model_proto_name, xfm_type);
+                outstr = sprintf('%s_%s_%s',subid,model_proto_name,xfm_type);
             end
+	        figdir = fullfile(rootpath,'figures', outstr);
 
-            figdir = fullfile(rootpath,'figures', outstr);
-            print_to_file(figdir, ~((iplot==1)&(append_flag==0)));
-            append_flag = 1;
+            print_to_file(figdir,~((iplot==1)&(append_flag==0)));
+	        append_flag = 1;
           end
-        end
+        end % if PRINT_TO_FILE
 
-        if CONVERT2PDF
-          convert_to_pdf(figdir);
-        end
+  	    if CONVERT2PDF
+  	      convert_to_pdf(figdir);
+	    end
 
       end % for isess=
     end % for isub
@@ -385,7 +564,6 @@ for iplot = 1:nplots
     nimg = 0;
     
     % Get the anatomical for the group
-    anatdir = fullfile(rootpath, 'group_analyses');
     spm_root = defs.fmri.spm.paths.spm_root;
     if exist('meanhires','var')
       hires_fname = meanhires.data{mhicol.path}{1};
@@ -405,66 +583,84 @@ for iplot = 1:nplots
     
     % Load the SPM structure
     load(model_fname);
-    tdf = size(SPM.xX.X,1);
-    
-    % Check to make sure that all the contrasts have been evaluated
-    if any(cellfun('isempty',{SPM.xCon.Vcon}))
-      msg = sprintf('Evaluating unevaluated contrasts ... \n');
-	r = update_report(r,msg);
-      SPM = spm_contrasts(SPM,1:length(SPM.xCon));
-      msg = sprintf('Saving updated SPM structure: %s\n', model_fname);
-	r = update_report(r,msg);
-      save(model_fname, 'SPM');
+
+    % Specify a job for spm_getSPM()
+% 	job.spmmat = {model_fname};
+    job.swd = stats_dir;
+	job.title = plot;
+	job.Im = []; % contrasts for masking
+	job.thresDesc = threshold_desc;
+	job.u = threshold_p_group;
+    job.k = threshold_voxels;
+    job.Ic = strmatch(plot,{SPM.xCon.name},'exact');	  
+ 	if isempty(job.Ic)
+	  msg = sprintf('No contrast matching: %s\n', plot);
+	  r = update_report(r,msg);
+	  continue
+    elseif length(job.Ic) > 1
+	  msg = sprintf('Many contrasts match: %s, using 1st\n', plot);
+	  r = update_report(r,msg);
+      job.Ic = job.Ic(1);
+	end
+
+	[SPM,xSPM] = spm_getSPM(job);
+	  
+	% Check to see if any voxels survived the thresholding
+	if isempty(xSPM.XYZ)
+	  continue
     end
-    
-    xCon = SPM.xCon;
-    
-    con_idx = strmatch(plot,{xCon.name},'exact');
-    threshold = get_threshold(xCon(con_idx),tdf,threshold_p_group)
+	  
+    % Add the job to the stack
+	nimg = add2stack_spm(xSPM);
+
+	% Add the appropriate colormap
+% 	if icont == 1
+	  cmap = newhot1;  % activation
+% 	else
+% 	  cmap = newhot3;  % deactivation
+% 	end	    
+	SO.img(nimg).cmap = cmap;
+
+	if ADD_CBAR, SO.cbar(end+1) = length(SO.img); end
+	  
+	if ADD_SPLIT_CONTOUR
+	  add2stack_contour(xCon(con_idx),stats_dir,threshold,'r');
+    end
 	
-    nimg = add2stack_split(xCon(con_idx),stats_dir,threshold);
-    SO.img(nimg).cmap = newhot1;
-    
-    if ADD_CBAR, SO.cbar(end+1) = length(SO.img); end
-    
-    if ADD_SPLIT_CONTOUR
-      add2stack_contour(xCon(con_idx),stats_dir,threshold,'r');
-    end
 
-    % Add the deactivations
-    nimg = add2stack_split(xCon(con_idx),stats_dir,-1*threshold);
-    SO.img(nimg).cmap = newhot3;
-
-    if ADD_CBAR, SO.cbar(end+1) = length(SO.img); end
-    
-    if ADD_SPLIT_CONTOUR
-      add2stack_contour(xCon(con_idx),stats_dir,-1*threshold,'b');
-    end
-
-    if ADD_MASK_CONTOUR
-      add2stack_mask(stats_dir);
-    end
+	if ADD_MASK_CONTOUR
+	  add2stack_mask(group_mask_dir);  % stats_dir
+	end
     
     % Render the image
     show_it(tp)
     
     % Add a title to the figure
-    t = axes('position',[0 0.925 0.5 ...
-	  0.05],'units','norm','visible','off');
-    group_model_str = sprintf('Group: %d subjects, Model: %s', tdf, model_proto_name);
-    pstr = sprintf('p-crit: %1.4f', threshold_p_group);
-
+    t = axes('position',[0 0.925 0.5 0.05],'units','norm','visible','off');
+    switch plot
+      case {'PermSum'}
+        group_model_str = sprintf('Sum tonreg perm, model: %s',...
+            model_proto_name);
+        pstr = 'Likelihood orig data by chance: 0.05';
+      otherwise
+        group_model_str = sprintf('Group: %d subjects, Model: %s',...
+            fix(xSPM.df(2))+1, model_proto_name);
+        pstr = sprintf('p-crit: %1.4f', threshold_p_group);
+    end
+    
     title_str = sprintf('%s\n%s\t%s', group_model_str, plot, pstr);
     
     text(0.1,0.6, title_str,'horizontalalign','left','fontsize',18);
     
     if PRINT_TO_FILE
-      figdir = fullfile(rootpath,'figures', ...
-	  sprintf('group_%s_%s_%s', model_proto_name,plot,tp.transform_types{tp.transform_idx}));
-      print_to_file(figdir);
+      fstub = sprintf('group_%s_%s',model_proto_name,...
+          tp.transform_types{tp.transform_idx});
+      figdir = fullfile(rootpath,'figures', fstub);
+      if iplot == 1, append = 0; else append = 1; end
+      print_to_file(figdir, append);
     end
-
-    if PRINT_TO_FILE & ALLSUB_TO_ONE
+    
+    if CONVERT2PDF
       convert_to_pdf(figdir);
     end
   end %if PLOT_GROUP
@@ -490,9 +686,8 @@ function show_it(tp)
   
   % Call routine that does the work
   slice_overlay
-return  
   
-function print_to_file(figdir,append)
+function print_to_file(figdir, append)
   global r
   if nargin < 2
     append = 0;
@@ -515,8 +710,7 @@ function print_to_file(figdir,append)
   else
     print('-append','-dpsc','-painters','-noui','-adobecset', psname);
   end
-return
-  
+
 function convert_to_pdf(figdir)
   global CLOBBER_PS
   
@@ -533,8 +727,6 @@ function convert_to_pdf(figdir)
     unix(unix_str);
   end
 
-return
-  
 function threshold = get_threshold(xCon,tdf,p)
   ndf = xCon.eidf;
   switch xCon.STAT
@@ -545,8 +737,6 @@ function threshold = get_threshold(xCon,tdf,p)
       ddf = tdf-1;
       threshold = tinv(1-p/2,ddf);
   end
-
-return
 
 function nimg = add2stack_split(xCon,stats_dir,threshold)
   global SO FTHRESH_MULT TTHRESH_MULT
@@ -570,36 +760,65 @@ function nimg = add2stack_split(xCon,stats_dir,threshold)
   end
   SO.img(nimg).prop = 1;
 
-return
-  
-function img = add2stack_contour(xCon,stats_dir,threshold,img_color)
+function nimg = add2stack_contour(xCon,stats_dir,threshold,img_color, linewidth,XYZ)
   global SO
   nimg = length(SO.img)+1;
 
   if isstr(xCon.Vspm)
-    SO.img(nimg).vol = spm_vol(fullfile(stats_dir, xCon.Vspm));
+    V = spm_vol(fullfile(stats_dir, xCon.Vspm));
   else
     if exist(xCon.Vspm.fname,'file')
-      SO.img(nimg).vol = spm_vol(xCon.Vspm.fname);
+      V = spm_vol(xCon.Vspm.fname);
     else
-      SO.img(nimg).vol = spm_vol(fullfile(stats_dir, xCon.Vspm.fname));
+      V = spm_vol(fullfile(stats_dir, xCon.Vspm.fname));
     end
   end
+  
+  % If we have a list of valid voxels, then we need to create a temporary
+  % volume that has masked out all other voxels
+  if exist('XYZ')
+    Y = spm_read_vols(V);
+    Yout = zeros(size(Y));
+    curr_idxs = sub2ind(size(Y),XYZ(1,:)',XYZ(2,:)',XYZ(3,:)');
+    Yout(curr_idxs) = Y(curr_idxs);
+    Vout = V;
+    Vout.fname = '/tmp/contthresh.img';
+    SO.img(nimg).vol = spm_write_vol(Vout,Yout);
+  else
+    SO.img(nimg).vol = V;
+  end
+  
   SO.img(nimg).type = 'contour';
   SO.img(nimg).contours = ones(1,2)*threshold;
   SO.img(nimg).linespec = img_color;
+  if exist('linewidth')
+    SO.img(nimg).linewidth = linewidth;
+  else
+    SO.img(nimg).linewidth = 1.5;
+  end
   SO.contours(end+1) = nimg;
 
-return
-  
 function nimg = add2stack_mask(stats_dir)
   global SO
   
   nimg = length(SO.img)+1;
   SO.img(nimg).vol = spm_vol(sprintf('%s/mask.img', stats_dir));
   SO.img(nimg).type = 'contour';
-  SO.img(nimg).contours = [0.5 0.5];
+  SO.img(nimg).contours = [0.1 0.125];
   SO.img(nimg).linespec = 'w';
 
-return
+function nimg = add2stack_spm(xSPM)
+  global SO FTHRESH_MULT TTHRESH_MULT
   
+  nimg = length(SO.img)+1;
+  SO.img(nimg).vol = slice_overlay('blobs2vol', xSPM.XYZ, xSPM.Z, xSPM.M);
+  SO.img(nimg).type = 'split';
+  SO.img(nimg).prop = 1;
+
+  switch xSPM.STAT
+    case 'F'
+      range_mult = FTHRESH_MULT;
+    case 'T'
+      range_mult = TTHRESH_MULT;
+  end
+  SO.img(nimg).range = [1 range_mult]*xSPM.u;

@@ -277,6 +277,13 @@ for isub=1:nsub_proc
             scans = jobs{level2_job_idx}.stats{cidx}.factorial_design.des.(type_str).scans;
             conidx = strmatch(level2(il).src_contrast,{xCon.name},'exact');
             if ~isempty(conidx)
+                
+              if length(conidx) > 1
+                conidx = conidx(1);
+                fprintf(1,['more than one contrast found for %s, using '...
+                    'the first one (%s)\n'],level2(il).src_contrast,...
+                    xCon(conidx).name);
+              end
               % Recently patched versions of SPM5 seem to store the full path
               % and filename in the fname field, so check to see if this is the
               % case before building what would become an errorneous filename

@@ -185,11 +185,20 @@ for isub=1:nsub_proc
       r = update_report(r,msg);
       unix(unix_str);
       
-      % gunzip the mask that was just created, or SPM will croak
-      unix_str = sprintf('gunzip %s',sprintf('%s_mask.nii.gz',maskstub));
-      msg = sprintf('%s\n',unix_str);
-      r = update_report(r,msg);
-      unix(unix_str);
+      % gunzip the mask that was just created, or SPM will croak      
+      gunstr = sprintf('%s_mask.nii',maskstub);
+      gstr = sprintf('%s.gz',gunstr);
+      if exist(gstr,'file')
+        if exist(gunstr,'file')
+          delete(gunstr);
+        end
+        unix_str = sprintf('gunzip %s',gstr);
+        msg = sprintf('%s\n',unix_str);
+        r = update_report(r,msg);
+        unix(unix_str);
+      elseif ~exist(gunstr,'file')
+        error('mask file (%s) not created!?\n',gunstr);
+      end
       
       outdata.data{emask_idx}.data{1} = [outdata.data{emask_idx}.data{1} ...
           subid];

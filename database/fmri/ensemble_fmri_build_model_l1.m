@@ -407,6 +407,7 @@ if USE_SPM
   rinfo.resp_mapping = sess.resp_mapping;
   rpath = fileparts(flist{1});
   rinfo.motionparam_fname = fullfile(rpath,sprintf('rp_%s',sprintf(epifstubfmt,subid,irun,1,'txt')));
+  rinfo.presfname = sess.pres.logfiles{irun,1};
 
   % If we are doing design matrix permutations, then we need to set up
   % the loop for that here
@@ -603,8 +604,9 @@ end % if USE_SPM
 
     % Add a constant for this run as a regressor if we are combining
     % regressors across runs
-    if USE_SPM && combine_runs && isfield(curr_model,'srcdata') && ...
-	  ~strcmp(curr_model.srcdata,'residuals')
+    if USE_SPM && combine_runs && ((isfield(curr_model,'srcdata') && ...
+	  ~strcmp(curr_model.srcdata,'residuals')) || ...
+      ~isfield(curr_model,'srcdata'))
       if ~uses_permute
 	nperm = 1;
       else

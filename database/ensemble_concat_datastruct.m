@@ -17,6 +17,19 @@ function result_st = ensemble_concat_datastruct(data_st,params)
 % 03/12/08 Petr Janata
 % 08/28/08 Fred Barrett - convert data_st from struct to cell array of
 % structs, if isstruct(data_st)
+% 01/07/09 Fred Barrett - if data_st{1} == struct('name','return_outdir'),
+% returns an empty string in result_st - makes compatible with
+% ensemble_jobman_parallel.m, which queries functions for default directories
+% within which to save job_struct data
+
+% return '' if data_st{1} == struct('name','return_outdir')
+if (iscell(data_st) && ~isempty(data_st) && isfield(data_st{1},'task') && ...
+        ~isempty(strmatch('return_outdir',data_st{1}.task))) || ...
+        (isstruct(data_st) && isfield(data_st,'task') && ...
+        ~isempty(strmatch('return_outdir',data_st.task)))
+    result_st = '';
+    return
+end
 
 result_st = ensemble_init_data_struct;
 try result_st.name=params.outDataName;
