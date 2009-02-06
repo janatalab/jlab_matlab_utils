@@ -39,6 +39,8 @@ function [stim_id_str,stim_id,stimloc] = get_ensemble_weighted_stim_v8(varargin)
 %    used, the first value of W shall be Wi.weights{Wi.order{1}}. Wi.counter
 %    should maintain the current index of Wi.order that is being used.). If you
 %    are using Wi, W and Wi should interact through params.fun.pre_send.
+% % % FIXME: notes about building an S array of stim masks, possibly in Wi
+% 
 %  params.fun.pre_send - (fh) pre_send is a function handle to an
 %    experiment-specific funtion to carry out any calculations or database
 %    operations necessary before choosing and returning the next stimulus to be
@@ -221,6 +223,7 @@ if isempty(is_initialized)
   weight_cols = set_var_col_const(weight_names);
   num_weights = length(weight_names);
   W = zeros(1, num_weights);
+  S = ones(nstim_total,1); % stimulus mask vector
   for iw = 1:num_weights
     W(iw) = params.weights.(weight_names{iw});
   end
@@ -232,7 +235,7 @@ if isempty(is_initialized)
   switch params.selection.type
     case 'equal_probability'
       A(:,weight_cols.init_prob) = ones(nstim_total,1)/nstim_total;
-     
+
     case 'weighted'
       
       % Analyze stimuli already presented in order to get their ratings (attribute
@@ -243,6 +246,11 @@ if isempty(is_initialized)
       % apriori weighting component could be a nested or sub-function in the
       % experiment weighting function, in the event that there is trial by
       % trial weighting function updating.
+      
+      % this function can return randomly ordered attribute weight vectors,
+      % and along with these weight vectors, stimulus mask vectors to be
+      % used along with attribute weight vectors, in the order given by
+      % Wi.order
       if (isfield(params,'fun') && isfield(params.fun,'weight_fun'))
           if ischar(params.fun.weight_fun)
             wffh = str2func(params.fun.weight_fun);
@@ -270,6 +278,9 @@ if isempty(is_initialized)
           wfdata.stimMeta = stimMeta;
           wfdata.smCols   = smCols;
           [A,W,Wi] = wffh(wfdata,params);
+          if ~isstruct(Wi) || ~isfield(Wi,'S') || isempty(Wi.S)
+            S = ones(nstim_total,1);
+          end
       end
   end
 
@@ -292,7 +303,7 @@ if isempty(is_initialized)
       end
 
   end
-  
+
   is_initialized = 1;
   if ~params.return_stim_during_init
     return
@@ -330,9 +341,14 @@ if (isfield(params,'fun') & isfield(params.fun,'pre_send'))
   try psdata.Wi = Wi;
   catch psdata.Wi = [];
   end
-  [A,W,Wi,prev_stim.class]  = psfh(psdata,params);
-elseif (isfield(Wi,'weights') & (length(Wi.weights) == 1))
-  W = Wi.weights{1};
+  [A,W,S,Wi,prev_stim.class]  = psfh(psdata,params);
+else
+  if (isfield(Wi,'weights') && (length(Wi.weights) == 1))
+    W = Wi.weights{1};
+  end
+  if (isfield(Wi,'S') && (length(Wi.S) == 1))
+    S = S{1};
+  end
 end
 
 if (strcmp(W,'end'))
@@ -346,7 +362,7 @@ else
     %    N = number of attributes
     % along with an attribute weighting vector, to select_from_weighted() which
     % draws randomly from the distribution of stimulus probabilities.
-    item_idx = select_from_weighted(A,W);
+    item_idx = select_from_weighted(A,W,S);
 
     if isempty(item_idx)
         stimloc = '';
@@ -371,3 +387,4 @@ else
 end
 
 return
+c
