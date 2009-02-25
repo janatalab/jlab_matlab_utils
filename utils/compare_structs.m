@@ -41,7 +41,9 @@ function [structsAreEqual,firstViolation,violationReason] = compare_structs(stru
 % 2007 - Stefan Tomic, first version
 % 10/8/2008 - Stefan Tomic, extracted from check_anal_exist and added tag,value functionality
 % 12/30/2008 - Fred Barrett, added support for multi-dimensional cell arrays as field values
-% 02/24/2009 - Fred Barrett, switched cell checking to compare_cells.m
+% 02/24/2009 - Fred Barrett, switched cell checking to compare_cells.m,
+%   also added handling of struct arrays
+% 
 
 numberTypes = {'int8','uint8','int16','uint16','int32','uint32','int64','uint64','double'};
 firstViolation = {};
@@ -102,6 +104,18 @@ else
   end
 end
 
+% get the size of the structs ... are they struct arrays?
+struct1_size = size(struct1);
+struct2_size = size(struct2);
+
+if ~all(struct1_size == struct2_size)
+  firstViolation = 'struct2';
+  violationReason = 'struct_arrays_different_size';
+  structsAreEqual = 0;
+  return
+else
+  nstruct_array = prod(struct1_size); % number of elements
+end
 
 % if we are checking only for a substruct, the following will
 % still work because we are only cycling through the fields of
@@ -113,78 +127,83 @@ end
 for iField = 1:struct1_nFields
     
   struct1_fieldName = struct1_fieldNames{iField};
-  struct1_val = struct1.(struct1_fieldName);
-  struct2_val = struct2.(struct1_fieldName);
-  struct1_fieldType = class(struct1_val);
-  struct2_fieldType = class(struct2_val);
   
-  %see if the fields are of the same type
-  %if both checkTypes and checkValues are turned off, then bypass
-  if(~strcmp(struct1_fieldType,struct2_fieldType) &&...
-     (checkTypes || checkValues))
-    firstViolation = {struct1_fieldName};
-    violationReason = 'type_differs';
-    structsAreEqual = 0;
-    return
-  end
-  
-  %if we are not comparing values and the type of field is anything
-  %but a struct, set them to equal and move on to the next
-  %field. Otherwise, we will compare their values in the switch statement
-  if(~checkValues && ~strcmp(struct1_fieldType,'struct'))
-    fieldsAreEqual = 1;
-    continue;
-  end
-  
-  %for each case (except for type struct), we need to see if
-  %(checkValues) is true. This actually seemed like the most
-  %efficient route because a lot of the necessary logic when not comparing
-  %values is still contained in the 'for' loop.
-  switch struct1_fieldType
-      
-   case numberTypes
-    if(size(struct1_val) == size(struct2_val))
-      fieldsAreEqual = all(struct1_val(:) == struct2_val(:));
-    else
-      fieldsAreEqual = 0; 
-    end
- 
-   case 'char' 
-    fieldsAreEqual = strcmp(struct1_val,struct2_val);
-  
-   case 'struct'
-    [fieldsAreEqual,subFieldViolation,violationReason] = ...
-        compare_structs(struct1_val,struct2_val,'values',checkValues,...
-        'substruct',checkSubstruct,'types',checkTypes);
- 
-   case 'cell'
-    [fieldsAreEqual,subFieldViolation,violationReason] = ...
-        compare_cells(struct1_val,struct2_val);
-    
-   case 'logical'
-    if struct1_val == struct2_val
-     fieldsAreEqual = 1;
-    else
-     fieldsAreEqual = 0;
-    end
-   otherwise
-    error(sprintf('Fieldtype %s not supported.',struct1_fieldType));
-    
-  end
+  % step through each element of the struct array, compare
+  for sIdx = 1:nstruct_array
 
-  if (~fieldsAreEqual)
-    if(strcmp(struct1_fieldType,'struct'))
-      firstViolation = strcat(struct1_fieldName,'.',subFieldViolation);
-    else
+    struct1_val = struct1(sIdx).(struct1_fieldName);
+    struct2_val = struct2(sIdx).(struct1_fieldName);
+    struct1_fieldType = class(struct1_val);
+    struct2_fieldType = class(struct2_val);
+  
+    %see if the fields are of the same type
+    %if both checkTypes and checkValues are turned off, then bypass
+    if(~strcmp(struct1_fieldType,struct2_fieldType) &&...
+       (checkTypes || checkValues))
       firstViolation = {struct1_fieldName};
-      violationReason = 'values_differ';
+      violationReason = 'type_differs';
+      structsAreEqual = 0;
+      return
     end
-    structsAreEqual = 0;
-    return
-  end
   
+    %if we are not comparing values and the type of field is anything
+    %but a struct, set them to equal and move on to the next
+    %field. Otherwise, we will compare their values in the switch statement
+    if(~checkValues && ~strcmp(struct1_fieldType,'struct'))
+      fieldsAreEqual = 1;
+      continue;
+    end
   
-end
+    %for each case (except for type struct), we need to see if
+    %(checkValues) is true. This actually seemed like the most
+    %efficient route because a lot of the necessary logic when not comparing
+    %values is still contained in the 'for' loop.
+    switch struct1_fieldType
+      
+      case numberTypes
+        if(size(struct1_val) == size(struct2_val))
+          fieldsAreEqual = all(struct1_val(:) == struct2_val(:));
+        else
+          fieldsAreEqual = 0; 
+        end
+ 
+      case 'char' 
+        fieldsAreEqual = strcmp(struct1_val,struct2_val);
+
+      case 'struct'
+        [fieldsAreEqual,subFieldViolation,violationReason] = ...
+            compare_structs(struct1_val,struct2_val,'values',checkValues,...
+            'substruct',checkSubstruct,'types',checkTypes);
+
+      case 'cell'
+        [fieldsAreEqual,subFieldViolation,violationReason] = ...
+            compare_cells(struct1_val,struct2_val);
+
+      case 'logical'
+        if struct1_val == struct2_val
+         fieldsAreEqual = 1;
+        else
+         fieldsAreEqual = 0;
+        end
+      otherwise
+        error(sprintf('Fieldtype %s not supported.',struct1_fieldType));
+
+
+    end % switch struct1
+
+    if (~fieldsAreEqual)
+        if(strcmp(struct1_fieldType,'struct'))
+          firstViolation = strcat(struct1_fieldName,'.',subFieldViolation);
+        else
+          firstViolation = {struct1_fieldName};
+          violationReason = 'values_differ';
+        end
+        structsAreEqual = 0;
+        return
+    end % if (~fieldsAre
+  end % for sIdx
+  
+end % for iField
 
 % if any one field was not equal, then we would not have
 % made it this far. Set structsAreEqual =1 and return
