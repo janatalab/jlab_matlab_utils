@@ -118,15 +118,21 @@ end
 sm = (s1 == s2);
 if ~all(sm)
   violationReason = 'cells have different sizes in one or more dimension';
+  return
 end
 
 % convert cells to vectors
 v1 = cell1(:);
 v2 = cell2(:);
-nv = length(v1);
+nv1 = length(v1);
+nv2 = length(v2);
+if nv1 ~= nv1
+  violationReason = 'vectors (converted cells) have different sizes';
+  return
+end
 
 % step through cells, compare at each index
-for i=1:nv
+for i=1:nv1
     
   % compare cell class
   c1 = class(v1{i});
@@ -174,7 +180,7 @@ for i=1:nv
     violationReason = sprintf('cell contents differed (%s)',subVioReason);
     return
   end
-end % for i=1:nv
+end % for i=1:nv1
 
 % no differences found, return equality
 cellsAreEqual = 1;
