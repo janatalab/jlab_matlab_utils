@@ -9,11 +9,11 @@ function outdata = ensemble_fmri_init(indata,defs)
 %   defs.paths.outroot
 %   defs.expinfo.id
 %   defs.fmri.protocol.id
-%   defs.init.CHECK_HEADERS (def: 1)
-%   defs.init.CORRECT_HIRES (def: 1)
-%   defs.init.SYMLINK_COPLANARS (def: 1)
-%   defs.init.SYMLINK_EPIS (def: 1)
-%   defs.init.VOL_CHECK (def: 1)
+%   defs.init.CHECK_HEADERS (default: 1)
+%   defs.init.CORRECT_HIRES (default: 1)
+%   defs.init.SYMLINK_COPLANARS (default: 1)
+%   defs.init.SYMLINK_EPIS (default: 1)
+%   defs.init.VOL_CHECK (default: 1)
 %   defs.init.USER_SCANNER_MOCO
 %   defs.init.MAKE_4D_NIFTI
 %   defs.init.USE_4D_NIFTI
@@ -96,6 +96,7 @@ end
 check_vars = {'sinfo'};
 check_required_vars;
 
+% return the default output directory, if ensemble_jobman_parallel asks
 if (iscell(indata) && ~isempty(indata) && isfield(indata{1},'task') && ...
         ~isempty(strmatch('return_outdir',indata{1}.task))) || ...
         (isstruct(indata) && isfield(indata,'task') && ...
@@ -107,12 +108,21 @@ if (iscell(indata) && ~isempty(indata) && isfield(indata{1},'task') && ...
   return
 end
 
+% 
+% initialize output data structures
+% 
+
+% % subject info output data structure
+% holds an sinfo structure for all subjects processed by this instance of
+% this job
 outdata.vars = [outdata.vars 'sinfo'];
 sinfo_idx = length(outdata.vars);
 outdata.data{sinfo_idx} = ensemble_init_data_struct();
 outdata.data{sinfo_idx}.type = 'sinfo';
 outdata.data{sinfo_idx}.data = sinfo;
 
+% % path output data structure
+% holds all paths created by this instance of this job
 outdata.vars = [outdata.vars 'paths'];
 paths_idx = length(outdata.vars);
 outdata.data{paths_idx} = ensemble_init_data_struct();
@@ -127,6 +137,8 @@ outdata.data{paths_idx}.data{5} = {};
 pathcol = set_var_col_const(outdata.data{paths_idx}.vars);
 
 if CORRECT_HIRES
+  % % hires output data structure
+  % holds paths to all hires images created by this instance of this job
   outdata.vars = [outdata.vars 'hires'];
   hires_idx = length(outdata.vars);
   outdata.data{hires_idx} = ensemble_init_data_struct();
@@ -141,6 +153,8 @@ if CORRECT_HIRES
 end
 
 if SYMLINK_COPLANARS
+  % % coplanar output data structure
+  % holds paths to all coplanar images symlinked by this instance of this job
   outdata.vars = [outdata.vars 'coplanar'];
   cop_idx = length(outdata.vars);
   outdata.data{cop_idx} = ensemble_init_data_struct();
@@ -155,6 +169,9 @@ if SYMLINK_COPLANARS
 end
 
 if SYMLINK_EPIS || MAKE_4D_NIFTI
+  % % epi output data structure
+  % holds paths to all epi images created or symlinked by this instance of
+  % this job
   outdata.vars = [outdata.vars 'epi'];
   epi_idx = length(outdata.vars);
   outdata.data{epi_idx} = ensemble_init_data_struct();
@@ -186,27 +203,16 @@ for isub=1:nsub_proc
   sub_outdir = fullfile(exp_outroot, subid);
   check_dir(sub_outdir,1);
 
-  outdata.data{paths_idx}.data{1} = [outdata.data{paths_idx}.data{1};...
-      subid];
-  outdata.data{paths_idx}.data{2} = [outdata.data{paths_idx}.data{2};...
-      0];
-  outdata.data{paths_idx}.data{3} = [outdata.data{paths_idx}.data{3};...
-      0];
-  outdata.data{paths_idx}.data{4} = [outdata.data{paths_idx}.data{4};...
-      'sub_indir'];
-  outdata.data{paths_idx}.data{5} = [outdata.data{paths_idx}.data{5};...
-      sub_indir];
+  % save paths to the path output data structure
+  % subject source file directory
+  outdata.data{paths_idx} = ensemble_add_data_struct_row(...
+      outdata.data{paths_idx},'subject_id',subid,'session',0,'run',0,...
+      'path_type','sub_indir','path',sub_indir);
 
-  outdata.data{paths_idx}.data{1} = [outdata.data{paths_idx}.data{1};...
-      subid];
-  outdata.data{paths_idx}.data{2} = [outdata.data{paths_idx}.data{2};...
-      0];
-  outdata.data{paths_idx}.data{3} = [outdata.data{paths_idx}.data{3};...
-      0];
-  outdata.data{paths_idx}.data{4} = [outdata.data{paths_idx}.data{4};...
-      'sub_outdir'];
-  outdata.data{paths_idx}.data{5} = [outdata.data{paths_idx}.data{5};...
-      sub_outdir];
+  % subject destination file directory (often the same as the source)
+  outdata.data{paths_idx} = ensemble_add_data_struct_row(...
+      outdata.data{paths_idx},'subject_id',subid,'session',0,'run',0,...
+      'path_type','sub_indir','path',sub_indir);
 
   % Determine number of sessions for this subject
   nsess = length(sinfo(subidx).sessinfo);
@@ -258,11 +264,139 @@ for isub=1:nsub_proc
     % Swap dimensions on hires images if necessary and if a swap sequence
     % is specified
     if CORRECT_HIRES & ~isempty(protocol.hires.swapseq)
-      fmri_correct_hires;
+        
+        %%%%% CORRECT HIRES
+        % swap dimensions
+        % concatenate slices, if not a 3d image
+        
+        msg = sprintf('\t\t\tSwapping dimensions on hires image\n');
+        r = update_report(r,msg);
+
+        series_map_idx = strmatch('hires',[sess.series_mappings{:,2}],'exact');
+        if isempty(series_map_idx)
+          msg = sprintf('Did not find hires for this session\n');
+          r = update_report(r,msg);
+        else
+          hires_indir = fullfile(anat_indir,sprintf('%s_%s', ...
+              sess.series_mappings{series_map_idx,1}{1}, ...
+              protocol.hires.dirstub));
+          infname = fullfile(hires_indir,[protocol.hires.fstub '.img']);
+
+          % Handle the situation where the hires file wasn't necessarily
+          % created, but instead I have a bunch of slices
+          if ~exist(infname)
+            msg = sprintf('Could not find %s.img\n', protocol.hires.fstub);
+            r = update_report(r,msg);
+            msg = sprintf('Checking for presence of individual slices ...\n')
+            r = update_report(r,msg);
+            dirlist = dir(fullfile(hires_indir,'0*.img'));
+            nfiles = length(dirlist);
+            if nfiles
+              msg = sprintf('Found %d files.  Concatenating into single volume...\n', nfiles);
+              r = update_report(r,msg);
+              curr_dir = pwd;
+              cd(hires_indir)
+
+              % merge the slices into the volume
+              fsl_str = 'fslmerge -a volume 0*.img';
+              msg = sprintf('%s\n', fsl_str);
+              r = update_report(r,msg);
+              unix(fsl_str);
+
+              % convert filetype to NIFTI_PAIR
+              fsl_str = 'fslchfiletype NIFTI_PAIR volume';
+              msg = sprintf('%s\n', fsl_str);
+              r = update_report(r,msg);
+              unix(fsl_str);
+
+              cd(curr_dir);
+            else
+              msg = sprintf('No hires found for %s',subid);
+              r = update_report(r,msg);
+              error(msg);
+            end % if nfiles
+          end % if ~exist(infname)
+
+          outfname = fullfile(anat_outdir,sprintf('%s_hires.img', subid));
+          if exist(outfname)
+            msg = sprintf(['existing hires in anat_outdir for subject %s, '...
+                'clobbering']);
+            r = update_report(r,msg);
+            delete(outfname);
+          end
+          swap_seq = protocol.hires.swapseq;
+          status = fsl_swapdims(infname,swap_seq,outfname, VERBOSE);
+          if status
+            msg = sprintf('WARNING: Failed to swap dimensions on hires image\n');
+            r = update_report(r,msg);
+          end
+
+          % add hires info to the hires struct
+          outdata.data{hires_idx} = ensemble_add_data_struct_row(...
+              outdata.data{hires_idx},'subject_id',subid,'session',...
+              isess,'ensemble_id',sess.ensemble_id,'path',outfname);
+
+        end % if isempty(series_map_idx)
+
+        %%%%% END CORRECT HIRES
+        
     end % if CORRECT_HIRES
     
     if SYMLINK_COPLANARS
-      fmri_symlink_coplanars;
+        
+        %%%%% SYMLINK_COPLANARS
+        % symlink coplanar .img files from orig/
+        
+        series_map_idx = strmatch('coplanar',[sess.series_mappings{:,2}]);
+        ncop = length(series_map_idx);
+
+        for icop = 1:ncop
+          coplanar_type = sess.series_mappings{series_map_idx(icop),2}{1};
+          switch coplanar_type
+            case 'coplanar_T1'
+              dirstub = protocol.coplanar_T1.dirstub;
+            case 'coplanar_T2'
+              dirstub = protocol.coplanar_T2.dirstub;
+            otherwise
+              dirstub = '';
+          end
+          coplanar_indir = fullfile(anat_indir,sprintf('%s_%s', ...
+              sess.series_mappings{series_map_idx(icop),1}{1}, ...
+              dirstub));
+          infstub = fullfile(coplanar_indir,protocol.hires.fstub);
+          outfstub = fullfile(anat_outdir, sprintf('%s_%s', subid, coplanar_type));
+
+          link_file = sprintf('%s.img', outfstub)
+          if CLOBBER
+            fprintf('Removing existing link ...\n');
+            unix_str = sprintf('rm %s', link_file);
+            unix(unix_str);
+          end
+
+          unix_str = sprintf('ln -s %s.img %s', infstub, link_file);
+          status = unix(unix_str);
+          if status
+            msg = sprintf('WARNING: Problem linking coplanar\n'); 
+            r = update_report(r,msg);
+            continue
+          end
+
+          unix_str = sprintf('cp %s.hdr %s.hdr', infstub, outfstub);
+          status = unix(unix_str);
+          if status
+            msg = sprintf('WARNING: Problem copying coplanar header\n'); 
+            r = update_report(r,msg);
+            continue
+          else
+            % add hires info to the hires struct
+            outdata.data{cop_idx} = ensemble_add_data_struct_row(...
+                'subject_id',subid,'session',isess,'ensemble_id',...
+                sess.ensemble_id,'path',sprintf('%s.img',outfstub));
+          end
+
+        end % for icop
+        %%%%% END SYMLINK_COPLANARS
+        
     end % if SYMLINK_COPLANARS
 	    
     % Figure out which EPI series we are dealing with
@@ -324,27 +458,13 @@ for isub=1:nsub_proc
       % Make sure the output directory exists
       check_dir(run_outdir,1);
         
-      outdata.data{paths_idx}.data{1} = [outdata.data{paths_idx}.data{1};...
-        subid];
-      outdata.data{paths_idx}.data{2} = [outdata.data{paths_idx}.data{2};...
-        isess];
-      outdata.data{paths_idx}.data{3} = [outdata.data{paths_idx}.data{3};...
-        irun];
-      outdata.data{paths_idx}.data{4} = [outdata.data{paths_idx}.data{4};...
-        'run_indir'];
-      outdata.data{paths_idx}.data{5} = [outdata.data{paths_idx}.data{5};...
-        run_indir];
+      outdata.data{paths_idx} = ensemble_add_data_struct_row(...
+          outdata.data{paths_idx},'subject_id',subid,'session',isess,...
+          'run',irun,'path_type','run_indir','path',run_indir);
 
-      outdata.data{paths_idx}.data{1} = [outdata.data{paths_idx}.data{1};...
-        subid];
-      outdata.data{paths_idx}.data{2} = [outdata.data{paths_idx}.data{2};...
-        isess];
-      outdata.data{paths_idx}.data{3} = [outdata.data{paths_idx}.data{3};...
-        irun];
-      outdata.data{paths_idx}.data{4} = [outdata.data{paths_idx}.data{4};...
-        'run_outdir'];
-      outdata.data{paths_idx}.data{5} = [outdata.data{paths_idx}.data{5};...
-        run_outdir];
+      outdata.data{paths_idx} = ensemble_add_data_struct_row(...
+          outdata.data{paths_idx},'subject_id',subid,'session',isess,...
+          'run',irun,'path_type','run_outdir','path',run_outdir);
 
       epifstubfmt = protocol.epi.fstubfmt;
             
@@ -360,20 +480,199 @@ for isub=1:nsub_proc
 
 	
 	    if SYMLINK_EPIS
-          fmri_symlink_epis;
+          %%%%% SYMLINK_EPIS
+          
+            ftypes = {'img','hdr'};
+            for itype = 1:length(ftypes)
+              flist = dir(fullfile(run_indir,sprintf('*.%s',ftypes{itype})));
+              for ifile = 1:length(flist)
+                targ_file = fullfile(run_indir,flist(ifile).name);
+                outfname = sprintf(epifstubfmt,subid,irun,ifile,ftypes{itype});
+                link_file = fullfile(run_outdir, outfname);
+                msg = '';
+                if exist(link_file)
+                  delete(link_file);
+                  msg = sprintf('deleted existing file %s\n',link_file);
+                end
+
+                switch ftypes{itype}
+                  case 'img'
+                unix_str = sprintf('ln -s %s %s', targ_file, link_file);
+                  case 'hdr'
+                unix_str = sprintf('cp %s %s', targ_file, link_file);
+                end
+                msg = [msg sprintf('%s\n', unix_str)];
+                r = update_report(r,msg);
+                status = unix(unix_str);
+
+                if status
+                  error('Failed to generate symlink')
+                end
+              end
+            end
+            
+          %%%%% END SYMLINK_EPIS
 	    end % if SYMLINK_EPIS
 
 	    % Check for consistency in ANALYZE file headers
 	    if CHECK_HEADERS
-	      fmri_check_headers;
-	    end % if CHECK_HEADERS
+          %%%%% CHECK_HEADERS
+
+            msg = sprintf('Checking headers in %s\n', run_outdir);
+            r = update_report(r,msg);
+            srcdir = run_outdir;  % need to use this if doing anything with SPM
+            flist = get_spm_flist(srcdir);
+            V = spm_vol(flist);
+            nfiles = length(V);
+
+            % Get the pixel dimensions for each volume
+            msg = sprintf('\tpixdims ...');
+            r = update_report(r,msg);
+            pixdim_mat = zeros(nfiles,4);
+            for ifile = 1:nfiles
+              pixdim_mat(ifile,:) = diag(V(ifile).mat)';
+            end
+
+            % See if any of the pixdims differ
+            diff_mat = diff(pixdim_mat);
+            if any(diff_mat(:))
+              warning('WARNING: Potentially bad pixel dimension information!\n');
+            else
+              msg = sprintf(' OK\n')
+              r = update_report(r,msg);
+            end
+        
+          %%%%% END CHECK_HEADERS
+        end % if CHECK_HEADERS
 
 	    if MAKE_4D_NIFTI
-	      fmri_make_4D_nifti;
-	    end % if MAKE_4D_NIFTI
+          %%%%% MAKE_4D_NIFTI
+            msg = sprintf('Creating 4D NIFTI files ...\n');
+            r = update_report(r,msg);
+            outfname = fullfile(run_outdir,sprintf('%s_run%d.nii', subid, irun));
+            infiles = fullfile(run_indir, '*.img');
+            
+            %%%%% FIXME: make 4D nifti of specific files? maybe,
+            %%%%% preprocessed files (smooth, normed, resid)? maybe add
+            %%%%% fstub to the beginning of *.img above?
+
+            unix_str = sprintf('fslmerge -t %s %s', outfname, infiles);
+            msg = sprintf('%s\n', unix_str);
+            r = update_report(r,msg);
+            status = unix(unix_str);
+            if status
+              error(sprintf('Failed to create 4D NIFTI: %s\n', outfname))
+            end
+            
+            %%%%% FIXME: add nifti file to epidata?? check USE_4D_NIFTI
+            
+          %%%%% END MAKE_4D_NIFTI
+        end % if MAKE_4D_NIFTI
 
   	    if VOL_CHECK
-	      fmri_vol_check;
+          %%%%% VOL_CHECK
+          
+            % Load the data
+            if USE_4D_NIFTI
+              fname = fullfile(run_outdir,sprintf('%s_run%d.nii', subid, irun));
+
+              if ~exist(fname)
+                msg = sprintf('Failed to find file: %s\n', fname);
+                r = update_report(r,msg);
+              else
+                warning off  % suppress file orientation warning
+                V = spm_vol(fname);
+                warning on
+                msg = sprintf('Loading data from: %s\n', fname);
+                r = update_report(r,msg);
+                Y = spm_read_vols(V);
+              end  
+              npts = length(V);
+            else
+              msg = sprintf('Loading ANALYZE format files');
+              r = update_report(r,msg);
+              flist = dir(fullfile(run_outdir,'*.img'));
+              npts = length(flist);
+
+              % Get dimensions of data
+              fname = fullfile(run_outdir, flist(1).name);
+              warning off
+              V = spm_vol(fname);
+              warning on
+
+              % Presize Y which will hold the EPI data
+              Y = zeros(V.dim(1),V.dim(2),V.dim(3),npts);
+              for ipt = 1:npts
+                fname = fullfile(run_outdir, flist(ipt).name);
+                warning off
+                V = spm_vol(fname);
+                warning on
+                msg = sprintf('.');
+                r = update_report(r,msg);
+                Y(:,:,:,ipt) = spm_read_vols(V);
+              end
+              msg = sprintf('\n');
+              r = update_report(r,msg);
+            end % if USE_4D_NIFTI
+
+            msg = sprintf('Calculating mean intensity for run %d\n', irun);
+            r = update_report(r,msg);
+
+            % Calculate summed intensity within each slice
+            % Method 1 for summing across 2 dimensions
+            Ymean = mean(Y,1);
+            Ymean = mean(Ymean,2);
+            Ymean = squeeze(Ymean);
+
+            % Method 2 for summing across 2 dimension
+            %Yreshape = reshape(Y,[size(Y,1)*size(Y,2) ...
+            %                    size(Y,3) size(Y,4)]);
+            %Ymean{irun} = mean(Yreshape);
+            %Ymean{irun} = squeeze(Ymean{irun});
+            if isfield(defs,'figs') && isfield(defs.figs,'display') ...
+                    && defs.figs.display
+              if irun == 1
+                figure(1), clf
+              end
+
+              subplot(ngood_runs,1,irun)
+              imagesc(Ymean), colorbar
+              colormap(jet)
+
+              % only show volumes 100 through 150
+              %        set(gca, 'xlim', [100 250]);
+              set(gca,'xtick',[0:10:npts])
+
+              ylabel('Slice#')
+              xlabel('Volume#')
+
+              if irun == 1
+                title(sprintf('Subject %s: Session %d: Run %d', sinfo(subidx).id, isess, runidx));
+              else
+                title(sprintf('Run %d', runidx));
+              end
+
+              if exist('WRITE2FILE','var')
+                check_dir(defs.paths.figpath,1);
+                fvc_fname = fullfile(defs.paths.figpath,sprintf('fmri_vol_check_%s.ps',...
+                  subid));
+                msg = sprintf('Writing mean intensity plot to %s',fvc_fname);
+                r = update_report(r,msg);
+                print(fvc_fname,'-dps');
+                msg = sprintf('Converting %s to PDF\n', fvc_fname);
+                r = update_report(r,msg);
+                %   pdf_fname = fullfile(defs.paths.figpath,sprintf('fmri_vol_check_%s.pdf',...
+                %       subid));
+                %   unix_str = sprintf('ps2pdf %s %s', fvc_fname, pdf_fname);
+                %   status = unix(unix_str);
+                %   if status
+                %     msg = sprintf('Failed to create PDF file from : %s\n', fvc_fname);
+                %     r = update_report(r,msg);
+                %   end
+              end
+            end
+            
+          %%%%% END VOL_CHECK  
 	    end % if VOL_CHECK
 
 	    % Get file lists
@@ -390,15 +689,134 @@ for isub=1:nsub_proc
   	    end % if USE_4D_NIFTI
 	
 	    if TOUCH_HEADERS
-	      fmri_touch_headers;
-	    end % if TOUCH_HEADERS
+          %%%%% TOUCH_HEADERS
+
+            nfiles = size(flist,1);
+            for ifile = 1:nfiles
+              curr_fname = flist(ifile,:);
+              msg = sprintf('Writing Nifti header for: %s\n', curr_fname);
+              r = update_report(r,msg);
+              M = spm_get_space(curr_fname);
+              spm_get_space(curr_fname,M);
+            end
+
+          %%%%% END TOUCH_HEADERS
+        end % if TOUCH_HEADERS
 	
 	    if REPLACE_BAD_VOLS & ~isempty(sinfo(subidx).badvols{irun})
-	      fmri_replace_bad_vols;
+          %%%%% REPLACE_BAD_VOLS
+            
+            % Make sure we have a directory into which we can copy the
+            % original volumes
+            orig_dir = fullfile(run_outdir,'orig_badvols');
+            check_dir(orig_dir,1);
+
+            nbad = size(sinfo(subidx).badvols{irun},1);
+            for ibad = 1:nbad
+              badvol_idx = sinfo(subidx).badvols{irun}{ibad,1};
+              goodvol_idxs = sinfo(subidx).badvols{irun}{ibad,2};
+
+              badfname = fullfile(run_outdir,sprintf(epifstubfmt, subidx, ...
+                  badvol_idx));
+
+              % Copy the original bad file
+              unix_str = sprintf('cp %s %s', badfname, orig_dir);
+              unix(unix_str);
+
+              ngood = length(goodvol_idxs);
+              goodflist = {};
+              for igood = 1:ngood
+                goodflist{igood} = fullfile(run_outdir,sprintf(epifstubfmt, subidx, ...
+                goodvol_idxs(igood)));
+              end
+
+              % Read in the header info for the good data
+              warning off
+              Vbad = spm_vol(badfname);
+              Vgood = spm_vol(strvcat(goodflist));
+              warning on
+              gooddata = spm_read_vols(Vgood);
+
+              msg = sprintf('Replacing %s with average of volumes %s\n',...
+                  badfname,sprintf('%d ', goodvol_idxs));
+              r = update_report(r,msg);
+
+              % Remove the old bad file (in case it is a symlink)
+              unix_str = sprintf('rm %s', badfname);
+              msg = sprintf('%s\n', unix_str);
+              r = update_report(r,msg);
+              unix(unix_str);
+
+              % Write out average of good images
+              Vnew = Vbad;
+              Vnew = spm_write_vol(Vnew,mean(gooddata,4)); 
+
+            end % for ibad
+
+          %%%%% END REPLACE_BAD_VOLS
 	    end % if REPLACE_BAD_VOLS
 	
 	    if ROTATE_EPI
-	      fmri_rotate_epi;
+          %%%%% ROTATE_EPI
+          
+            % Check to see if we want a flip in z, in which case we need to
+            % call avwswapdim in order for this to happen cleanly
+            if sign(einfo(iexp).rotvect(9) == -1) 
+              nfiles = size(flist,1);
+              for ifile = 1:nfiles
+                if sign(einfo(iexp).rotvect(7) == -1)  % do we want
+                  % to flip x
+                  xstr = '-x';
+                else
+                  xstr = 'x';
+                end
+
+                tmp_file = sprintf('/tmp/tmp_%s_%06d.nii', study_id, fix(rand*900000));
+                % Format the FSL string
+                fsl_str = sprintf('avwswapdim %s %s y -z %s', flist(ifile,:), xstr, tmp_file);
+                msg = sprintf('%s\n', fsl_str);
+                r = update_report(r,msg);
+                status = unix(fsl_str);
+                if status
+                  error('Error swapping dimensions')
+                end
+
+                [fpath,fstub] = fileparts(flist(ifile,:));
+
+                % Remove the original image file (actually, it's symlink in
+                % most cases)
+                unix_str = sprintf('rm %s', [fpath '/' fstub '.*']);
+                msg = sprintf('%s\n', unix_str);
+                r = update_report(r,msg);
+                status = unix(unix_str);
+
+                new_fname = fullfile(fpath,sprintf('%s.nii', fstub));
+                % Move the tmp file in place of the original image file
+                unix_str = sprintf('mv %s %s', tmp_file, new_fname);
+                msg = sprintf('%s\n', unix_str);
+                r = update_report(r,msg);
+                status = unix(unix_str);
+                if status
+                  error('Error moving temporary file to run directory')
+                end
+
+                % Change the file type of the new image
+                unix_str = sprintf('avwchfiletype NIFTI_PAIR %s', new_fname);
+                msg = sprintf('%s\n', unix_str);
+                r = update_report(r,msg);
+                status = unix(unix_str);
+                if status
+                  error('Filetype change failed')
+                end
+
+              end
+            else
+              warning off  % suppress Nifti warnings
+              pj_spm_reorient(cellstr(flist),einfo(iexp).rotvect);
+              warning on
+            end
+            
+          %%%%% END ROTATE_EPI
 	    end % if ROTATE_EPI
 
         if ~exist('flist') || isempty(flist)
@@ -411,16 +829,9 @@ for isub=1:nsub_proc
       
         if exist('flist') && ~isempty(flist)
           for ifl=1:length(flist)
-            outdata.data{epi_idx}.data{epcol.subject_id} = ...
-              [outdata.data{epi_idx}.data{epcol.subject_id}; subid];
-            outdata.data{epi_idx}.data{epcol.session} = ...
-              [outdata.data{epi_idx}.data{epcol.session}; isess];
-            outdata.data{epi_idx}.data{epcol.ensemble_id} = ...
-              [outdata.data{epi_idx}.data{epcol.ensemble_id}; sess.ensemble_id];
-            outdata.data{epi_idx}.data{epcol.run} = ...
-              [outdata.data{epi_idx}.data{epcol.run}; irun];
-            outdata.data{epi_idx}.data{epcol.path} = ...
-              [outdata.data{epi_idx}.data{epcol.path}; flist(ifl,:)];
+            outdata.data{epi_idx} = ensemble_add_data_struct_row(...
+                'subject_id',subid,'session',isess,'ensemble_id',...
+                sess.ensemble_id,'run',irun,'path',flist(ifl,:));
           end
         end
 
