@@ -11,6 +11,10 @@ function outdata = ensemble_fmri_ica(indata,defs)
 %   path data
 %   defs.ica.Z_SCORE - generates and uses z-scored images for analysis
 %   defs.ica.CONCAT_BY_SUB - concatenates volumes for each subject
+%   defs.ica.NDIMS - number of IC dimensions to retain, 0 = default melodic
+%       estimation
+%   defs.ica.MMTHRESH
+%   defs.ica.TR
 % 
 % 2009.03.05 FB
 
