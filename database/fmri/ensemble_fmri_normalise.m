@@ -38,6 +38,8 @@ for idata = 1:length(indata)
         case 'sinfo'
           sinfo = indata{idata};
           sinfo = sinfo.data;
+          proc_subs = {sinfo(:).id};
+          nsub_proc = length(proc_subs);
         case {'epi','realign_epi'}
           epidata = indata{idata};
           epicol = set_var_col_const(epidata.vars);
@@ -82,14 +84,6 @@ for idata = 1:length(indata)
   end
 end
 
-if ~exist('sinfo','var')
-  if isfield(defs,'sinfo')
-    sinfo = defs.sinfo;
-  end
-end
-proc_subs = {sinfo(:).id};
-nsub_proc = length(proc_subs);
-
 % check for required vars
 check_vars = {'sinfo','pathdata'};
 check_required_vars;
@@ -98,7 +92,7 @@ if (iscell(indata) && ~isempty(indata) && isfield(indata{1},'task') && ...
         ~isempty(strmatch('return_outdir',indata{1}.task))) || ...
         (isstruct(indata) && isfield(indata,'task') && ...
         ~isempty(strmatch('return_outdir',indata.task)))
-  if exist('pathdata','var') && length(pathdata.data{1}) > 0
+  if exist('pathdata','var') && ~isempty(pathdata.data{1})
     if length(nsub_proc) == 1
       pfilt = struct();
       pfilt.include.all.subject_id = proc_subs;
@@ -146,11 +140,9 @@ try USE_FSL = defs.normalise.USE_FSL; catch USE_FSL = 0; end
 
 if USE_FSL && ~USE_SPM
   error('FSL not supported yet ...\n');
-  return
 elseif ~USE_FSL && ~USE_SPM
   error(['\t\tyou must specify either SPM or FSL to carry out '...
       'the analyses\n']);
-  return
 end
 
 % Set stuff up for specifying an SPM job.  Specify jobs on a subject level
@@ -269,14 +261,9 @@ for isub=1:nsub_proc
         else
           hires_outfname = hires_img;
         end % if RESAMP
-        outdata.data{hires_idx}.data{hicol.subject_id} = ...
-          [outdata.data{hires_idx}.data{hicol.subject_id}; subid];
-        outdata.data{hires_idx}.data{hicol.session} = ...
-          [outdata.data{hires_idx}.data{hicol.session}; isess];
-        outdata.data{hires_idx}.data{hicol.ensemble_id} = ...
-          [outdata.data{hires_idx}.data{hicol.ensemble_id}; sess.ensemble_id];
-        outdata.data{hires_idx}.data{hicol.path} = ...
-          [outdata.data{hires_idx}.data{hicol.path}; hires_outfname];
+        outdata.data{hires_idx} = ensemble_add_data_struct_row(...
+            outdata.data{hires_idx},'subject_id',subid,'session',isess,...
+            'ensemble_id',sess.ensemble_id,'path',hires_outfname);
       else
         msg = sprintf(['can''t find hires data for subject %s, quitting '...
             'normalise step'],subid);
@@ -316,14 +303,9 @@ for isub=1:nsub_proc
           r = update_report(r,msg);
     	  unix(unix_str);
         end
-        outdata.data{cop_idx}.data{cocol.subject_id} = ...
-          [outdata.data{cop_idx}.data{cocol.subject_id}; subid];
-        outdata.data{cop_idx}.data{cocol.session} = ...
-          [outdata.data{cop_idx}.data{cocol.session}; isess];
-        outdata.data{cop_idx}.data{cocol.ensemble_id} = ...
-          [outdata.data{cop_idx}.data{cocol.ensemble_id}; sess.ensemble_id];
-        outdata.data{cop_idx}.data{cocol.path} = ...
-          [outdata.data{cop_idx}.data{cocol.path}; tmpfname];
+        outdata.data{cop_idx} = ensemble_add_data_struct_row(...
+          outdata.data{cop_idx},'subject_id',subid,'session',isess,...
+          'ensemble_id',sess.ensemble_id,'path',tmpfname);
       end % if exist('coplanar
 
     end % if USE_SPM
@@ -333,7 +315,7 @@ for isub=1:nsub_proc
       % filter epidata by subject, session, run
       epiFilt = struct();
       epiFilt.include.all.subject_id = {subid};
-      epiFilt.include.all.session = [isess];
+      epiFilt.include.all.session = isess;
       sessdata = ensemble_filter(epidata,epiFilt);
         
       [runm,urun] = make_mask_mtx(sessdata.data{epicol.run});
@@ -375,16 +357,9 @@ for isub=1:nsub_proc
         for ifl=1:length(flist)
           [tmppath,tmpfname,tmpext] = fileparts(flist{ifl,:});
           outfname = fullfile(tmppath,sprintf('w%s%s',tmpfname,tmpext));
-          outdata.data{epi_idx}.data{epicol.subject_id} = ...
-            [outdata.data{epi_idx}.data{epicol.subject_id}; subid];
-          outdata.data{epi_idx}.data{epicol.session} = ...
-            [outdata.data{epi_idx}.data{epicol.session}; isess];
-          outdata.data{epi_idx}.data{epicol.ensemble_id} = ...
-            [outdata.data{epi_idx}.data{epicol.ensemble_id}; sess.ensemble_id];
-          outdata.data{epi_idx}.data{epicol.run} = ...
-            [outdata.data{epi_idx}.data{epicol.run}; irun];
-          outdata.data{epi_idx}.data{epicol.path} = ...
-            [outdata.data{epi_idx}.data{epicol.path}; outfname];
+          outdata.data{epi_idx} = ensemble_add_data_struct_row(...
+            outdata.data{epi_idx},'subject_id',subid,'session',isess,...
+            'ensemble_id',sess.ensemble_id,'run',irun,'path',outfname);
         end
       end % if exist_epi
     end % for irun
@@ -397,7 +372,7 @@ for isub=1:nsub_proc
 end % for isub=
 
 % Submit the SPM job stack
-if RUN_SPM & ~isempty(jobs)
+if RUN_SPM && ~isempty(jobs)
   % Save the job file so the we have a record of what we did
   tstamp = datenum(now);
   job_stub = sprintf('jobs_%s.mat', datestr(tstamp,30));

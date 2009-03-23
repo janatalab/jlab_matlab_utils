@@ -3,8 +3,8 @@ function outdata = ensemble_fmri_init(indata,defs)
 % inits an fmri dataset on disk for indata.data{inc.subjec_id}, returns paths to relevant files
 % 
 % REQUIRES
-%   defs.sinfo(:)
-%   defs.subids
+%   defs.sinfo(:) - containing subject information for all subjects you
+%       want to process
 %   defs.paths.inroot
 %   defs.paths.outroot
 %   defs.expinfo.id
@@ -15,8 +15,6 @@ function outdata = ensemble_fmri_init(indata,defs)
 %   defs.init.SYMLINK_EPIS (default: 1)
 %   defs.init.VOL_CHECK (default: 1)
 %   defs.init.USER_SCANNER_MOCO
-%   defs.init.MAKE_4D_NIFTI
-%   defs.init.USE_4D_NIFTI
 %   defs.init.TOUCH_HEADERS
 %   defs.init.REPLACE_BAD_VOLS
 %   defs.init.ROTATE_EPI
@@ -40,18 +38,13 @@ r.report_on_fly = 1;
 
 %%% INITIALIZE REPORTING VAR/FUNC
 
-% get subids
-if isfield(defs,'subids')
-  proc_subs = defs.subids;
-  if ~ischar(proc_subs) && ~iscell(proc_subs)
-    warning(1,'please provide valid subids');
-    return
-  elseif ~iscell(proc_subs)
-    proc_subs = {proc_subs};
-    nsub_proc = length(proc_subs);
-  end
+% get sinfo
+if isfield(defs,'sinfo') && isstruct(defs.sinfo)
+  sinfo = defs.sinfo;
+  proc_subs = {sinfo(:).id};
+  nsub_proc = length(proc_subs);
 else
-  warning(1,'please provide valid subids');
+  warning(1,'please provide a valid sinfo struct');
   return
 end
 
@@ -61,8 +54,6 @@ exp_inroot = defs.paths.inroot;
 exp_outroot = defs.paths.outroot;
 check_dir(exp_outroot);
 
-try CHECK_HEADERS = defs.init.CHECK_HEADERS;
-catch CHECK_HEADERS = 1; end
 try CORRECT_HIRES = defs.init.CORRECT_HIRES;
 catch CORRECT_HIRES = 1; end
 try SYMLINK_COPLANARS = defs.init.SYMLINK_COPLANARS;
@@ -73,10 +64,6 @@ try VOL_CHECK = defs.init.VOL_CHECK;
 catch VOL_CHECK = 1; end
 try USE_SCANNER_MOCO = defs.init.USE_SCANNER_MOCO;
 catch USE_SCANNER_MOCO = 0; end
-try MAKE_4D_NIFTI = defs.init.MAKE_4D_NIFTI;
-catch MAKE_4D_NIFTI = 0; end
-try USE_4D_NIFTI = defs.init.USE_4D_NIFTI;
-catch USE_4D_NIFTI = 0; end
 try TOUCH_HEADERS = defs.init.TOUCH_HEADERS;
 catch TOUCH_HEADERS = 0; end
 try REPLACE_BAD_VOLS = defs.init.REPLACE_BAD_VOLS;
@@ -87,10 +74,15 @@ try USE_SPM = defs.init.USE_SPM; catch USE_SPM = 0; end
 try CLOBBER = defs.init.CLOBBER; catch CLOBBER = 1; end
 try WRITE2FILE = defs.init.WRITE2FILE; catch WRITE2FILE = 0; end
 
-% set up data structs
-if isfield(defs,'sinfo') && isstruct(defs.sinfo)
-  sinfo = defs.sinfo;
+try CHECK_HEADERS = defs.init.CHECK_HEADERS;
+catch
+    if SYMLINK_EPIS
+        CHECK_HEADERS = 1;
+    else
+        CHECK_HEADERS = 0;
+    end
 end
+
 
 % check for required vars
 check_vars = {'sinfo'};
@@ -168,7 +160,7 @@ if SYMLINK_COPLANARS
   cocol = set_var_col_const(outdata.data{cop_idx}.vars);
 end
 
-if SYMLINK_EPIS || MAKE_4D_NIFTI
+if SYMLINK_EPIS
   % % epi output data structure
   % holds paths to all epi images created or symlinked by this instance of
   % this job
@@ -193,9 +185,8 @@ outcols = set_var_col_const(outdata.vars);
 %
 
 for isub=1:nsub_proc
-  subidx = strmatch(proc_subs{isub},{sinfo.id},'exact');
-  subid = sinfo(subidx).id;
-  msg = sprintf('\t\tPROCESSING SUBJECT (%d/%d): %s\n', isub, nsub_proc,subid);
+  subid = sinfo(isub).id;
+  msg = sprintf('\t\tPROCESSING SUBJECT (%d/%d): %s\n',isub,nsub_proc,subid);
   r = update_report(r,msg);
   
   % Deal with directory infrastructure
@@ -215,14 +206,14 @@ for isub=1:nsub_proc
       'path_type','sub_indir','path',sub_indir);
 
   % Determine number of sessions for this subject
-  nsess = length(sinfo(subidx).sessinfo);
+  nsess = length(sinfo(isub).sessinfo);
   
   %
   % START OF THE SESSION LOOP
   %
   
   for isess = 1:nsess
-    sess = sinfo(subidx).sessinfo(isess);
+    sess = sinfo(isub).sessinfo(isess);
     
     if ~sess.use_session
       msg = sprintf('\t\t\tSkipping session %d\n', isess);
@@ -238,7 +229,7 @@ for isub=1:nsub_proc
     ngood_runs = nruns;
     
     % Deal with the path definitions
-    fmri_sess_paths;
+    ensemble_fmri_set_sess_paths;
     
     % Figure out which version of the experiment applies
     exp_id = sess.exp_id;
@@ -253,17 +244,10 @@ for isub=1:nsub_proc
     protocol_idx = ...
 	   strmatch(sess.protocol_id,{defs.fmri.protocol.id},'exact');
     protocol = defs.fmri.protocol(protocol_idx);
-            
-    %
-    % Deal with the physiological files for this session
-    %
-    
-    % Here we need to set things up that we need to accomplish at the
-    % session level, i.e. across runs
-    
+
     % Swap dimensions on hires images if necessary and if a swap sequence
     % is specified
-    if CORRECT_HIRES & ~isempty(protocol.hires.swapseq)
+    if CORRECT_HIRES && ~isempty(protocol.hires.swapseq)
         
         %%%%% CORRECT HIRES
         % swap dimensions
@@ -287,7 +271,7 @@ for isub=1:nsub_proc
           if ~exist(infname)
             msg = sprintf('Could not find %s.img\n', protocol.hires.fstub);
             r = update_report(r,msg);
-            msg = sprintf('Checking for presence of individual slices ...\n')
+            msg = sprintf('Checking for presence of individual slices ...\n');
             r = update_report(r,msg);
             dirlist = dir(fullfile(hires_indir,'0*.img'));
             nfiles = length(dirlist);
@@ -366,7 +350,7 @@ for isub=1:nsub_proc
           infstub = fullfile(coplanar_indir,protocol.hires.fstub);
           outfstub = fullfile(anat_outdir, sprintf('%s_%s', subid, coplanar_type));
 
-          link_file = sprintf('%s.img', outfstub)
+          link_file = sprintf('%s.img', outfstub);
           if CLOBBER
             fprintf('Removing existing link ...\n');
             unix_str = sprintf('rm %s', link_file);
@@ -390,7 +374,8 @@ for isub=1:nsub_proc
           else
             % add hires info to the hires struct
             outdata.data{cop_idx} = ensemble_add_data_struct_row(...
-                'subject_id',subid,'session',isess,'ensemble_id',...
+                outdata.data{cop_idx},'subject_id',subid,'session',...
+                isess,'ensemble_id',...
                 sess.ensemble_id,'path',sprintf('%s.img',outfstub));
           end
 
@@ -538,82 +523,41 @@ for isub=1:nsub_proc
             if any(diff_mat(:))
               warning('WARNING: Potentially bad pixel dimension information!\n');
             else
-              msg = sprintf(' OK\n')
+              msg = sprintf(' OK\n');
               r = update_report(r,msg);
             end
         
           %%%%% END CHECK_HEADERS
         end % if CHECK_HEADERS
 
-	    if MAKE_4D_NIFTI
-          %%%%% MAKE_4D_NIFTI
-            msg = sprintf('Creating 4D NIFTI files ...\n');
-            r = update_report(r,msg);
-            outfname = fullfile(run_outdir,sprintf('%s_run%d.nii', subid, irun));
-            infiles = fullfile(run_indir, '*.img');
-            
-            %%%%% FIXME: make 4D nifti of specific files? maybe,
-            %%%%% preprocessed files (smooth, normed, resid)? maybe add
-            %%%%% fstub to the beginning of *.img above?
-
-            unix_str = sprintf('fslmerge -t %s %s', outfname, infiles);
-            msg = sprintf('%s\n', unix_str);
-            r = update_report(r,msg);
-            status = unix(unix_str);
-            if status
-              error(sprintf('Failed to create 4D NIFTI: %s\n', outfname))
-            end
-            
-            %%%%% FIXME: add nifti file to epidata?? check USE_4D_NIFTI
-            
-          %%%%% END MAKE_4D_NIFTI
-        end % if MAKE_4D_NIFTI
-
   	    if VOL_CHECK
           %%%%% VOL_CHECK
           
             % Load the data
-            if USE_4D_NIFTI
-              fname = fullfile(run_outdir,sprintf('%s_run%d.nii', subid, irun));
+            msg = sprintf('Loading ANALYZE format files');
+            r = update_report(r,msg);
+            flist = dir(fullfile(run_outdir,'*.img'));
+            npts = length(flist);
+            
+            % Get dimensions of data
+            fname = fullfile(run_outdir, flist(1).name);
+            warning off
+            V = spm_vol(fname);
+            warning on
 
-              if ~exist(fname)
-                msg = sprintf('Failed to find file: %s\n', fname);
-                r = update_report(r,msg);
-              else
-                warning off  % suppress file orientation warning
-                V = spm_vol(fname);
-                warning on
-                msg = sprintf('Loading data from: %s\n', fname);
-                r = update_report(r,msg);
-                Y = spm_read_vols(V);
-              end  
-              npts = length(V);
-            else
-              msg = sprintf('Loading ANALYZE format files');
-              r = update_report(r,msg);
-              flist = dir(fullfile(run_outdir,'*.img'));
-              npts = length(flist);
-
-              % Get dimensions of data
-              fname = fullfile(run_outdir, flist(1).name);
+            % Presize Y which will hold the EPI data
+            Y = zeros(V.dim(1),V.dim(2),V.dim(3),npts);
+            for ipt = 1:npts
+              fname = fullfile(run_outdir, flist(ipt).name);
               warning off
               V = spm_vol(fname);
               warning on
-
-              % Presize Y which will hold the EPI data
-              Y = zeros(V.dim(1),V.dim(2),V.dim(3),npts);
-              for ipt = 1:npts
-                fname = fullfile(run_outdir, flist(ipt).name);
-                warning off
-                V = spm_vol(fname);
-                warning on
-                msg = sprintf('.');
-                r = update_report(r,msg);
-                Y(:,:,:,ipt) = spm_read_vols(V);
-              end
-              msg = sprintf('\n');
+              msg = sprintf('.');
               r = update_report(r,msg);
-            end % if USE_4D_NIFTI
+              Y(:,:,:,ipt) = spm_read_vols(V);
+            end
+            msg = sprintf('\n');
+            r = update_report(r,msg);
 
             msg = sprintf('Calculating mean intensity for run %d\n', irun);
             r = update_report(r,msg);
@@ -641,13 +585,14 @@ for isub=1:nsub_proc
 
               % only show volumes 100 through 150
               %        set(gca, 'xlim', [100 250]);
-              set(gca,'xtick',[0:10:npts])
+              set(gca,'xtick',0:10:npts)
 
               ylabel('Slice#')
               xlabel('Volume#')
 
               if irun == 1
-                title(sprintf('Subject %s: Session %d: Run %d', sinfo(subidx).id, isess, runidx));
+                title(sprintf('Subject %s: Session %d: Run %d',...
+                    sinfo(isub).id,isess,runidx));
               else
                 title(sprintf('Run %d', runidx));
               end
@@ -661,32 +606,25 @@ for isub=1:nsub_proc
                 print(fvc_fname,'-dps');
                 msg = sprintf('Converting %s to PDF\n', fvc_fname);
                 r = update_report(r,msg);
-                %   pdf_fname = fullfile(defs.paths.figpath,sprintf('fmri_vol_check_%s.pdf',...
-                %       subid));
-                %   unix_str = sprintf('ps2pdf %s %s', fvc_fname, pdf_fname);
-                %   status = unix(unix_str);
-                %   if status
-                %     msg = sprintf('Failed to create PDF file from : %s\n', fvc_fname);
-                %     r = update_report(r,msg);
-                %   end
+                pdf_fname = fullfile(defs.paths.figpath,sprintf('fmri_vol_check_%s.pdf',...
+                    subid));
+                unix_str = sprintf('ps2pdf %s %s', fvc_fname, pdf_fname);
+                status = unix(unix_str);
+                if status
+                  msg = sprintf('Failed to create PDF file from : %s\n', fvc_fname);
+                  r = update_report(r,msg);
+                end
               end
             end
-            
-          %%%%% END VOL_CHECK  
+
+          %%%%% END VOL_CHECK
 	    end % if VOL_CHECK
 
 	    % Get file lists
-	    if USE_4D_NIFTI
-	      msg = sprintf('Using 4D Nifti file\n');
-	      r = update_report(r,msg);
-	      flist = fullfile(run_outdir,sprintf('%s_run%d.nii', subid, irun));
-        else
-	      %msg = sprintf('Using ANALYZE format files\n');
-	      srcdir = run_outdir;  % need to use this if doing anything with
-	      % SPM
-	      srcstub = sprintf('%s*.img',subid);
-	      flist = get_spm_flist(srcdir,srcstub);
-  	    end % if USE_4D_NIFTI
+	    srcdir = run_outdir;  % need to use this if doing anything with
+	    % SPM
+	    srcstub = sprintf('%s*.img',subid);
+	    flist = get_spm_flist(srcdir,srcstub);
 	
 	    if TOUCH_HEADERS
           %%%%% TOUCH_HEADERS
@@ -703,7 +641,7 @@ for isub=1:nsub_proc
           %%%%% END TOUCH_HEADERS
         end % if TOUCH_HEADERS
 	
-	    if REPLACE_BAD_VOLS & ~isempty(sinfo(subidx).badvols{irun})
+	    if REPLACE_BAD_VOLS && ~isempty(sinfo(isub).badvols{irun})
           %%%%% REPLACE_BAD_VOLS
             
             % Make sure we have a directory into which we can copy the
@@ -711,12 +649,12 @@ for isub=1:nsub_proc
             orig_dir = fullfile(run_outdir,'orig_badvols');
             check_dir(orig_dir,1);
 
-            nbad = size(sinfo(subidx).badvols{irun},1);
+            nbad = size(sinfo(isub).badvols{irun},1);
             for ibad = 1:nbad
-              badvol_idx = sinfo(subidx).badvols{irun}{ibad,1};
-              goodvol_idxs = sinfo(subidx).badvols{irun}{ibad,2};
+              badvol_idx = sinfo(isub).badvols{irun}{ibad,1};
+              goodvol_idxs = sinfo(isub).badvols{irun}{ibad,2};
 
-              badfname = fullfile(run_outdir,sprintf(epifstubfmt, subidx, ...
+              badfname = fullfile(run_outdir,sprintf(epifstubfmt, isub, ...
                   badvol_idx));
 
               % Copy the original bad file
@@ -726,8 +664,8 @@ for isub=1:nsub_proc
               ngood = length(goodvol_idxs);
               goodflist = {};
               for igood = 1:ngood
-                goodflist{igood} = fullfile(run_outdir,sprintf(epifstubfmt, subidx, ...
-                goodvol_idxs(igood)));
+                goodflist{igood} = fullfile(run_outdir,sprintf(...
+                    epifstubfmt,isub,goodvol_idxs(igood)));
               end
 
               % Read in the header info for the good data
@@ -760,7 +698,7 @@ for isub=1:nsub_proc
           %%%%% ROTATE_EPI
           
             % Check to see if we want a flip in z, in which case we need to
-            % call avwswapdim in order for this to happen cleanly
+            % call fslswapdim in order for this to happen cleanly
             if sign(einfo(iexp).rotvect(9) == -1) 
               nfiles = size(flist,1);
               for ifile = 1:nfiles
@@ -773,7 +711,7 @@ for isub=1:nsub_proc
 
                 tmp_file = sprintf('/tmp/tmp_%s_%06d.nii', study_id, fix(rand*900000));
                 % Format the FSL string
-                fsl_str = sprintf('avwswapdim %s %s y -z %s', flist(ifile,:), xstr, tmp_file);
+                fsl_str = sprintf('fslswapdim %s %s y -z %s', flist(ifile,:), xstr, tmp_file);
                 msg = sprintf('%s\n', fsl_str);
                 r = update_report(r,msg);
                 status = unix(fsl_str);
@@ -801,7 +739,7 @@ for isub=1:nsub_proc
                 end
 
                 % Change the file type of the new image
-                unix_str = sprintf('avwchfiletype NIFTI_PAIR %s', new_fname);
+                unix_str = sprintf('fslchfiletype NIFTI_PAIR %s', new_fname);
                 msg = sprintf('%s\n', unix_str);
                 r = update_report(r,msg);
                 status = unix(unix_str);
@@ -811,7 +749,7 @@ for isub=1:nsub_proc
 
               end
             else
-              warning off  % suppress Nifti warnings
+                warning off  % suppress Nifti warnings
               pj_spm_reorient(cellstr(flist),einfo(iexp).rotvect);
               warning on
             end
@@ -830,7 +768,8 @@ for isub=1:nsub_proc
         if exist('flist') && ~isempty(flist)
           for ifl=1:length(flist)
             outdata.data{epi_idx} = ensemble_add_data_struct_row(...
-                'subject_id',subid,'session',isess,'ensemble_id',...
+                outdata.data{epi_idx},'subject_id',subid,'session',...
+                isess,'ensemble_id',...
                 sess.ensemble_id,'run',irun,'path',flist(ifl,:));
           end
         end

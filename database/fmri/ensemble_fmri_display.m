@@ -127,7 +127,7 @@ try PRINT_TO_FILE = defs.display.PRINT_TO_FILE;
   catch PRINT_TO_FILE = 1; end
 try CLOBBER_PS = defs.display.CLOBBER_PS; catch CLOBBER_PS = 1; end
 try CONVERT2PDF = defs.display.CONVERT2PDF; catch CONVERT2PDF = 0; end
-try MAX_T = defs.display.MAX_T; catch MAX_T = 10; end
+try MAX_T = defs.display.MAX_T; catch MAX_T = 0; end
 try FTHRESH_MULT = defs.display.FTHRESH_MULT; catch FTHRESH_MULT = 4; end
 try TTHRESH_MULT = defs.display.TTHRESH_MULT; catch TTHRESH_MULT = 3; end
 try CONTOUR_INTERVAL = defs.display.COUNTOUR_INTERVAL;
@@ -164,6 +164,9 @@ if isfield(defs,'conjunctions')
     conj_idx = defs.conj_idx;
   end
   conjunctions = defs.conjunctions;
+  CONJUNCTIONS = 1;
+else
+  CONJUNCTIONS = 0;
 end
 
 if isfield(defs,'display') && isstruct(defs.display) && ...
@@ -223,9 +226,6 @@ my_colormap = hsv;
 
 conjunct = [1 0 0; 0 1 0; 1 1 0; 0 0 1; 1 0 1; 0 1 1; 1 1 1];
 
-% Set up some general figure parameters
-figdir = fullfile(rootpath,'figures',sprintf('model_%02d', model_id)); check_dir(figdir);
-
 SO.figure = spm_figure('GetWin', 'Graphics'); % use SPM figure window
 set(SO.figure,'DefaultLineLineWidth', DEFAULT_CONTOUR_WIDTH)
 SO.labels.format = '%+d';
@@ -271,7 +271,7 @@ for iplot = 1:nplots
     	% Load the anatomical info
         nimg = nimg+1;
     	SO.img(nimg).type = 'truecolor';
-        SO.img(nimg).prop = 1;
+        SO.img(nimg).prop = .6;
         SO.img(nimg).cmap = gray;
 
         if USE_INDIVIDUAL_HIRES
@@ -290,7 +290,7 @@ for iplot = 1:nplots
 	
         if ~isempty(strmatch(plot,'conjunctions','exact'))
 
-            if ~exist('conjunctions') || ~exist('conj_idx')
+            if ~CONJUNCTIONS || ~exist('conj_idx')
               error('conjunctions specified, but not provided in defs\n');
             end
             conj_name = conjunctions{conj_idx}.name;
@@ -529,7 +529,8 @@ for iplot = 1:nplots
 	        if ~strmatch(plot,'Hires4Subject','exact')
 	          outstr = [outstr '_' model_proto_name];
             end
-	        figdir = fullfile(rootpath,'figures', outstr);
+	        figdir = fullfile(rootpath,'figures',model_proto_name,outstr);
+            check_dir(fileparts(figdir));
 	        print_to_file(figdir, isub~=1);
           else
 	        switch plot
@@ -541,16 +542,17 @@ for iplot = 1:nplots
               otherwise
                 outstr = sprintf('%s_%s_%s',subid,model_proto_name,xfm_type);
             end
-	        figdir = fullfile(rootpath,'figures', outstr);
+	        figdir = fullfile(rootpath,'figures',model_proto_name,outstr);
+            check_dir(fileparts(figdir));
 
             print_to_file(figdir,~((iplot==1)&(append_flag==0)));
 	        append_flag = 1;
           end
+          if CONVERT2PDF          
+    	    convert_to_pdf(figdir);
+	      end
         end % if PRINT_TO_FILE
 
-  	    if CONVERT2PDF
-  	      convert_to_pdf(figdir);
-	    end
 
       end % for isess=
     end % for isub
@@ -577,60 +579,158 @@ for iplot = 1:nplots
     SO.img(nimg).cmap = gray;
     
     model_dir = fullfile(rootpath, 'analyses/spm/group', sprintf('model_%02d',model_id));
+
+    if CONJUNCTIONS
+
+        conj_name = conjunctions{conj_idx}.name;
+        conjunction_info = conjunctions{conj_idx}.mappings;
+        
+        nitems = size(conjunction_info,1);
+        for im = 1:nitems
+          cond_name = conjunction_info{im,1};  % condition
+          cont_name = conjunction_info{im,2};  % contrast name
+          pval = conjunction_info{im,3};  % p-value
+          color_str = conjunction_info{im,4}; % color string
+
+          stats_dir = fullfile(model_dir,cond_name);
+          model_fname = fullfile(stats_dir,'SPM.mat');
+          
+          % load the SPM structure
+          load(model_fname);
+          
+          job.swd = stats_dir;
+          job.title = cond_name;
+          job.Im = []; % contrasts for masking
+          job.u = pval;
+
+          job.thresDesc = threshold_desc;
+          job.k = threshold_voxels;
+          job.Ic = strmatch(cont_name,{SPM.xCon.name},'exact');
+          if isempty(job.Ic)
+            msg = sprintf('No contrast matching: %s/conj\n', cont_name);
+            r = update_report(r,msg);
+            continue
+          elseif length(job.Ic) > 1
+            msg = sprintf('Many contrasts match: %s, using 1st\n', ...
+                cont_name);
+            r = update_report(r,msg);
+            job.Ic = job.Ic(1);
+          end
+
+          [SPM,xSPM] = spm_getSPM(job);
+
+          % Initialize an output volume if this is the first volume
+          if im == 1
+            conj_dir = fullfile(stats_dir,'Conjunctions');
+            check_dir(conj_dir);
+            V.fname = fullfile(conj_dir, conj_name);
+            V.dim = SPM.xVol.DIM;
+            V.mat = SPM.xVol.M;
+
+            X = zeros([V.dim; nitems]');
+          end
+
+          % Check to see if any voxels survived the thresholding
+          if isempty(xSPM.XYZ)
+            continue
+          end
+
+          tmp = zeros(V.dim');
+          tmp(sub2ind(SPM.xVol.DIM',xSPM.XYZ(1,:),xSPM.XYZ(2,:),xSPM.XYZ(3,:))) = 1;
+          if color_str == 'w'
+            X(:,:,:,im) = tmp*7;
+          elseif color_str == 'k'
+            X(:,:,:,im) = tmp*0;
+          else
+            X(:,:,:,im) = tmp*(2^(find('rgb' == color_str)-1));
+          end
+
+          nimg = length(SO.img)+1;
+          vals = xSPM.Z;
+          SO.img(nimg).range = [1 1.75]*xSPM.u;
+          SO.img(nimg).vol = slice_overlay('blobs2vol', xSPM.XYZ, vals, xSPM.M);
+          SO.img(nimg).type = 'split';
+          SO.img(nimg).prop = 1;
+          SO.img(nimg).contours = [0.5 1.5];
+
+          if ADD_CBAR
+            SO.cbar(end+1) = nimg;
+          end
+
+          cmap_idxs = [1:32]+8; % [1:32]
+          switch color_str
+            case 'r'
+              SO.img(nimg).cmap = newhot1(cmap_idxs,:);
+            case 'g'
+              SO.img(nimg).cmap = newhot2(cmap_idxs,:);
+            case 'b'
+              SO.img(nimg).cmap = newhot3(cmap_idxs,:);
+          end
+
+          if ADD_MASK_CONTOUR
+            add2stack_mask(anatdir);
+          end
+%           add2stack_spm(xSPM);
+        end % for im = 1:nitems
+        
+        
+    else
     
-    stats_dir = fullfile(model_dir, plotdirstubs{iplot});
-    model_fname = fullfile(stats_dir,'SPM.mat');
+        stats_dir = fullfile(model_dir, plotdirstubs{iplot});
+        model_fname = fullfile(stats_dir,'SPM.mat');
+
+        % Load the SPM structure
+        load(model_fname);
+
+        % Specify a job for spm_getSPM()
+    % 	job.spmmat = {model_fname};
+        job.swd = stats_dir;
+        job.title = plot;
+        job.Im = []; % contrasts for masking
+        job.thresDesc = threshold_desc;
+        job.u = threshold_p_group;
+        job.k = threshold_voxels;
+        job.Ic = strmatch(plot,{SPM.xCon.name},'exact');	  
+        if isempty(job.Ic)
+          msg = sprintf('No contrast matching: %s\n', plot);
+          r = update_report(r,msg);
+          continue
+        elseif length(job.Ic) > 1
+          msg = sprintf('Many contrasts match: %s, using 1st\n', plot);
+          r = update_report(r,msg);
+          job.Ic = job.Ic(1);
+        end
+
+        [SPM,xSPM] = spm_getSPM(job);
+
+        % Check to see if any voxels survived the thresholding
+        if isempty(xSPM.XYZ)
+          continue
+        end
+
+        % Add the job to the stack
+        nimg = add2stack_spm(xSPM);
+
+        % Add the appropriate colormap
+    % 	if icont == 1
+          cmap = newhot1;  % activation
+    % 	else
+    % 	  cmap = newhot3;  % deactivation
+    % 	end	    
+        SO.img(nimg).cmap = cmap;
+
+        if ADD_CBAR, SO.cbar(end+1) = length(SO.img); end
+
+        if ADD_SPLIT_CONTOUR
+          add2stack_contour(xCon(con_idx),stats_dir,threshold,'r');
+        end
+
+
+        if ADD_MASK_CONTOUR
+          add2stack_mask(group_mask_dir);  % stats_dir
+        end
     
-    % Load the SPM structure
-    load(model_fname);
-
-    % Specify a job for spm_getSPM()
-% 	job.spmmat = {model_fname};
-    job.swd = stats_dir;
-	job.title = plot;
-	job.Im = []; % contrasts for masking
-	job.thresDesc = threshold_desc;
-	job.u = threshold_p_group;
-    job.k = threshold_voxels;
-    job.Ic = strmatch(plot,{SPM.xCon.name},'exact');	  
- 	if isempty(job.Ic)
-	  msg = sprintf('No contrast matching: %s\n', plot);
-	  r = update_report(r,msg);
-	  continue
-    elseif length(job.Ic) > 1
-	  msg = sprintf('Many contrasts match: %s, using 1st\n', plot);
-	  r = update_report(r,msg);
-      job.Ic = job.Ic(1);
-	end
-
-	[SPM,xSPM] = spm_getSPM(job);
-	  
-	% Check to see if any voxels survived the thresholding
-	if isempty(xSPM.XYZ)
-	  continue
-    end
-	  
-    % Add the job to the stack
-	nimg = add2stack_spm(xSPM);
-
-	% Add the appropriate colormap
-% 	if icont == 1
-	  cmap = newhot1;  % activation
-% 	else
-% 	  cmap = newhot3;  % deactivation
-% 	end	    
-	SO.img(nimg).cmap = cmap;
-
-	if ADD_CBAR, SO.cbar(end+1) = length(SO.img); end
-	  
-	if ADD_SPLIT_CONTOUR
-	  add2stack_contour(xCon(con_idx),stats_dir,threshold,'r');
-    end
-	
-
-	if ADD_MASK_CONTOUR
-	  add2stack_mask(group_mask_dir);  % stats_dir
-	end
+    end % if CONJUNCTIONS
     
     % Render the image
     show_it(tp)
@@ -653,16 +753,24 @@ for iplot = 1:nplots
     text(0.1,0.6, title_str,'horizontalalign','left','fontsize',18);
     
     if PRINT_TO_FILE
-      fstub = sprintf('group_%s_%s',model_proto_name,...
-          tp.transform_types{tp.transform_idx});
-      figdir = fullfile(rootpath,'figures', fstub);
+      if CONJUNCTIONS
+        fstub = sprintf('group_%s_%s_%s',model_proto_name,conj_name,...
+            tp.transform_types{tp.transform_idx});
+        figdir = fullfile(conj_dir,fstub);
+        check_dir(fileparts(figdir));
+      else
+        fstub = sprintf('group_%s_%s',model_proto_name,...
+            tp.transform_types{tp.transform_idx});
+        figdir = fullfile(rootpath,'figures',model_proto_name,fstub);
+        check_dir(fileparts(figdir));
+      end
       if iplot == 1, append = 0; else append = 1; end
       print_to_file(figdir, append);
+      if CONVERT2PDF
+        convert_to_pdf(figdir);
+      end
     end
     
-    if CONVERT2PDF
-      convert_to_pdf(figdir);
-    end
   end %if PLOT_GROUP
 end % for plot
 

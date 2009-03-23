@@ -15,7 +15,6 @@ function outdata = ensemble_fmri_realign_epi(indata,defs)
 % 2008-08-14 FB
 
 global defaults r
-VERBOSE = 1;
 
 outdata = ensemble_init_data_struct();
 outdata.type = 'realign_epi';
@@ -35,20 +34,14 @@ for idata = 1:length(indata)
       case 'sinfo'
         sinfo = indata{idata};
         sinfo = sinfo.data;
+        proc_subs = {sinfo(:).id};
+        nsub_proc = length(proc_subs);
       case {'paths'}
         pathdata = indata{idata};
         pcol = set_var_col_const(pathdata.vars);
     end
   end
 end
-
-if ~exist('sinfo','var')
-  if isfield(defs,'sinfo')
-    sinfo = defs.sinfo;
-  end
-end
-proc_subs = {sinfo(:).id};
-nsub_proc = length(proc_subs);
 
 % check for required vars
 check_vars = {'sinfo','epidata','pathdata'};
@@ -58,7 +51,7 @@ if (iscell(indata) && ~isempty(indata) && isfield(indata{1},'task') && ...
         ~isempty(strmatch('return_outdir',indata{1}.task))) || ...
         (isstruct(indata) && isfield(indata,'task') && ...
         ~isempty(strmatch('return_outdir',indata.task)))
-  if exist('pathdata','var') && length(pathdata.data{1}) > 0
+  if exist('pathdata','var') && ~isempty(pathdata.data{1})
     if length(nsub_proc) == 1
       pfilt = struct();
       pfilt.include.all.subject_id = proc_subs;
@@ -237,7 +230,7 @@ for is=1:length(us)
 	    msg = sprintf('%s\n', fsl_str);
 	    status = unix(fsl_str);  % execute the command
 	    if status
-	      msg = sprintf('UNIX command failed!!\n\n')
+	      msg = sprintf('UNIX command failed!!\n\n');
 	      r = update_report(r,msg);
 	      continue
         end
@@ -261,7 +254,7 @@ for is=1:length(us)
 end % for is
 
 % Submit the SPM job stack
-if RUN_SPM & ~isempty(jobs)
+if RUN_SPM && ~isempty(jobs)
   % Save the job file so the we have a record of what we did
   tstamp = datenum(now);
   job_stub = sprintf('jobs_%s.mat', datestr(tstamp,30));

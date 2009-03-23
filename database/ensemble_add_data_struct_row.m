@@ -30,18 +30,20 @@ cols = set_var_col_const(indata.vars);
 for iv = 1:2:nargin-1
   fld = varargin{iv};
   if isfield(cols,fld)
-    if iscell(indata.data{cols.(fld)})
-      indata.data{cols.(fld)}{end+1} = varargin{iv+1};
-    else
-      inclass = class(indata.data{cols.(fld)});
-      vclass  = class(varargin{iv+1});
-      if isempty(strmatch(inclass,vclass))
-        error(['data struct column type (%s) and value type (%s) for '...
-            '%s key do not match'],inclass,vclass,fld);
-      else
-        indata.data{cols.(fld)}(end+1) = varargin{iv+1};
-      end
-    end
+%     if iscell(indata.data{cols.(fld)})
+%       indata.data{cols.(fld)}{end+1} = varargin{iv+1};
+%     else
+%       inclass = class(indata.data{cols.(fld)});
+%       vclass  = class(varargin{iv+1});
+%       if isempty(strmatch(inclass,vclass))
+%         error(['data struct column type (%s) and value type (%s) for '...
+%             '%s key do not match'],inclass,vclass,fld);
+%       else
+        indata.data{cols.(fld)} = [indata.data{cols.(fld)}; varargin{iv+1}];
+%         indata.data{cols.(fld)}(end+1) = varargin{iv+1};
+%         indata.data{cols.(fld)} = [
+%       end
+%     end
   end % if isfield(cols,
 end % for ivar =
 
