@@ -5,6 +5,7 @@ function outdata = ensemble_fmri_ica(indata,defs)
 % CURRENTLY only uses FSL's Melodic
 % CURRENTLY expects 4D nifti volumes
 % CURRENTLY runs separate ICA on each 4D volume provided ...
+% CURRENTLY looks for hires data, otherwise uses MNI 152 as background img
 % 
 % REQUIRES
 %   epi data - 4D nifti files - it will iterate over each 4D nifti file
@@ -48,6 +49,9 @@ for idata = 1:length(indata)
       case {'paths'}
         pathdata = indata{idata};
         pcol = set_var_col_const(pathdata.vars);
+      case 'hires'
+        hires = indata{idata};
+        hicol = set_var_col_const(hires.vars);
     end
   end
 end
@@ -94,7 +98,23 @@ end
 try BGTHRESH = defs.ica.BGTHRESH; catch BGTHRESH = 1; end
 try melodic_params = defs.ica.melodic_params;
     catch melodic_params = '--nobet --Ostats';
-    end
+end
+
+if exist('hires','var')
+  bgimage = hires.data{hicol.path}{1};
+else
+  bgimage = fullfile(defs.fmri.spm.paths.canonical_dir,'avg152T1.nii');
+end
+
+if exist(bgimage,'file')
+  msg = sprintf('using background image %s\n',bgimage);
+  r = update_report(r,msg);
+else
+  msg = sprintf(['background image %s not found, no background image '...
+      'being used\n'],bgimage);
+  r = update_report(r,msg);
+  bgimage = '';
+end
 
 if USE_SPM && ~USE_FSL
   error('SPM not supported yet ...\n');
@@ -170,6 +190,11 @@ for ii=1:nimg
     mstr = sprintf(['melodic -i %s -o %s --bgthreshold=%d --tr=%1.1f '...
         '-d %d --mmthresh=%1.1f --report -v %s'],...
         imgpath,opath,BGTHRESH,TR,NDIMS,MMTHRESH,melodic_params);
+    if ~isempty(bgimage)
+      mstr = [mstr sprintf(' --bgimage %s',bgimage)];
+    end
+    msg = sprintf('executing: %s',mstr);
+    r = update_report(r,msg);
     status = unix(mstr);
     if status
       warning('melodic failed to analyze %s:\n\t(%s)\n',imgpath,mstr);

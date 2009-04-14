@@ -45,21 +45,61 @@ eeglab('initpaths');
 
 % Parse out the input data
 for idata = 1:length(indata)
-  switch indata(idata).type
-    case {'paths'}
-      pathdata = indata(idata);
-      pcol = set_var_col_const(pathdata.vars);
+  if isfield(indata{idata},'type')
+    switch indata{idata}.type
+      case {'paths'}
+        pathdata = indata{idata};
+        pcol = set_var_col_const(pathdata.vars);
+      case {'sinfo'}
+        sinfo = indata{idata};
+        sinfo = sinfo.data;
+        proc_subs = {sinfo(:).id};
+        nsub_proc = length(proc_subs);
+    end
   end
-end
-
-if isfield(defs,'sinfo')
-  sinfo = defs.sinfo;
-  proc_subs = {sinfo(:).id};
 end
 
 % check for required vars
 check_vars = {'sinfo','pathdata'};
 check_required_vars;
+
+if (iscell(indata) && ~isempty(indata) && isfield(indata{1},'task') && ...
+        ~isempty(strmatch('return_outdir',indata{1}.task))) || ...
+        (isstruct(indata) && isfield(indata,'task') && ...
+        ~isempty(strmatch('return_outdir',indata.task)))
+  if exist('pathdata','var') && ~isempty(pathdata.data{1})
+    if length(nsub_proc) == 1
+      pfilt = struct();
+      pfilt.include.all.subject_id = proc_subs;
+      lpathdata = ensemble_filter(pathdata,pfilt);
+      if ~isempty(lpathdata.data{1})
+        sfilt = pfilt;
+        sfilt.include.all.path_type = {'physio_outdir'};
+        spathdata = ensemble_filter(lpathdata,sfilt);
+        if length(spathdata.data{1}) == 1
+          % one epi outdir, save outdata = epi_outdir
+          outdata = spathdata.data{pcol.path}{1};
+        else
+          sfilt = pfilt;
+          sfilt.include.all.path_type = {'sess_outdir'};
+          spathdata = ensemble_filter(lpathdata,sfilt);
+          if length(spathdata.data{1}) == 1;
+            outdata = spathdata.data{pcol.path}{1};
+          else
+            sfilt = pfilt;
+            sfilt.include.all.path_type = {'sub_outdir'};
+            spathdata = ensemble_filter(lpathdata,sfilt);
+            if length(spathdata.data{1}) == 1;
+              outdata = spathdata.data{pcol.path}{1};            
+            end
+          end
+        end
+      end
+    end
+  end
+  if ~exist('outdata','var') || ~exist(outdata,'dir'), outdata = ''; end
+  return
+end
 
 outdata.vars = [outdata.vars 'sinfo'];
 sinfo_idx = length(outdata.vars);
@@ -87,8 +127,6 @@ try SIG_CHECK = defs.SIG_CHECK; catch SIG_CHECK = 1; end
 %
 % START OF THE SUBJECT LOOP
 %
-
-nsub_proc = length(proc_subs);
 
 for isub=1:nsub_proc
   subid = sinfo(isub).id;
