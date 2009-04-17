@@ -21,7 +21,7 @@ function an_st = ensemble_enum_hist(data_st,params)
 %               to be analyzed.
 % 11/13/2007 FB - added error checking in plot_hist, to support blank enum 
 % labels, such as in the case of data_format_id 142, 144 & 145
-
+% 04/17/09 PJ - added output of plotted data to comma-separated files.
 
 an_st = {};
 na = 0;
@@ -396,9 +396,13 @@ function out_pp = plot_hist(data_st,params)
     sorted_idxs = 1:length(data_st.data{col.mean});
   end
   
+  % Create output variables
+  sorted_data = data_st.data{col.mean}(sorted_idxs);
+  sorted_stderr = sorted_data/sqrt(data_st.data{col.nitems});
+  
   % Plot the data
-  bs = bar(1:ncat,data_st.data{col.mean}(sorted_idxs));
-  add_errorbars(bs,data_st.data{col.std}(sorted_idxs)'/sqrt(data_st.data{col.nitems}));
+  bs = bar(1:ncat, sorted_data);
+  add_errorbars(bs,sorted_stderr');
   set(gca,'xtick',[],'xlim',[0 ncat+1])
   set(gca,'activepositionproperty','outerposition')
 
@@ -407,6 +411,7 @@ function out_pp = plot_hist(data_st,params)
   % Set axes formatting
   
   % Add xtick labels as text objects so that we can rotate them
+  label_data = {};
   for icat = 1:ncat
     % FB 11/13/2007 added this conditional, since empty enum values create
     % an empty cell return from linewrap, which in turn is illegal in
@@ -417,9 +422,10 @@ function out_pp = plot_hist(data_st,params)
       label_text = ' ';
     end
     text(icat,0,label_text,'rotation',-90, ...
-	'horizontalalign','left', ...
-	'verticalalign','middle', ...
-	'fontsize', labelfontsize);
+      'horizontalalign','left', ...
+      'verticalalign','middle', ...
+      'fontsize', labelfontsize);
+    label_data{icat} = label_text;
   end
   
   try ylim = pp.ylim; catch ylim=[]; end
@@ -454,6 +460,25 @@ function out_pp = plot_hist(data_st,params)
   if isfield(pp,'write2file') && pp.write2file
     fprintf('Printing figure to file: %s\n', pp.figfname);
     print(pp.figfname, pp.printargs{:})
+  end
+  
+  % Write the data that were plotted to a comma-delimited text file
+  try data2file = pp.data2file; catch data2file = true; end
+  if data2file && ~isempty(pp.figfname)
+    [fpath,fname,fext] = fileparts(pp.figfname);
+    datafname = fullfile(fpath,[fname '.csv']);
+    % open the file for writing
+    fid = fopen(datafname,'wt');
+    if fid == -1
+      fprintf('FAILED to open %s for writing\n', datafname);
+    else
+      fprintf('Writing figure data to: %s\n', datafname);
+      fprintf(fid,'Category,Data,StdErr\n');
+      for icat = 1:length(label_data)
+        fprintf(fid,'%s,%1.6f,%1.6f\n', label_data{icat}, sorted_data(icat), sorted_stderr(icat));
+      end
+      fclose(fid);
+    end
   end
   
   pp.fignum = gcf;
