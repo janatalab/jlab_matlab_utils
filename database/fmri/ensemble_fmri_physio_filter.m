@@ -280,7 +280,7 @@ for isub=1:nsub_proc
           end
           
           fprintf(1,'regressing, ');
-          [b,bint,r,rint,stats] = regress(EEGraw.data,dM(:,:,ic));
+          [b,bint,r,rint,stats] = regress(EEGraw.data,dM(:,:));
           Y = Y - r';
           
           if SIG_CHECK

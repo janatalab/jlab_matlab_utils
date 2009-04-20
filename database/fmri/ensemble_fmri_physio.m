@@ -222,6 +222,8 @@ for isub=1:nsub_proc
             sprintf('%s_sess%d_present.mat',subid,isess));
         lparams.link2pres.filt.include.any.RUN = irun;
       end
+      
+      % read-in physio data
       ri = proc_physio_data(physiopath,lparams);
 
       if isempty(fields(ri))
@@ -243,50 +245,22 @@ for isub=1:nsub_proc
           ri.meta.srate,'subject',subid,'session',sess.ensemble_id,...
           'chanlocs',chanlocs,'nbchan',nchans,'pnts',npts);
       
-      %%%% Filter this run data?
-      for ic=1:length(lparams.channels)
-        if isfield(lparams.channels(ic),'filter')
-        end
-      end
-      
-      
       set_fname = sprintf('%s_sess%d_run%d_physio.set',subid,isess,irun);
       pop_saveset(EEG,'filename',set_fname,'filepath',physio_outdir);
       set_fpn = fullfile(physio_outdir,set_fname);
 
-      outdata.data{ppaths_idx}.data{ppcol.subject_id} = ...
-          [outdata.data{ppaths_idx}.data{ppcol.subject_id}; subid];
-      outdata.data{ppaths_idx}.data{ppcol.session} = ...
-          [outdata.data{ppaths_idx}.data{ppcol.session}; isess];
-      outdata.data{ppaths_idx}.data{ppcol.ensemble_id} = ...
-          [outdata.data{ppaths_idx}.data{ppcol.ensemble_id}; sess.ensemble_id];
-      outdata.data{ppaths_idx}.data{ppcol.run} = ...
-          [outdata.data{ppaths_idx}.data{ppcol.run}; irun];
-      outdata.data{ppaths_idx}.data{ppcol.path} = ...
-          [outdata.data{ppaths_idx}.data{ppcol.path}; set_fpn];
-%       outdata.data{ppaths_idx}.data{ppcol.path} = ...
-%           [outdata.data{ppaths_idx}.data{ppcol.path}; mat_fname];
-
+      outdata.data{ppaths_idx} = ensemble_add_data_struct_row(...
+          outdata.data{ppaths_idx},'subject_id',subid,'session',isess,...
+          'ensemble_id',sess.ensemble_id,'run',irun,'path',set_fpn);
+      
       if SIG_CHECK
-        sigs = fieldnames(ri.signal);
+        sigs = {EEG.chanlocs(:).labels};
         nsig = length(sigs);
         figure();
         for i=1:nsig
           sig = sigs{i};
           subplot(nsig,1,i);
-          if isempty(strmatch('resp',sig,'exact'))
-            plot(ri.signal.(sig));
-          else
-            [rm,ur]=make_mask_mtx(ri.signal.(sig));
-            nr = length(ur);
-            imagesc(rm');
-            set(gca,'YTick',1:nr);
-            if isfield(sess.physio,'resp_titles')
-              set(gca,'YTickLabel',sess.physio.resp_titles);
-            else
-              set(gca,'YTickLabel',ur);
-            end
-          end % if isempty(strmatch
+          plot(EEG.data(i,:));
           ylabel(sig);
         end % for i=1:nsig
         if isfield(defs,'figs') && isfield(defs.figs,'write2file') && ...
@@ -296,6 +270,72 @@ for isub=1:nsub_proc
             print(figfname,defs.figs.printargs{:});
         end
       end % if SIG_CHECK
+      
+      %%%% Filter this run data?
+      if ~isempty(strmatch('filter',fieldnames(lparams.channels)))
+        EEGf = EEG;
+        for ic=1:length(lparams.channels)
+          if isfield(lparams.channels(ic),'filter')
+            % get EEG channel index for this channel
+            cidx = strmatch(lparams.channels(ic).name,EEGf.chanlocs(:).labels);
+            if length(cidx) > 1
+              cidx = cidx(1);
+            elseif isempty(cidx)
+              warning(['no match between lparams.channel %d and EEG ',...
+                  'struct!? skipping\n'],ic);
+              continue
+            end % if length(cidx
+          
+            % filter data?
+            lf = lparams.channels(ic).filter;
+            if ~isstruct(lf)
+              warning(['filter struct for channel %d is not a struct, '...
+                  'skipping\n'],ic);
+            else
+              for icf=1:length(lf)
+                if ~isfield(lf(icf),'fun')
+                  warning(['filter struct %d for channel %d does not '...
+                      'contain a function handle (.fun field), '...
+                      'skipping\n'],icf,ic);
+                else
+                  if ~isfield(lf(icf),'params'), lf(icf).params = struct; end
+                  lfh = parse_fh(lf(icf).fun);
+                
+                  cparams = lparams;
+                  cparams.(func2str(lfh)) = lf;
+                  EEGf = lfh(EEGf,cparams);
+                end % if ~isfield(lf(icf
+              end % for icf=1:
+            end % if ~isstruct(lf
+          end % if isfield(lparams.channels(ic
+        end % for ic=1:length(lparams.ch
+
+        set_fname = sprintf('%s_sess%d_run%d_physio_filtered.set',subid,isess,irun);
+        pop_saveset(EEGf,'filename',set_fname,'filepath',physio_outdir);
+        set_fpn = fullfile(physio_outdir,set_fname);
+
+        outdata.data{ppaths_idx} = ensemble_add_data_struct_row(...
+            outdata.data{ppaths_idx},'subject_id',subid,'session',isess,...
+            'ensemble_id',sess.ensemble_id,'run',irun,'path',set_fpn);
+        
+        if SIG_CHECK
+          sigs = {EEGf.chanlocs(:).labels};
+          nsig = length(sigs);
+          figure();
+          for i=1:nsig
+            sig = sigs{i};
+            subplot(nsig,1,i);
+            plot(EEGf.data(i,:));
+            ylabel(sig);
+          end % for i=1:nsig
+          if isfield(defs,'figs') && isfield(defs.figs,'write2file') && ...
+                  defs.figs.write2file
+              figfname = fullfile(physio_outdir,sprintf(...
+                  '%s_sess%d_run%d_physioFilteredSigCheck.ps',subid,isess,irun));
+              print(figfname,defs.figs.printargs{:});
+          end
+        end % if SIG_CHECK
+      end % if ~isempty(strmatch('filter
       
     end % for irun
     
