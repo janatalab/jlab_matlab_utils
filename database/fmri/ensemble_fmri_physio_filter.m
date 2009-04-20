@@ -5,7 +5,10 @@ function outdata = ensemble_fmri_physio_filter(indata,defs)
 % REQUIRES
 %   defs.physio_filter.target_channels
 %   defs.physio_filter.SIG_CHECK
+%   defs.physio_filter.butter.order
+%   defs.physio_filter.butter.cutoff
 %   defs.figs.print_args
+%   defs.fmri
 % 
 % 2008/10/06 FB - started coding
 
@@ -107,7 +110,19 @@ outdata.data{ppaths_idx}.data{5} = {};
 ppcol = set_var_col_const(outdata.data{ppaths_idx}.vars);
 
 target_channels = defs.physio_filter.target_channels;
-try SIG_CHECK = params.physio_filter.SIG_CHECK; catch SIG_CHECK = 0; end
+try SIG_CHECK = defs.physio_filter.SIG_CHECK; catch SIG_CHECK = 0; end
+try b_order = defs.physio_filter.butter.order; catch b_order = 0; end
+try b_order = defs.physio_filter.butter.order; catch b_order = 12; end
+try b_cutoff = defs.physio_filter.butter.cutoff; catch b_cutoff = 0.5; end
+
+if ~isfield(defs,'figs') || ~isfield(defs.figs,'printargs') || ...
+        ~iscell(defs.figs.printargs) || isempty(defs.figs.printargs)
+  defs.figs.printargs = {'-dpsc','-append'};
+end
+
+if b_order
+  [fb,fa] = butter(b_order,b_cutoff);
+end
 
 %
 % START OF THE SUBJECT LOOP
@@ -183,7 +198,7 @@ for isub=1:nsub_proc
       rpaths = ensemble_filter(spaths,rfilt);
       
       % get physio data
-      physiofname = rpaths.data{1};
+      physiofname = rpaths.data{pcol.path}{1};
       if isempty(physiofname)
         msg = sprintf('no physiofname found, skipping run %d (%d/%d)\n',...
             rnum,irun,nruns);
@@ -193,57 +208,80 @@ for isub=1:nsub_proc
       
       [fp,fn,fx] = fileparts(physiofname);
       EEG = pop_loadset('filename',sprintf('%s%s',fn,fx),'filepath',fp);
-
       tgt_chan_idxs = find(ismember({EEG.chanlocs(:).labels},target_channels));
       nchans = length(tgt_chan_idxs);
 
-      % create TR event channel
-      fprintf(1,'creating TR event channel\n');
-      tr_idxs = 1:pparams.TR*EEG.srate:EEG.pnts; % in samples
-      ntr = length(tr_idxs);
-      tr_events = [ones(ntr,1) (tr_idxs/EEG.srate)']; % in seconds
-      EEG = pop_importevent(EEG,'append','no','event','tr_events','fields',...
-          {'type','latency'},'timeunit',1);
-
-      % extract epochs
-      fprintf(1,'extracting epochs\n');
-      EEG = pop_epoch(EEG,{},[0 pparams.TR],'epochinfo','yes');
-
-      % calculate mean TR waveform for each channel
-      fprintf(1,'calculating mean TR waveform for each channel,regressing\n');
-      mE = [];
-
+      EEGraw = EEG; % save a copy of the original dataset
+      
       for ic=1:nchans
         tci = tgt_chan_idxs(ic);
-        cname = EEG.chanlocs{tci};
+        cname = EEG.chanlocs(tci).labels;
         fprintf(1,'chan %d (%d), ',ic,tci);
 
-        % filter
-        fprintf(1,'filtering, ');
+        % get data for this channel
         Y = EEG.data(tci,:);
-        Y = filtfilt(fb,fa,Y);
 
-        if ~isempty(cname,{'scr','respir'})
+        if ~isempty(strmatch(cname,{'scr','respir'}))
         
-          E = [];
-          for it=1:EEG.trials
-            E = [E; Y(:,it)];
+          %
+          % remove any scanner-related artifact in scr and respir channels
+          % by calculating mean wave-form for each TR, and regressing the
+          % channel signal on a design matrix based on this mean waveform
+          %
+
+          % create TR event channel
+          fprintf(1,'creating TR event channel\n');
+          tr_idxs = 1:pparams.TR*EEG.srate:EEG.pnts; % in samples
+          ntr = length(tr_idxs);
+          tr_events = [ones(ntr,1) (tr_idxs/EEG.srate)']; % in seconds
+          EEGe = pop_importevent(EEG,'append','no','event',tr_events,...
+              'fields',{'type','latency'},'timeunit',1);
+
+          % extract TR epochs
+          fprintf(1,'extracting epochs\n');
+          EEGe = pop_epoch(EEGe,{},[0 pparams.TR],'epochinfo','yes');
+          E = EEGe.data(tci,:);
+
+          % calculate mean TR waveform for each channel
+          fprintf(1,'calculating mean TR waveform for %s channel, ',cname);
+          W = [];
+          for it=1:EEGe.trials
+            W = [W; E(:,it)];
           end
-          mE = [mE; mean(E)];
-          dM = zeros(EEG.pnts,EEG.trials+1,nchans);
+          mW = mean(W); % mean waveform across TRs
 
           % create regression design matrix
+          dM = zeros(EEG.pnts,EEGe.trials);
           fprintf(1,'dM, ');
-          for it=1:EEG.trials
-            start = (EEG.pnts*(it-1)+1);
-            stop  = EEG.pnts*it;
-            dM(start:stop,it,ic) = mE(ic,:);
+          for it=1:EEGe.trials
+            start = (EEGe.pnts*(it-1)+1);
+            stop  = EEGe.pnts*it;
+            dM(start:stop,it) = mW;
           end
-          dM(:,end,ic) = 1;
+          
+          % are there any samples not accounted for at the end of dM?
+          if stop < size(dM,1)
+            if (size(dM,1) - (stop - 1)) > length(mE)
+              % left-over size is greater than the length of a TR
+              error('there are less trials than there should be\n');
+            else
+              % fill out extra time at the end of the design matrix
+              start = stop + 1;
+              stop = size(dM,1);
+              dM(start:stop,end+1) = repmat(mE(1:stop-start),[it 1]);
+            end
+          end
+          dM(:,end+1) = 1; % must place a constant as the last regressor
 
+          % filter using filtfilt?
+          if b_order
+            fprintf(1,'filtering, ');
+            Y = filtfilt(fb,fa,Y);
+          end
+          
           fprintf(1,'regressing, ');
-          [b,bint,r,rint,stats] = regress(Y',dM(:,:,ic));
-          Y = Y - r;
+          [b,bint,r,rint,stats] = regress(EEGraw.data,dM(:,:,ic));
+          Y = Y - r';
           
           if SIG_CHECK
             logfname = fullfile(fp,sprintf('%s_sigcheck.ps',fn));
@@ -264,6 +302,12 @@ for isub=1:nsub_proc
             print(logfname,defs.figs.printargs{:});
           end
         else
+          % filter using filtfilt?
+          if b_order
+            fprintf(1,'filtering, ');
+            Y = filtfilt(fb,fa,Y);
+          end
+          
           if SIG_CHECK
             logfname = fullfile(fp,sprintf('%s_sigcheck.ps',fn));
             figure();
@@ -279,11 +323,11 @@ for isub=1:nsub_proc
           end                    
         end
 
-        EEG.data(tci,:) = Y;
+        EEGraw.data(tci,:) = Y;
       end % for ic=1:nchans
 
       set_fname = sprintf('%s_filtered%s',fn,fx);
-      pop_saveset(EEG,'filename',set_fname,'filepath',fp);
+      pop_saveset(EEGraw,'filename',set_fname,'filepath',fp);
         
       set_fpn = fullfile(fp,set_fname);
 

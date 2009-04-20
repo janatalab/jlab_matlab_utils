@@ -226,7 +226,6 @@ for isub=1:nsub_proc
 
       if isempty(fields(ri))
         continue
-
       end
       
       % import into EEGLAB
@@ -243,11 +242,13 @@ for isub=1:nsub_proc
       EEG = pop_importdata('dataformat','array','data',signal,'srate',...
           ri.meta.srate,'subject',subid,'session',sess.ensemble_id,...
           'chanlocs',chanlocs,'nbchan',nchans,'pnts',npts);
-
-      % save to file
-%       mat_fname = fullfile(physio_outdir,...
-%           sprintf('%s_sess%d_run%d_physio.mat',subid,isess,irun));
-%       save(mat_fname,'-struct','ri');
+      
+      %%%% Filter this run data?
+      for ic=1:length(lparams.channels)
+        if isfield(lparams.channels(ic),'filter')
+        end
+      end
+      
       
       set_fname = sprintf('%s_sess%d_run%d_physio.set',subid,isess,irun);
       pop_saveset(EEG,'filename',set_fname,'filepath',physio_outdir);
