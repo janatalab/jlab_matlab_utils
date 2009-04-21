@@ -277,7 +277,8 @@ for isub=1:nsub_proc
         for ic=1:length(lparams.channels)
           if isfield(lparams.channels(ic),'filter')
             % get EEG channel index for this channel
-            cidx = strmatch(lparams.channels(ic).name,EEGf.chanlocs(:).labels);
+            cidx = strmatch(lparams.channels(ic).name,...
+                {EEGf.chanlocs(:).labels});
             if length(cidx) > 1
               cidx = cidx(1);
             elseif isempty(cidx)
@@ -298,11 +299,11 @@ for isub=1:nsub_proc
                       'contain a function handle (.fun field), '...
                       'skipping\n'],icf,ic);
                 else
-                  if ~isfield(lf(icf),'params'), lf(icf).params = struct; end
                   lfh = parse_fh(lf(icf).fun);
-                
+                  fname = func2str(lfh);
+
                   cparams = lparams;
-                  cparams.(func2str(lfh)) = lf;
+                  cparams.(fname) = lf;
                   EEGf = lfh(EEGf,cparams);
                 end % if ~isfield(lf(icf
               end % for icf=1:

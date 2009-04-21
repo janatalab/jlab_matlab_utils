@@ -52,6 +52,9 @@ for idata = 1:length(indata)
       case 'hires'
         hires = indata{idata};
         hicol = set_var_col_const(hires.vars);
+      case 'coplanar'
+        coplanar = indata{idata};
+        cocol = set_var_col_const(coplanar.vars);
     end
   end
 end
@@ -102,18 +105,23 @@ end
 
 if exist('hires','var')
   bgimage = hires.data{hicol.path}{1};
-else
-  bgimage = fullfile(defs.fmri.spm.paths.canonical_dir,'avg152T1.nii');
+elseif exist('coplanar','var')
+  bgimage = coplanar.data{cocol.path}{1};
 end
 
-if exist(bgimage,'file')
+if exist('bgimage','var') && exist(bgimage,'file')
   msg = sprintf('using background image %s\n',bgimage);
   r = update_report(r,msg);
 else
-  msg = sprintf(['background image %s not found, no background image '...
-      'being used\n'],bgimage);
-  r = update_report(r,msg);
-  bgimage = '';
+  avgimage = fullfile(defs.fmri.spm.paths.canonical_dir,'avg152T1.nii');
+  if ~exist(avgimage,'file')
+    msg = sprintf(['background images %s and %s not found, no '...
+        'background image is being used\n'],bgimage,avgimage);
+    r = update_report(r,msg);
+    bgimage = '';
+  else
+    bgimage = avgimage;
+  end
 end
 
 if USE_SPM && ~USE_FSL
