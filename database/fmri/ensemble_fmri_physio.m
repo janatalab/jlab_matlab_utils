@@ -112,12 +112,13 @@ ppaths_idx = length(outdata.vars);
 outdata.data{ppaths_idx} = ensemble_init_data_struct();
 outdata.data{ppaths_idx}.type='physio_paths';
 outdata.data{ppaths_idx}.vars = {'subject_id','session',...
-    'ensemble_id','run','path'};
+    'ensemble_id','run','path','preprocessed'};
 outdata.data{ppaths_idx}.data{1} = {};
 outdata.data{ppaths_idx}.data{2} = [];
 outdata.data{ppaths_idx}.data{3} = [];
 outdata.data{ppaths_idx}.data{4} = [];
 outdata.data{ppaths_idx}.data{5} = {};
+outdata.data{ppaths_idx}.data{6} = [];
 ppcol = set_var_col_const(outdata.data{ppaths_idx}.vars);
 
 ecdparams.outDataName = 'physio_data';
@@ -251,7 +252,8 @@ for isub=1:nsub_proc
 
       outdata.data{ppaths_idx} = ensemble_add_data_struct_row(...
           outdata.data{ppaths_idx},'subject_id',subid,'session',isess,...
-          'ensemble_id',sess.ensemble_id,'run',irun,'path',set_fpn);
+          'ensemble_id',sess.ensemble_id,'run',irun,'path',set_fpn,...
+          'preprocessed',0);
       
       if SIG_CHECK
         sigs = {EEG.chanlocs(:).labels};
@@ -317,7 +319,8 @@ for isub=1:nsub_proc
 
         outdata.data{ppaths_idx} = ensemble_add_data_struct_row(...
             outdata.data{ppaths_idx},'subject_id',subid,'session',isess,...
-            'ensemble_id',sess.ensemble_id,'run',irun,'path',set_fpn);
+            'ensemble_id',sess.ensemble_id,'run',irun,'path',set_fpn,...
+            'preprocessed',1);
         
         if SIG_CHECK
           sigs = {EEGf.chanlocs(:).labels};

@@ -33,6 +33,9 @@ for idata = 1:length(indata)
         case 'modelspec'
           modelspec = indata{idata};
           mocol = set_var_col_const(modelspec.vars);
+        case 'physio_paths'
+          physio_paths = indata{idata};
+          physcol = set_var_col_const(physio_paths.vars);
       end
   end
 end
@@ -47,7 +50,7 @@ if (iscell(indata) && ~isempty(indata) && isfield(indata{1},'task') && ...
         ~isempty(strmatch('return_outdir',indata{1}.task))) || ...
         (isstruct(indata) && isfield(indata,'task') && ...
         ~isempty(strmatch('return_outdir',indata.task)))
-  if exist('pathdata','var') && length(pathdata.data{1}) > 0
+  if exist('pathdata','var') && ~isempty(pathdata.data{1})
     if length(nsub_proc) == 1
       pfilt = struct();
       pfilt.include.all.subject_id = proc_subs;
@@ -409,6 +412,24 @@ if USE_SPM
   rinfo.motionparam_fname = fullfile(rpath,sprintf('rp_%s',sprintf(epifstubfmt,subid,irun,1,'txt')));
   rinfo.presfname = sess.pres.logfiles{irun,1};
 
+  % if there is physio data for this subject/run, and if there is a physio
+  % data struct that has been provided as input for this job, then extract
+  % and attach the physo data to rinfo
+  if isfield(sess,'physio')
+    if exist('physio_paths','var')
+      pf.include.all.subject_id = {subid};
+      pf.include.all.session = isess;
+      pf.include.all.run = urun(irun);
+      lphys = ensembl_filter(physio_paths,pf);
+      if ~isempty(lphys.data{physcol.path}) && ...
+              exist(lphys.data{physcol.path}{1},'file')
+        rinfo.physiofname = lphys.data{physcol.path}{1};
+      else
+        warning('physio file for run %d not found\n',urun(irun));
+      end
+    end
+  end
+  
   % If we are doing design matrix permutations, then we need to set up
   % the loop for that here
   if ~uses_permute
@@ -423,7 +444,7 @@ if USE_SPM
     stat_idx = build_model_idx_offset+iperm-1;
 
     % Generate arrays specifying the conditions, onsets, durations
-    spmsess.cond = generate_conds_v2(rinfo, curr_model, sess);
+    spmsess.cond = fmri_generate_conds(rinfo, curr_model, sess);
 
     condinfo_fname = fullfile(spm_outdir, sprintf('model%02d_run%d_condinfo.mat', model_id,irun));
 
@@ -435,7 +456,7 @@ if USE_SPM
     spmsess.multi = {''}; % {condinfo_fname}
 
     % Specify additional regressors
-    spmsess.regress = generate_regress_v2(rinfo, curr_model, sess);
+    spmsess.regress = fmri_generate_regress(rinfo, curr_model, sess);
     spmsess.multi_reg = {''};
     spmsess.hpf = curr_model.hpf;  % inf=no high-pass filtering
 
@@ -443,7 +464,7 @@ if USE_SPM
     if irun == 1        
       % Calculate end of run time for this run
       end_of_run_time = actual_nvol*protocol.epi.tr;
-      
+
       % remove condition onsets that occur after end_of_run_time
       for icond = 1:length(spmsess.cond)
         run_mask = spmsess.cond(icond).onset < end_of_run_time;
