@@ -53,10 +53,20 @@ maxn = max(cellfun(@length,indata.data));
 % fill out short columns
 for id = 1:length(indata.data)
   while length(indata.data{id}) < maxn
-    if ischar(indata.data{id})
-      indata.data{id}{end+1} = '';
+    if iscell(indata.data{id})
+      if isempty(indata.data{id})
+        indata.data{id} = cell(maxn,1);
+      else
+        indata.data{id} = [indata.data{id}; ...
+            cell(maxn-length(indata.data{id}),1)];
+      end
     else
-      indata.data{id}{end+1} = [];
+      if isempty(indata.data{id})
+        indata.data{id} = nan(maxn,1);
+      else
+        indata.data{id} = [indata.data{id}; ...
+            nan(maxn-length(indata.data{id}),1)];
+      end
     end
   end
 end

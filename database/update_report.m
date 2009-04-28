@@ -7,7 +7,7 @@ end
 
 r.msglog = [r.msglog;{report_str}];
 
-if r.report_on_fly
+if isfield(r,'report_on_fly') && ~isempty(r.report_on_fly)
   fprintf('%s',report_str)
 end
 
