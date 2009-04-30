@@ -351,10 +351,15 @@ for isub=1:nsub_proc
           outfstub = fullfile(anat_outdir, sprintf('%s_%s', subid, coplanar_type));
 
           link_file = sprintf('%s.img', outfstub);
-          if CLOBBER
-            fprintf('Removing existing link ...\n');
-            unix_str = sprintf('rm %s', link_file);
-            unix(unix_str);
+          if exist(link_file,'file')
+            if CLOBBER
+              fprintf('Removing existing link ...\n');
+              unix_str = sprintf('rm %s', link_file);
+              unix(unix_str);
+            else
+              warning('link file %s exists, not clobbering',link_file);
+              continue
+            end
           end
 
           unix_str = sprintf('ln -s %s.img %s', infstub, link_file);

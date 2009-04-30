@@ -94,6 +94,8 @@ ri.meta.stime = stime;
 % get TR
 if isfield(params,'TR')
   TR = params.TR;
+else
+  error('no TR found in the params struct\n');
 end
 
 % find channels, get data
