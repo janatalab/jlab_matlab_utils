@@ -56,6 +56,8 @@ function outdata = ensemble_fmri_physio_summ(indata,defs)
 %           perform on peak height values before returning them.
 %   	.height_thresh (default 0.02) - peak heights below this value will
 %           be rejected
+%       .zscore (default '') - if set to 1, each scr epoch will be zscored
+%           within-epoch, before being analyzed
 %   defs.physio_summ.pulse - settings for pulse ox. data summary
 %   	.find_peaks.thresh (default 0.5) - proportion of total signal
 %           range below which peaks will not be considered. for example,
@@ -205,9 +207,9 @@ try lead = ps.lead; catch lead = 2; end % in seconds
 try use_filtered = ps.use_filtered; catch use_filtered = 0; end
 try ep_per_fig = ps.ep_per_fig; catch ep_per_fig = 3; end
 try pargs = ps.pargs; catch pargs = {'-dpsc','-append'}; end
-try epoch_filter = ps.epoch_filter; catch epoch_filter = ''; end
 
 % get scr analysis parameters
+try scr.zscore = ps.scr.zscore; catch scr.zscore = ''; end
 try scr.int_begin = ps.scr.int_begin; catch scr.int_begin = 2; end % in sec
 try scr.int_end = ps.scr.int_end; catch scr.int_end = 6; end % in seconds
 try scr.proxlim = ps.scr.proxlim; catch scr.proxlim = 0.6; end % in seconds
@@ -551,7 +553,7 @@ for isub=1:nsub_proc
               % extract all epochs for this channel
               epochs = squeeze(EEG.data(cidx,:,:));
               
-              if ~isempty(epoch_filter)
+              if ~isempty(scr.zscore)
                 epochs = (epochs-mean(epochs(:)))/std(epochs(:));
               end
 
@@ -723,7 +725,7 @@ for isub=1:nsub_proc
                   title(sprintf(['%s, sess %d, run %d, signal %s, epoch'...
                       ' %d'],subid,isess,rnum,c,iep));
                   hold on;
-                  for ipk = 1:npeaks(iep)
+                  for ipk = 1:length(pidxs)
                     plot(pidxs(ipk),pksig(pidxs(ipk)),'g*');
                   end
                   hold off;
@@ -770,7 +772,7 @@ for isub=1:nsub_proc
               case {'gsr','scr'}
                 oidx = gsr_idx;
                 ridx = gsr_cols.(rname);
-              case {'cardiac'}
+              case {'cardiac','pulse'}
                 oidx = card_idx;
                 ridx = card_cols.(rname);
               otherwise
@@ -814,7 +816,7 @@ for isub=1:nsub_proc
         switch c
           case {'gsr','scr'}
             oidx = gsr_idx;
-          case {'cardiac'}
+          case {'cardiac','pulse'}
             oidx = card_idx;
           otherwise
             warning('unknown channel type (%s)\n',c);
@@ -846,7 +848,7 @@ for isub=1:nsub_proc
               eidx = gsre_idx;
               ridx = gsr_cols.(rname);
               sidx = gsre_cols.signal;
-            case {'cardiac'}
+            case {'cardiac','pulse'}
               oidx = card_idx;
               eidx = carde_idx;
               ridx = card_cols.(rname);
@@ -874,8 +876,8 @@ for isub=1:nsub_proc
               li=lidxs(i);
               sig=outdata.data{eidx}.data{sidx}{li};              
               if isempty(sig), continue, end
-              if ~isempty(strmatch(c,'cardiac'))
-                pidxs=find_peaks(sig,pk);
+              if ~isempty(strmatch(c,{'cardiac','pulse'}))
+                pidxs=find_peaks(sig,pulse.pk);
                 if isempty(pidxs), continue, end
                 sig=diff(pidxs);
               end
