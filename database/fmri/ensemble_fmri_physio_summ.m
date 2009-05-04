@@ -2,10 +2,58 @@ function outdata = ensemble_fmri_physio_summ(indata,defs)
 
 % calculates summary statistics for physio data collected during fMRI
 % 
+% This function calculates a variety of summary statistics for epochs of
+% physiological data signals, matches those statistics with responses from
+% presentation logfiles (optional), saves these data to disk (optional) in
+% a form amenable to import into SAS (optional), and also saves waveform
+% graphics that may be used in assessing the validity of the summary
+% statistics that have been calculated, as well as the processing steps
+% taken during those calculations.
+% 
+% NOTE: this script assumes that pre-processed physio data have been saved
+% into eeglab data structures
+% 
+% REQUIRES
+% 
+%   indata - cell array of ensemble data structs
+%       'sinfo' - data struct, containing sinfo data for all (but only)
+%           those subjects that you wish to analyze
+%       'paths' - ensemble data struct, output of ensemble_fmri_init,
+%           containing 'physio_outdir', which is used as the output
+%           location of all figures that are constructed
+%       'physio_paths' - output of ensemble_fmri_physio, ensemble data
+%           struct containing one row per subject/session/run, with paths
+%           to pre-processed physio data files for each run
+%       'pres_paths' - output of ensemble_fmri_parse_present, an ensemble
+%           data struct containing one row per subject/session/run, with
+%           paths to pre-processed presentation response and event data
+% 
 % LOADING PHYSIO DATA FILES
+%   
+%   physio files are loaded on a per-subject, per-session, per-run basis,
+%   from locations identified in 'physio_paths', for those subjects that
+%   exist in 'sinfo'. By default, ensemble_fmri_physio (which generates
+%   physio_paths) generates a non-filtered raw data file for each
+%   subject/session/run, and saves these to physio_paths, but given
+%   filtering criteria, also saves a filtered data file to disk in the same
+%   location as the raw data file, and saves the path to the filtered data
+%   file into physio paths, with '_filtered' appended to the end of the
+%   filename, before the extension. If the following parameter is set to 1,
+%   ensemble_fmri_physio_summ will search for and attempt to load the
+%   filtered data file as opposed to the raw data file. If set to 0, it
+%   will attempt to load the raw, unfiltered data file.
+% 
 %   defs.physio_summ.use_filtered (default 1)
 % 
 % EPOCHING
+% 
+%   ensemble_fmri_physio_summ is intended to calculate summary statistics
+%   on epochs of physiological data signals. These epochs may, or may not,
+%   have responses or experimental classes associated with them. Epochs can
+%   currently be defined in terms of events from a presentation log file,
+%   or vectors of epoch onsets and offsets in seconds (calculated from the
+%   beginning of the provided preprocessed physiological signal)
+% 
 %   defs.physio_summ.epoch_start (default 0) - if a struct, with sub-field
 %       'filter', this is treated as a filter criteria for the included
 %       presentation data, to filter for events to be treated as epoch
@@ -27,11 +75,62 @@ function outdata = ensemble_fmri_physio_summ(indata,defs)
 %       will be used for all epochs.
 %   defs.physio_summ.lead (default 2) - pre-epoch baseline to be added to
 %       epoch when calculating and extracting epochs. this value is assumed
-%       to be in 'seconds'
-%   measures
-%   exporting
+%       to be in 'seconds'.
+% 
+%       FIXME: In the case that there is not sufficient room
+%       for the given baseline period between the first epoch onset and the
+%       very beginning of the signal acquisition (for instance, first epoch
+%       onset is at 1s, but the baseline period is 2s), the first epoch
+%       will be not be returned by eeglab. This is because eeglab
+%       requires an equal number of datapoints for all epochs extracted
+%       from a given signal, and this case creates an out-of-bounds epoch
+%       definition that is dropped by eeglab.
+% 
+%       FIXME: pad the signal with 0s to provide enough data points to
+%       allow for a baseline for the first epoch, and then adjust timings
+%       of all other events? this would necessarily require special
+%       calculation of the baseline of the first epoch, limited to
+%       real-data only, when subtracting the baseline from the signal of
+%       interest, so as not to bias the baseline with artifically added 0s.
 % 
 % SUMMARY DATA CALCULATION
+% 
+%   The current analyses calculate summary statistics for both pulse and
+%   skin conductance data. For pulse, mean heart rate within an epoch, as
+%   well as heart rate variance, is calculated. For scr, a number of
+%   statistics are calculated to investigate both individual transient skin
+%   conductance responses (SCRs), and change in overall skin conductance
+%   level (SCL).
+% 
+%   For SCRs, individual responses are defined as the highest peak within a
+%   range of +/- 'proxlim' seconds (default 0.6) within an epoch, whose
+%   height is greater than height_thresh (default 0.02). A standard minimum
+%   SCR height, as defined by Dawson et al 2000, is 0.02 microsiemens,
+%   therefore if the incoming signal is defined in microsiemens (as is
+%   biopac data when both high pass filters on the GSR100 are set to DC),
+%   the default height_thresh should be used. Total number of SCRs within
+%   an epoch (npeaks), mean peak height, peak height variance, first peak
+%   height, and first peak time are calculated. If preprocessed data are
+%   provided in microsiemens, then heights and variance will be returned in
+%   microsiemens.
+% 
+%   For SCLs, epoched skin conductance data are standardized
+%   within-subject, across epochs, to control for individual differences in
+%   SCL variability and range (Dawson et al 2000, p209; also Ben-Shakhar
+%   1985). Specific integral and mean SCL over the expected period of a
+%   specific SCR (spc_integral.being, spc_integral.end, default 2s to 6s)
+%   are calculated, as well as integral and mean SCL over the entire epoch
+%   (not including the baseline period).
+% 
+%   NOTE: if entering these data into mixed effects multi-level regression
+%   models, certain effects such as different rates of habituation between
+%   individuals will be somewhat controlled for by pooling variance within
+%   subjects, but if not, additional measures should be considered if you
+%   want to control for individual differences in (at least) rate of
+%   habituation when using repeated stimuli or chronic stimuli. Different
+%   rates of habituation may effect mean peak height and peak height
+%   variance, and may also have some effect on integral.
+% 
 %   defs.physio_summ.channels - channel names, as they appear in your
 %       eeglab chanlocs labels, that you wish to calculate summary
 %       information for.
@@ -47,7 +146,9 @@ function outdata = ensemble_fmri_physio_summ(indata,defs)
 %   	.find_peaks.thresh (default 0) - proportion of total signal
 %           range below which peaks will not be considered. for example,
 %           for .thresh = 0.5, peaks will only be returned if their height 
-%           is more than half of the total signal range
+%           is more than half of the total signal range. This is passed on
+%           to find_peaks, but is always set to 0, since we want to be able
+%           to find peaks across the entire range of signal.
 %   	.peak_heights.calcFrom (default 'left') - parameter passed to
 %           'peak_heights', indicating from which side of a peak to find the
 %           trough used to calculate peak height
@@ -56,8 +157,6 @@ function outdata = ensemble_fmri_physio_summ(indata,defs)
 %           perform on peak height values before returning them.
 %   	.height_thresh (default 0.02) - peak heights below this value will
 %           be rejected
-%       .zscore (default '') - if set to 1, each scr epoch will be zscored
-%           within-epoch, before being analyzed
 %   defs.physio_summ.pulse - settings for pulse ox. data summary
 %   	.find_peaks.thresh (default 0.5) - proportion of total signal
 %           range below which peaks will not be considered. for example,
@@ -65,10 +164,19 @@ function outdata = ensemble_fmri_physio_summ(indata,defs)
 %           is more than half of the total signal range
 % 
 % RESPONSE MATCHING FOR EPOCHS
-%   presentation data must be included, in the form of a pres_paths data
-%       struct (created by presentation_parse) containing paths to
-%       presentation data that has been parsed and saved to disk for the
-%       given participant/session.
+% 
+%   if there are responses expected and present within a presentation
+%   logfile that can be matched in a 1 to 1 relationship with epochs that
+%   are extracted or defined, these responses can be included in any data
+%   files that are exported, matched to each epoch and the summary
+%   statistics calculated for each epoch. Also, overlays of all epochs
+%   corresponding to each unique response within a response set, and
+%   average waveform for each level of each response, can be calculated and
+%   output. presentation data must be included, in the form of a pres_paths
+%   data struct (created by presentation_parse) containing paths to
+%   presentation data that has been parsed and saved to disk for the given
+%   participant/session.
+% 
 %   defs.physio_summ.responses (default 0) - struct array, each struct
 %       identifying filtering criteria to be applied to the given
 %       presentation data, to extract events containing response data that
@@ -97,9 +205,12 @@ function outdata = ensemble_fmri_physio_summ(indata,defs)
 % data. Then, sub-fields of those fields should be params that get sent to
 % those functions as the second argument, the first argument being the
 % data output of the previous function (in may or all cases, an eeglab
-% struct?
+% struct? ... OR a cell array of structs containing a series of processing
+% jobs, params for those jobs, function handles/references, etc ...?
 % 
 % FB 2009.04.21
+% FB 2009.05.04 - adding documentation, now zscores signal for SCL
+% calculation but leaves signal for SCR calculation in raw form.
 
 outdata = ensemble_init_data_struct();
 
@@ -266,10 +377,9 @@ if ~isempty(strmatch('gsr',channels)) || ~isempty(strmatch('scr',channels))
     outdata.data{gsr_idx} = ensemble_init_data_struct();
     outdata.data{gsr_idx}.type = 'gsr_summ';
     outdata.data{gsr_idx}.vars = {'subject_id','session','ensemble_id',...
-        'run','trial','integral','mean_activation','ttl_integral',...
-        'ttl_mean_activation','npeaks','mean_peak_height',...
-        'peak_height_variance','first_peak_time','first_peak_height',...
-        resp_names{:}};
+        'run','trial','integral','scl','ttl_integral','ttl_scl',...
+        'npeaks','mean_peak_height','peak_height_variance',...
+        'first_peak_time','first_peak_height',resp_names{:}};
     gsr_cols = set_var_col_const(outdata.data{gsr_idx}.vars);
     outdata.data{gsr_idx}.data{gsr_cols.subject_id} = {};
     outdata.data{gsr_idx}.data{gsr_cols.session} = [];
@@ -277,9 +387,9 @@ if ~isempty(strmatch('gsr',channels)) || ~isempty(strmatch('scr',channels))
     outdata.data{gsr_idx}.data{gsr_cols.run} = [];
     outdata.data{gsr_idx}.data{gsr_cols.trial} = [];
     outdata.data{gsr_idx}.data{gsr_cols.integral} = [];
-    outdata.data{gsr_idx}.data{gsr_cols.mean_activation} = [];
+    outdata.data{gsr_idx}.data{gsr_cols.scl} = [];
     outdata.data{gsr_idx}.data{gsr_cols.ttl_integral} = [];
-    outdata.data{gsr_idx}.data{gsr_cols.ttl_mean_activation} = [];
+    outdata.data{gsr_idx}.data{gsr_cols.ttl_scl} = [];
     outdata.data{gsr_idx}.data{gsr_cols.npeaks} = [];
     outdata.data{gsr_idx}.data{gsr_cols.mean_peak_height} = [];
     outdata.data{gsr_idx}.data{gsr_cols.peak_height_variance} = [];
@@ -525,7 +635,7 @@ for isub=1:nsub_proc
         % fill out an ns-length cell and array for session/run info
         lsubids = cell(ns,1);
         for iep=1:ns, lsubids{iep} = subid; end
-        lsessid = repmat(isess,ns,1);
+        lsess = repmat(isess,ns,1);
         lrun = repmat(rnum,ns,1);
         lesess = repmat(sess.ensemble_id,ns,1);
         
@@ -552,35 +662,35 @@ for isub=1:nsub_proc
               
               % extract all epochs for this channel
               epochs = squeeze(EEG.data(cidx,:,:));
-              
-              if ~isempty(scr.zscore)
-                epochs = (epochs-mean(epochs(:)))/std(epochs(:));
-              end
+              zepoch = (epochs-mean(epochs(:)))/std(epochs(:));
 
               % subtract baseline for each epoch
               for iep=1:ns
                 mbase = mean(epochs(1:(lead*EEG.srate),iep));
                 epochs(:,iep) = epochs(:,iep) - mbase;
+
+                zbase = mean(zepoch(1:(lead*EEG.srate),iep));
+                zepoch(:,iep) = zepoch(:,iep) - zbase;
               end
           
               % calculate integral within integral window defined by
-              % int_begin and int_end
+              % int_begin and int_end, USING ZEPOCH
               startint = lead_end + scr.int_begin*EEG.srate + 1;
               endint   = lead_end + scr.int_end*EEG.srate + 1;
-              integral = trapz(squeeze(epochs(startint:endint,:)));
+              integral = trapz(squeeze(zepoch(startint:endint,:)));
               integral = integral(:);
               
-              % calculate mean activation across integral window
-              mact = mean(squeeze(epochs(startint:endint,:)));
-              mact = mact(:);
+              % calculate mean scl across integral window, USING ZEPOCH
+              mscl = mean(squeeze(zepoch(startint:endint,:)));
+              mscl = mact(:);
               
-              % calculate integral across entire waveform
-              ttl_int = trapz(squeeze(epochs(lead_end+1:end,:)));
+              % calculate integral across entire waveform, USING ZEPOCH
+              ttl_int = trapz(squeeze(zepoch(lead_end+1:end,:)));
               ttl_int = ttl_int(:);
               
-              % calculate mean activation across entire waveform
-              ttlmact = mean(squeeze(epochs(lead_end+1:end,:)));
-              ttlmact = ttlmact(:);
+              % calculate mean scl across entire waveform, USING ZEPOCH
+              ttlmscl = mean(squeeze(zepoch(lead_end+1:end,:)));
+              ttlmscl = ttlmscl(:);
               
               % init peak stats vectors
               npeaks = zeros(ns,1); % total number of peaks
@@ -684,12 +794,11 @@ for isub=1:nsub_proc
               % save to outdata
               outdata.data{gsr_idx} = ensemble_add_data_struct_row(...
                   outdata.data{gsr_idx},'subject_id',lsubids,'session',...
-                  lsessid,'ensemble_id',lesess,'run',lrun,'trial',...
-                  [1:ns]','integral',integral,'mean_activation',...
-                  mact,'ttl_integral',ttl_int,'ttl_mean_activation',...
-                  ttlmact,'npeaks',npeaks,'mean_peak_height',mpkhgt,...
-                  'peak_height_variance',vpkhgt,'first_peak_time',...
-                  fptime,'first_peak_height',fphght);
+                  lsess,'ensemble_id',lesess,'run',lrun,'trial',[1:ns]',...
+                  'integral',integral,'scl',mscl,'ttl_integral',ttl_int,...
+                  'ttl_scl',ttlmscl,'npeaks',npeaks,'mean_peak_height',...
+                  mpkhgt,'peak_height_variance',vpkhgt,...
+                  'first_peak_time',fptime,'first_peak_height',fphght);
 
             case {'cardiac','pulse'}
                 
@@ -745,7 +854,7 @@ for isub=1:nsub_proc
               % save to outdata
               outdata.data{card_idx} = ensemble_add_data_struct_row(...
                   outdata.data{card_idx},'subject_id',lsubids,'session',...
-                  lsessid,'ensemble_id',lesess,'run',lrun,'trial',...
+                  lsess,'ensemble_id',lesess,'run',lrun,'trial',...
                   [1:ns]','heart_rate',hr_bpm,'hr_variance',hr_var);
               
             otherwise
