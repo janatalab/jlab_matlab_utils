@@ -18,11 +18,16 @@ function an_st = ensemble_extract_nd_matrix(data_st,params)
 % Optionally, one can specify:
 % .post_process_func - a cell-array of strings that specifies further
 % transformations on the matrix before the data are returned.
-%
+% .mean_multiple_values - if this is set to 1, and a cell is found to have
+% multiple values, the mean of those values will be calculated for that
+% cell. The default behavior in this case is to convert the entire data
+% matrix into a multi-dimensional cell array.
+% 
 % NOTE: Currently does not support dynamic handling of response type (radio,
 % checkbox, written).  Only handles radio button enums.
 
 % 12/10/08 Petr Janata
+% 05/06/09 FB - added params.mean_multiple_values
 
 an_st = ensemble_init_data_struct;
 
@@ -118,7 +123,7 @@ curr_mask = ones(size(indata));
 % this has to be recursive to handle an arbitrary number of dimensions.
 % 
 data_matrix = burrow(curr_mask, dimension_vals, curr_dim, dim_names, dim_idxs, ...
-    indata, data_matrix, data_st);
+    indata, data_matrix, data_st, params);
 
 %
 % See if we want to do any post-processing
@@ -147,10 +152,11 @@ an_st.data{ancols.dim_values} = dimension_vals;
 end % function ensemble_extract_nd_matrix
 
 function outdata = burrow(curr_mask, dimension_vals, curr_dim, dim_names, ...
-      dim_idxs, indata, outdata, data_st)
+      dim_idxs, indata, outdata, data_st, params)
 
   datacols = set_var_col_const(data_st.vars);
   curr_data = data_st.data{datacols.(dim_names{curr_dim})};
+  try mmv = params.mean_multiple_values; catch mmv = 0; end
 
   % Get the number of values we have to traverse for the current dimension
   ndim_idxs = length(dimension_vals{curr_dim});
@@ -165,7 +171,7 @@ function outdata = burrow(curr_mask, dimension_vals, curr_dim, dim_names, ...
     % down
     if curr_dim+1 <= length(dim_idxs)
       outdata = burrow(curr_mask, dimension_vals, curr_dim+1, dim_names, ...
-	  dim_idxs, indata, outdata, data_st);
+	  dim_idxs, indata, outdata, data_st, params);
     else
       % grab the data
       
@@ -175,16 +181,21 @@ function outdata = burrow(curr_mask, dimension_vals, curr_dim, dim_names, ...
       % value, otherwise convert to a cell array
       num_values = sum(composite_mask);
       if isnumeric(outdata) && num_values > 1
-	fprintf('%s: Have to convert numeric array to cell array because more than one value was found\n', mfilename)
-	outdata = num2cell(outdata);
+        if ~mmv
+  	fprintf('%s: Have to convert numeric array to cell array because more than one value was found\n', mfilename)
+    outdata = num2cell(outdata);
+        end
       end
-      
-      % Copy the data
+            % Copy the data
       if num_values > 0
 	if ~isnumeric(outdata)
 	  outdata{curr_outdata_idx} = indata(composite_mask);
-	else
-	  outdata(curr_outdata_idx) = indata(composite_mask);
+    else
+      if length(indata(composite_mask)) > 1 && mmv
+    outdata(curr_outdata_idx) = nanmean(indata(composite_mask));
+      else
+	outdata(curr_outdata_idx) = indata(composite_mask);
+      end
 	end
       end
     end
