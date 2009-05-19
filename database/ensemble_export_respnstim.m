@@ -269,7 +269,9 @@ if isfield(params.export,'by_subject')
             for isub = 1:nsub
                 sidx = find(ismember(lsData.data{lsCols.subject_id},subs{isub}));
                 if length(sidx) > 1
-                    sidx = sidx(1);
+                  sidx = sidx(1);
+                elseif isempty(sidx)
+                  continue
                 end
                 for ivar = 1:nvars
                     vi = vidxs(ivar);
@@ -734,7 +736,9 @@ if fid ~= 1
     if isfield(params.export,'delimiter')
         dlm = params.export.delimiter;
     else
-        dlm = '';
+        % \t is the default delimiter
+        dlm = '\t';
+        params.export.delimiter = '\t';
     end
     for irow = 1:outRow
         row = '';
@@ -779,12 +783,7 @@ if fid ~= 1
             if ~length(row)
                 row = item;
             else
-                % \t is the default delimiter
-                if dlm
-                    row = sprintf('%s%s%s',row,dlm,item);
-                else
-                    row = sprintf('%s\t%s',row,item);
-                end
+                row = sprintf('%s%s%s',row,dlm,item);
             end
         end
         fprintf(fid,'%s\n',row);

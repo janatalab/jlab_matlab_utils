@@ -1,6 +1,16 @@
 function result = ensemble_load_expinfo(indata,params) 
 % returns the response table and metadata associated with an experiment
 %
+%   result = ensemble_load_expinfo(indata,params)
+% 
+% REQUIRES
+%   params.ensemble.conn_id
+%   params.ensemble.experiment_title
+%   params.ensemble.remove_incomplete_sessions
+%   params.ensemble.terminal_form
+%   params.extract_vars
+%   params.filt
+% 
 % the 'indata' variable is not used yet, but is simply there as a
 % placeholder. It may be used in future versions of this function
 %
@@ -21,6 +31,7 @@ function result = ensemble_load_expinfo(indata,params)
 %
 % 08/06/08 JG - Added getDefaultParams feature
 %
+% 2009.05.18 FB - added some additional header documentation
 
 if( isstr( indata ) && strcmp( indata, 'getDefaultParams' ) )
 	result.ensemble.experiment_title = 'use local settings';
