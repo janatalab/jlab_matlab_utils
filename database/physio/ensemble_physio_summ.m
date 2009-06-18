@@ -856,7 +856,9 @@ for isub=1:nsub_proc
                 hr_var(iep) = var(dtimes);
                 
                 % slope of change in heart rate
-                hr_slope(iep) = regress(dtimes',[1:length(dtimes)]');
+                zlength = zscore(1:length(dtimes))';
+                ztimes = zscore(dtimes);
+                hr_slope(iep) = regress(ztimes,zlength);
 
                 % save signal out to cardiac_epochs
                 outdata.data{carde_idx} = ensemble_add_data_struct_row(...
@@ -881,7 +883,7 @@ for isub=1:nsub_proc
                   
                   subplot(ep_per_fig*2,1,m+ep_per_fig+1);
                   plot(dtimes);
-                  title(sprintf('change in heart rate, %d slope',...
+                  title(sprintf('change in heart rate, %0.4f slope',...
                       hr_slope(iep)));
                   
                   if SAVE_EPOCHS && (m+1) == ep_per_fig

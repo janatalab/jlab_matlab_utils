@@ -166,7 +166,7 @@ for isub=1:nsub_proc
     behav_outdir = spaths.data{pcol.path}{outdx};
     
     andx = strmatch('anal_outdir',spaths.data{pcol.path_type});
-    if isempty(anxd)
+    if isempty(andx)
       anal_outdir = behav_outdir;
     else
       anal_outdir = spaths.data{pcol.path}{andx};

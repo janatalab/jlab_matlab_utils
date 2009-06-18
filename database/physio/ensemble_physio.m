@@ -192,8 +192,10 @@ for isub=1:nsub_proc
     outdx = strmatch('physio_outdir',spaths.data{pcol.path_type});
     physio_outdir = spaths.data{pcol.path}{outdx};
     
-    if isfield(physio,'link2pres')
-      behdx = strmatch('behav_outdir',spaths.data{pcol.path_type});
+    behdx = strmatch('behav_outdir',spaths.data{pcol.path_type});
+    if isempty(behdx)
+      behav_outdir = physio_outdir;
+    else
       behav_outdir = spaths.data{pcol.path}{behdx};
     end
     
