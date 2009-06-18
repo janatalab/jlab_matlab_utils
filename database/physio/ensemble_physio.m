@@ -1,4 +1,4 @@
-function outdata = ensemble_fmri_physio(indata,defs)
+function outdata = ensemble_physio(indata,defs)
 
 % processes physiological data, stores .mat file on disk, 1 per run
 % 
@@ -26,6 +26,8 @@ function outdata = ensemble_fmri_physio(indata,defs)
 %   defs.physio.LINK2FMRI
 % 
 % 2008/10/06 FB - started coding
+% 2009/06/18 FB - moved from ensemble_fmri_physio to ensemble_physio, added
+%   LINK2FMRI flag, to allow for generalization outside of fmri analyses
 
 outdata = ensemble_init_data_struct();
 
@@ -33,7 +35,7 @@ global r
 
 r = init_results_struct;
 
-r.type = 'fmri_physio';  % Identify the type of this reporting instance
+r.type = 'physio';  % Identify the type of this reporting instance
 r.report_on_fly = 1;
 
 %%%% FIXME: allow for a param?

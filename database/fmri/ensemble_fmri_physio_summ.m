@@ -1,17 +1,18 @@
-function outdata = ensemble_fmri_physio_summ(indata,defs)
+function outdata = ensemble_physio_summ(indata,defs)
 
-% calculates summary statistics for physio data collected during fMRI
+% calculates summary statistics for physio data
 % 
 % This function calculates a variety of summary statistics for epochs of
 % physiological data signals, matches those statistics with responses from
-% presentation logfiles (optional), saves these data to disk (optional) in
-% a form amenable to import into SAS (optional), and also saves waveform
-% graphics that may be used in assessing the validity of the summary
-% statistics that have been calculated, as well as the processing steps
-% taken during those calculations.
+% presentation logfiles (optional), saves these data to disk (signals and
+% peaks) in a form amenable to import into SAS (optional), and also saves
+% waveform graphics that may be used in assessing the validity of the
+% summary statistics that have been calculated, as well as the processing
+% steps taken during those calculations.
 % 
 % NOTE: this script assumes that pre-processed physio data have been saved
-% into eeglab data structures
+% into eeglab data structures, and that presentation log files are
+% available to guide signal epoching
 % 
 % REQUIRES
 % 
@@ -21,10 +22,10 @@ function outdata = ensemble_fmri_physio_summ(indata,defs)
 %       'paths' - ensemble data struct, output of ensemble_fmri_init,
 %           containing 'physio_outdir', which is used as the output
 %           location of all figures that are constructed
-%       'physio_paths' - output of ensemble_fmri_physio, ensemble data
+%       'physio_paths' - output of ensemble_physio, ensemble data
 %           struct containing one row per subject/session/run, with paths
 %           to pre-processed physio data files for each run
-%       'pres_paths' - output of ensemble_fmri_parse_present, an ensemble
+%       'pres_paths' - output of ensemble_parse_present, an ensemble
 %           data struct containing one row per subject/session/run, with
 %           paths to pre-processed presentation response and event data
 % 
@@ -32,14 +33,14 @@ function outdata = ensemble_fmri_physio_summ(indata,defs)
 %   
 %   physio files are loaded on a per-subject, per-session, per-run basis,
 %   from locations identified in 'physio_paths', for those subjects that
-%   exist in 'sinfo'. By default, ensemble_fmri_physio (which generates
+%   exist in 'sinfo'. By default, ensemble_physio (which generates
 %   physio_paths) generates a non-filtered raw data file for each
 %   subject/session/run, and saves these to physio_paths, but given
 %   filtering criteria, also saves a filtered data file to disk in the same
 %   location as the raw data file, and saves the path to the filtered data
 %   file into physio paths, with '_filtered' appended to the end of the
 %   filename, before the extension. If the following parameter is set to 1,
-%   ensemble_fmri_physio_summ will search for and attempt to load the
+%   ensemble_physio_summ will search for and attempt to load the
 %   filtered data file as opposed to the raw data file. If set to 0, it
 %   will attempt to load the raw, unfiltered data file.
 % 
@@ -47,7 +48,7 @@ function outdata = ensemble_fmri_physio_summ(indata,defs)
 % 
 % EPOCHING
 % 
-%   ensemble_fmri_physio_summ is intended to calculate summary statistics
+%   ensemble_physio_summ is intended to calculate summary statistics
 %   on epochs of physiological data signals. These epochs may, or may not,
 %   have responses or experimental classes associated with them. Epochs can
 %   currently be defined in terms of events from a presentation log file,
@@ -73,7 +74,7 @@ function outdata = ensemble_fmri_physio_summ(indata,defs)
 %       filter. If a filter criterion is used and the field 'minimum_end'
 %       exists and is set to = 1, the minimum epoch time (offset-onset)
 %       will be used for all epochs.
-%   defs.physio_summ.lead (default 2) - pre-epoch baseline to be added to
+%   defs.physio_summ.baseline (default 2) - pre-epoch baseline to be added to
 %       epoch when calculating and extracting epochs. this value is assumed
 %       to be in 'seconds'.
 % 
@@ -219,6 +220,9 @@ function outdata = ensemble_fmri_physio_summ(indata,defs)
 % FB 2009.04.21
 % FB 2009.05.04 - adding documentation, now zscores signal for SCL
 % calculation but leaves signal for SCR calculation in raw form.
+% FB 2009.06.18 - changed "params.lead" to "params.baseline", and checked
+% the script for hard-coded reliance on anything fmri-related, with aims to
+% generalize from ensemble_fmri_physio_summ to ensemble_physio_summ
 
 outdata = ensemble_init_data_struct();
 
@@ -226,7 +230,7 @@ global r
 
 r = init_results_struct;
 
-r.type = 'fmri_physio_summ';  % Identify the type of this reporting instance
+r.type = 'physio_summ';  % Identify the type of this reporting instance
 r.report_on_fly = 1;
 
 % % load colormap
@@ -322,7 +326,7 @@ try sas = ps.sas; catch sas.libsave = 0; end
 try epoch_start = ps.epoch_start; catch epoch_start = ''; end
 try epoch_end = ps.epoch_end; catch epoch_end = ''; end
 try responses = ps.responses; catch responses = 0; end
-try lead = ps.lead; catch lead = 2; end % in seconds
+try baseline = ps.baseline; catch baseline = 2; end % in seconds
 try use_filtered = ps.use_filtered; catch use_filtered = 0; end
 try ep_per_fig = ps.ep_per_fig; catch ep_per_fig = 3; end
 try pargs = ps.pargs; catch pargs = {'-dpsc','-append'}; end
@@ -655,7 +659,7 @@ for isub=1:nsub_proc
             estimes],'fields',{'type','latency'},'timeunit',1);
 
         % epoch the data based upon event onsets and the largest event duration 
-        EEG = pop_epoch(EEG,[],[-lead etime],'eventindices',1:ns);
+        EEG = pop_epoch(EEG,[],[-baseline etime],'eventindices',1:ns);
 
         if EEG.trials ~= ns
           error('one or more epochs was lost, sub %s, sess %d, run %d\n',...
@@ -677,7 +681,7 @@ for isub=1:nsub_proc
         for ic=1:nchan
           c = channels{ic};
 
-          lead_end = (lead*EEG.srate)+1;
+          baseline_end = (baseline*EEG.srate)+1; % next sample after end of baseline
 
           % extract channel location
           cidx = strmatch(c,{EEG.chanlocs.labels});
@@ -696,17 +700,17 @@ for isub=1:nsub_proc
 
               % subtract baseline for each epoch
               for iep=1:ns
-                mbase = mean(epochs(1:(lead*EEG.srate),iep));
+                mbase = mean(epochs(1:(baseline*EEG.srate),iep));
                 epochs(:,iep) = epochs(:,iep) - mbase;
 
-                zbase = mean(zepoch(1:(lead*EEG.srate),iep));
+                zbase = mean(zepoch(1:(baseline*EEG.srate),iep));
                 zepoch(:,iep) = zepoch(:,iep) - zbase;
               end
           
               % calculate integral within integral window defined by
               % int_begin and int_end, USING ZEPOCH
-              startint = lead_end + scr.int_begin*EEG.srate + 1;
-              endint   = lead_end + scr.int_end*EEG.srate + 1;
+              startint = baseline_end + scr.int_begin*EEG.srate + 1;
+              endint   = baseline_end + scr.int_end*EEG.srate + 1;
               integral = trapz(squeeze(zepoch(startint:endint,:)));
               integral = integral(:);
               
@@ -715,11 +719,11 @@ for isub=1:nsub_proc
               mscl = mscl(:);
               
               % calculate integral across entire waveform, USING ZEPOCH
-              ttl_int = trapz(squeeze(zepoch(lead_end+1:end,:)));
+              ttl_int = trapz(squeeze(zepoch(baseline_end+1:end,:)));
               ttl_int = ttl_int(:);
               
               % calculate mean scl across entire waveform, USING ZEPOCH
-              ttlmscl = mean(squeeze(zepoch(lead_end+1:end,:)));
+              ttlmscl = mean(squeeze(zepoch(baseline_end+1:end,:)));
               ttlmscl = ttlmscl(:);
               
               % init peak stats vectors
@@ -748,7 +752,7 @@ for isub=1:nsub_proc
 
                 % remove peaks whose troughs occur before 1 sec after
                 % stimulus onset
-                pidxs(bidxs < (lead+1)*EEG.srate) = [];
+                pidxs(bidxs < (baseline+1)*EEG.srate) = [];
                 
                 % remove peaks within +/- 'proxlim' seconds of each peak
                 pidxs_mod = pidxs;
@@ -840,7 +844,7 @@ for isub=1:nsub_proc
               % iterate over epochs
               for iep=1:ns
                 % find peaks
-                pksig = EEG.data(cidx,lead_end+1:end,iep);
+                pksig = EEG.data(cidx,baseline_end+1:end,iep);
                 pidxs = find_peaks(pksig,pulse.pk);
                 dtimes = diff(pidxs);
                 

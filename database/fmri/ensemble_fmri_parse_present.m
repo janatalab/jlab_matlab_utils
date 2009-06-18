@@ -1,4 +1,4 @@
-function outdata = ensemble_fmri_parse_present(indata,defs)
+function outdata = ensemble_parse_present(indata,defs)
 
 % parses presentation files, saves to appropriate place on disk
 % 
@@ -13,8 +13,10 @@ function outdata = ensemble_fmri_parse_present(indata,defs)
 %       defs.paths.figpath
 %   defs.init.USE_SPM
 %   defs.init.CLOBBER
+%   defs.LINK2FMRI
 % 
 % 2008/08/11 FB - adapted from proc_nostalgia_fmri_fmri
+% 2009/06/18 FB - generalized from fmri analyses to all analyses
 
 outdata = ensemble_init_data_struct();
 
@@ -22,7 +24,7 @@ global r
 
 r = init_results_struct;
 
-r.type = 'fmri_anal';  % Identify the type of this reporting instance
+r.type = 'presentation';  % Identify the type of this reporting instance
 r.report_on_fly = 1;
 
 %%% INITIALIZE VARIABLES
@@ -112,6 +114,7 @@ if WRITE2FILE
 end
 
 ecdparams.outDataName = 'presentation_data';
+try LINK2FMRI = defs.LINK2FMRI; catch LINK2FMRI = 0; end
 
 %
 % START OF THE SUBJECT LOOP
@@ -163,10 +166,22 @@ for isub=1:nsub_proc
     behav_outdir = spaths.data{pcol.path}{outdx};
     
     andx = strmatch('anal_outdir',spaths.data{pcol.path_type});
-    anal_outdir = spaths.data{pcol.path}{andx};
+    if isempty(anxd)
+      anal_outdir = behav_outdir;
+    else
+      anal_outdir = spaths.data{pcol.path}{andx};
+    end
     
     % Determine how many runs we're dealing with
-    runs = sess.use_epi_runs;
+    if LINK2FMRI
+      runs = sess.use_epi_runs;
+    else
+      if isfield(sess,'use_runs')
+        runs = sess.use_runs;
+      else
+        runs = 1:size(pres.logfiles,1);
+      end
+    end
     nruns = length(runs);  
     
     %
