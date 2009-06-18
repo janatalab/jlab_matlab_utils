@@ -208,6 +208,14 @@ function outdata = ensemble_fmri_physio_summ(indata,defs)
 % struct? ... OR a cell array of structs containing a series of processing
 % jobs, params for those jobs, function handles/references, etc ...?
 % 
+% CITATIONS
+%   Dawson ME, Schell AM, & Filion DL (2000). "The Electrodermal System."
+%       In JT Cacioppo, LG Tassinary & GG Berntson (Eds.) "Handbook of
+%       Psychophysiology" (pp 201-223). Cambridge: Cambridge Univ. Press.
+%   Ben-Shakhar  (1985). "Standardization within individuals: Simple method
+%       to neutralize individual differences in skin conductance."
+%       Psychophysiology, 22:292-9.
+% 
 % FB 2009.04.21
 % FB 2009.05.04 - adding documentation, now zscores signal for SCL
 % calculation but leaves signal for SCR calculation in raw form.
@@ -405,7 +413,7 @@ if ~isempty(strmatch('gsr',channels)) || ~isempty(strmatch('scr',channels))
     outdata.data{gsre_idx} = ensemble_init_data_struct();
     outdata.data{gsre_idx}.type = 'gsr_epochs';
     outdata.data{gsre_idx}.vars = {'subject_id','session','ensemble_id',...
-        'run','trial','signal'};
+        'run','trial','signal','srate','peakidxs'};
     gsre_cols = set_var_col_const(outdata.data{gsre_idx}.vars);
     outdata.data{gsre_idx}.data{gsre_cols.subject_id} = {};
     outdata.data{gsre_idx}.data{gsre_cols.session} = [];
@@ -413,6 +421,8 @@ if ~isempty(strmatch('gsr',channels)) || ~isempty(strmatch('scr',channels))
     outdata.data{gsre_idx}.data{gsre_cols.run} = [];
     outdata.data{gsre_idx}.data{gsre_cols.trial} = [];
     outdata.data{gsre_idx}.data{gsre_cols.signal} = {};
+    outdata.data{gsre_idx}.data{gsre_cols.srate} = [];
+    outdata.data{gsre_idx}.data{gsre_cols.peakidxs} = {};
 end
 
 if ~isempty(strmatch('cardiac',channels)) || ...
@@ -423,7 +433,7 @@ if ~isempty(strmatch('cardiac',channels)) || ...
     outdata.data{card_idx} = ensemble_init_data_struct();
     outdata.data{card_idx}.type = 'cardiac_summ';
     outdata.data{card_idx}.vars = {'subject_id','session','ensemble_id',...
-        'run','trial','heart_rate','hr_variance',resp_names{:}};
+        'run','trial','heart_rate','hr_variance','hr_slope',resp_names{:}};
     card_cols = set_var_col_const(outdata.data{card_idx}.vars);
     outdata.data{card_idx}.data{card_cols.subject_id} = {};
     outdata.data{card_idx}.data{card_cols.session} = [];
@@ -432,6 +442,7 @@ if ~isempty(strmatch('cardiac',channels)) || ...
     outdata.data{card_idx}.data{card_cols.trial} = [];
     outdata.data{card_idx}.data{card_cols.heart_rate} = [];
     outdata.data{card_idx}.data{card_cols.hr_variance} = [];
+    outdata.data{card_idx}.data{card_cols.hr_slope} = [];
     for in=1:length(resp_names)
       outdata.data{card_idx}.data{card_cols.(resp_names{in})} = {};
     end
@@ -442,7 +453,7 @@ if ~isempty(strmatch('cardiac',channels)) || ...
     outdata.data{carde_idx} = ensemble_init_data_struct();
     outdata.data{carde_idx}.type = 'cardiac_epochs';
     outdata.data{carde_idx}.vars = {'subject_id','session','ensemble_id',...
-        'run','trial','signal'};
+        'run','trial','signal','srate','peakidxs'};
     carde_cols = set_var_col_const(outdata.data{carde_idx}.vars);
     outdata.data{carde_idx}.data{carde_cols.subject_id} = {};
     outdata.data{carde_idx}.data{carde_cols.session} = [];
@@ -450,6 +461,8 @@ if ~isempty(strmatch('cardiac',channels)) || ...
     outdata.data{carde_idx}.data{carde_cols.run} = [];
     outdata.data{carde_idx}.data{carde_cols.trial} = [];
     outdata.data{carde_idx}.data{carde_cols.signal} = {};
+    outdata.data{carde_idx}.data{carde_cols.srate} = [];
+    outdata.data{carde_idx}.data{carde_cols.peakidxs} = {};
 end
 
 %
@@ -542,6 +555,7 @@ for isub=1:nsub_proc
       % set up epochs using presentation data
       if ~isempty(epoch_start) && ~isempty(epoch_end)
 
+        %%%% find beginnings of epochs
         % FIXME: add ability to handle multiple epoch definitions, for
         % instance a def for rest period and a def for task period
         if isnumeric(epoch_start) && length(epoch_start) > 1
@@ -566,6 +580,7 @@ for isub=1:nsub_proc
           continue
         end
         
+        %%%% find ends of epochs
         if isnumeric(epoch_end) && length(epoch_end) == 1
           % epoch time provided, assumed in seconds
           etime = epoch_end;
@@ -609,6 +624,9 @@ for isub=1:nsub_proc
         if ~exist('etime','var') 
           % make sure to remove epochs that exceed the samples in EEG
           ee_end_idxs = eetimes > EEG.pnts/EEG.srate;
+          if ~isempty(ee_end_idxs)
+            warning('%d epochs out of bounds, removing\n',length(ee_end_idxs));
+          end
           eetimes(ee_end_idxs) = []; % remove exceeding epochs from eetimes
           estimes(ee_end_idxs) = []; % remove exceeding epochs from estimes
           dtimes = eetimes - estimes;
@@ -620,6 +638,18 @@ for isub=1:nsub_proc
           end
         end
 
+        % double check that all epochs end before the end of the data set
+        if any(estimes > EEG.pnts/EEG.srate)
+          ee_end_idxs = (estimes + etime) > EEG.pnts/EEG.srate;
+          if ~isempty(ee_end_idxs)
+            warning('%d epochs out of bounds, removing\n',length(ee_end_idxs));
+          end
+          eetimes(ee_end_idxs) = []; % remove exceeding epochs from eetimes
+          estimes(ee_end_idxs) = []; % remove exceeding epochs from estimes
+        end
+        ns = length(estimes);
+        ne = length(eetimes);
+        
         % import event onsets
         EEG = pop_importevent(EEG,'append','no','event',[ones(ns,1) ...
             estimes],'fields',{'type','latency'},'timeunit',1);
@@ -682,7 +712,7 @@ for isub=1:nsub_proc
               
               % calculate mean scl across integral window, USING ZEPOCH
               mscl = mean(squeeze(zepoch(startint:endint,:)));
-              mscl = mact(:);
+              mscl = mscl(:);
               
               % calculate integral across entire waveform, USING ZEPOCH
               ttl_int = trapz(squeeze(zepoch(lead_end+1:end,:)));
@@ -783,7 +813,8 @@ for isub=1:nsub_proc
                 outdata.data{gsre_idx} = ensemble_add_data_struct_row(...
                   outdata.data{gsre_idx},'subject_id',subid,'session',...
                   isess,'ensemble_id',sess.ensemble_id,'run',rnum,...
-                  'trial',iep,'signal',{pksig});
+                  'trial',iep,'signal',{pksig},'srate',EEG.srate,...
+                  'peakidxs',pidxs);
               end % for iep=1:ns
               
               % save final figure to file if not already saved
@@ -804,6 +835,7 @@ for isub=1:nsub_proc
                 
               hr_bpm = zeros(ns,1); % avg epoch heart rate, beats per min.
               hr_var = zeros(ns,1); % heart rate variance during epoch
+              hr_slope = zeros(ns,1); % slope of heart rate change during epoch
               
               % iterate over epochs
               for iep=1:ns
@@ -818,18 +850,22 @@ for isub=1:nsub_proc
                 % heart rate (in beats per minute) and heart rate variance
                 hr_bpm(iep) = 1/(mean(dtimes)/EEG.srate)*60;
                 hr_var(iep) = var(dtimes);
+                
+                % slope of change in heart rate
+                hr_slope(iep) = regress(dtimes',[1:length(dtimes)]');
 
                 % save signal out to cardiac_epochs
                 outdata.data{carde_idx} = ensemble_add_data_struct_row(...
                   outdata.data{carde_idx},'subject_id',subid,'session',...
                   isess,'ensemble_id',sess.ensemble_id,'run',rnum,...
-                  'trial',iep,'signal',{pksig});
+                  'trial',iep,'signal',{pksig},'srate',EEG.srate,...
+                  'peakidxs',pidxs);
 
                 % graph??
                 if GRAPH_EPOCHS
                   m = mod(iep-1,ep_per_fig);
                   if m == 0, figure(); end
-                  subplot(ep_per_fig,1,m+1);
+                  subplot(ep_per_fig*2,1,m+1);
                   plot(pksig);
                   title(sprintf(['%s, sess %d, run %d, signal %s, epoch'...
                       ' %d'],subid,isess,rnum,c,iep));
@@ -839,12 +875,17 @@ for isub=1:nsub_proc
                   end
                   hold off;
                   
+                  subplot(ep_per_fig*2,1,m+ep_per_fig+1);
+                  plot(dtimes);
+                  title(sprintf('change in heart rate, %d slope',...
+                      hr_slope(iep)));
+                  
                   if SAVE_EPOCHS && (m+1) == ep_per_fig
                     % save graphed epochs to a file
                     print(pargs{:},figfname);
                   end
                 end
-              end
+              end % for iep=1:ns
               
               % save final figure to file if not already saved
               if SAVE_EPOCHS && (m+1) ~= ep_per_fig
@@ -855,7 +896,8 @@ for isub=1:nsub_proc
               outdata.data{card_idx} = ensemble_add_data_struct_row(...
                   outdata.data{card_idx},'subject_id',lsubids,'session',...
                   lsess,'ensemble_id',lesess,'run',lrun,'trial',...
-                  [1:ns]','heart_rate',hr_bpm,'hr_variance',hr_var);
+                  [1:ns]','heart_rate',hr_bpm,'hr_variance',hr_var,...
+                  'hr_slope',hr_slope);
               
             otherwise
               warning('unknown channel %s',c);
@@ -869,11 +911,16 @@ for isub=1:nsub_proc
             respdata = lresp{iresp};
             nrespd = length(respdata);
             % check against length of events (ns)
-            if nrespd ~= ns
+            if nrespd < ns
               warning(['data for response %s of different length (%d) '...
                   'than number of epochs (%d), these are not being '...
                   'added to the output\n'],rname,nrespd,ns);
               continue
+            elseif ns < nrespd
+              warning(['more responses (%d) than epochs (%d), assume '...
+                  'that epochs were dropped from the end, and dropping '...
+                  'extra responses'],nrespd,ns);
+              respdata(ns+1:end) = [];
             end
 
             % get indices for this channel and this response
@@ -988,7 +1035,7 @@ for isub=1:nsub_proc
               if ~isempty(strmatch(c,{'cardiac','pulse'}))
                 pidxs=find_peaks(sig,pulse.pk);
                 if isempty(pidxs), continue, end
-                sig=diff(pidxs);
+                sig=60./(diff(pidxs)/EEG.srate);
               end
               if size(sig,1) > size(sig,2), sig = sig'; end
               plot(sig,'g');

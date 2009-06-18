@@ -304,7 +304,7 @@ for isub=1:nsub_proc
           outfname = fullfile(anat_outdir,sprintf('%s_hires.img', subid));
           if exist(outfname)
             msg = sprintf(['existing hires in anat_outdir for subject %s, '...
-                'clobbering']);
+                'clobbering'],subid);
             r = update_report(r,msg);
             delete(outfname);
           end
@@ -541,7 +541,7 @@ for isub=1:nsub_proc
             % Load the data
             msg = sprintf('Loading ANALYZE format files');
             r = update_report(r,msg);
-            flist = dir(fullfile(run_outdir,'*.img'));
+            flist = dir(fullfile(run_outdir,sprintf('%s*.img',subid)));
             npts = length(flist);
             
             % Get dimensions of data

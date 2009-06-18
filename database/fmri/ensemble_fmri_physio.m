@@ -21,8 +21,9 @@ function outdata = ensemble_fmri_physio(indata,defs)
 % REQUIRES
 %   defs.sinfo(:).sessinfo(:).physio
 %   defs.sinfo(:).sessinfo(:).physio.source
-%   defs.physio.SIG_CHECK
 %   defs.sinfo(:).sessinfo(:).physio.resp_titles
+%   defs.physio.SIG_CHECK
+%   defs.physio.LINK2FMRI
 % 
 % 2008/10/06 FB - started coding
 
@@ -124,6 +125,7 @@ ppcol = set_var_col_const(outdata.data{ppaths_idx}.vars);
 ecdparams.outDataName = 'physio_data';
 
 try SIG_CHECK = defs.SIG_CHECK; catch SIG_CHECK = 1; end
+try LINK2FMRI = defs.LINK2FMRI; catch LINK2FMRI = 0; end
 
 %
 % START OF THE SUBJECT LOOP
@@ -166,13 +168,15 @@ for isub=1:nsub_proc
       pparams.link2pres = physio.link2pres;
     end
     
-    % Obtain information about the scanning protocol that was used in this
-    % session
-    protocol_idx = strmatch(sess.protocol_id, {defs.fmri.protocol.id}, ...
-	'exact');
+    if LINK2FMRI
+      % Obtain information about the scanning protocol that was used in this
+      % session
+      protocol_idx = strmatch(sess.protocol_id, {defs.fmri.protocol.id}, ...
+          'exact');
+      pparams.TR = defs.fmri.protocol(protocol_idx).epi.tr;
+      pparams.nslice_per_vol = defs.fmri.protocol(protocol_idx).epi.nslices;
+    end
     
-    pparams.TR = defs.fmri.protocol(protocol_idx).epi.tr;
-    pparams.nslice_per_vol = defs.fmri.protocol(protocol_idx).epi.nslices;
     
     % get physio_indir/outdir, behav_outdir
     sfilt = struct();
@@ -186,11 +190,21 @@ for isub=1:nsub_proc
     outdx = strmatch('physio_outdir',spaths.data{pcol.path_type});
     physio_outdir = spaths.data{pcol.path}{outdx};
     
-    behdx = strmatch('behav_outdir',spaths.data{pcol.path_type});
-    behav_outdir = spaths.data{pcol.path}{behdx};
+    if isfield(physio,'link2pres')
+      behdx = strmatch('behav_outdir',spaths.data{pcol.path_type});
+      behav_outdir = spaths.data{pcol.path}{behdx};
+    end
     
     % Determine how many runs we're dealing with
-    runs = sess.use_epi_runs;
+    if LINK2FMRI
+      runs = sess.use_epi_runs;
+    else
+      if isfield(sess,'use_physio_runs')
+        runs = sess.use_physio_runs;
+      else
+        runs = 1:size(physio.datafiles,1);
+      end
+    end
     nruns = length(runs);  
     
     %
@@ -222,6 +236,9 @@ for isub=1:nsub_proc
         lparams.link2pres.presfname = fullfile(behav_outdir,...
             sprintf('%s_sess%d_present.mat',subid,isess));
         lparams.link2pres.filt.include.any.RUN = irun;
+      end
+      if isfield(rparams,'signal_bounds')
+        lparams.signal_bounds = rparams.signal_bounds;
       end
       
       % read-in physio data
@@ -305,7 +322,7 @@ for isub=1:nsub_proc
                   fname = func2str(lfh);
 
                   cparams = lparams;
-                  cparams.(fname) = lf;
+                  cparams.(fname) = lf(icf);
                   EEGf = lfh(EEGf,cparams);
                 end % if ~isfield(lf(icf
               end % for icf=1:

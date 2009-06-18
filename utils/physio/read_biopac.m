@@ -2,6 +2,18 @@ function ri = read_biopac(fname,params)
 
 % Reads physiological data measured by the BioPac system, epochs data
 % 
+%   ri = read_biopac(fname,params)
+% 
+% The BioPac system was originally first used in the Janata Lab at the 3T
+% scanner at the UC Davis Imaging Research Center, to collect physiological
+% measures while participants were being scanned. This system, though,
+% could conceivably be used to collect data outside of the scanner.
+% Therefore, this script does not assume that physiological data it
+% analyzes was collected in an NMR environment, and it does not assume that
+% a TR is available for epoching purposes, but it does allow for a TR to be
+% used for epoching, and it also allows for a more general presentation
+% logfile-based epoching.
+% 
 % REQUIRES
 %   - reading data -
 %   fname - path to single file to be processed
@@ -14,6 +26,14 @@ function ri = read_biopac(fname,params)
 %       as reflected in .hdr.per_chan_data.comment_text in the .acq file
 %     NOTE: special channel name 'trigger' treated as scanner pulses,
 %     assumed to be TTL pulses time-locked to volume acquisition onset
+%   params.signal_bounds - 2-length vector containing start and end times
+%       in seconds to initially bound the signal by. this can be used in
+%       the case that one physio file contains data from multiple runs.
+%       Since data here are handled on a run-by-run basis, this can be used
+%       to limit the initial data that is extracted to the samples
+%       pertinent for the given run. a value of 0 in the first position
+%       will be replaced with a 1, while a value of 0 in the second
+%       position will be replaced with the final sample in the data set
 %
 %   - epoching -
 %   params.bound_by_trigger - if this is true, and if there is a channel in
@@ -24,7 +44,8 @@ function ri = read_biopac(fname,params)
 %     exists, params.link2pres will be ignored
 %     NOTE: this requires params.TR ... if no params.TR is specified, it
 %     will be estimated as median(diff(trigger_onsets_in_ms))/1000
-%   params.TR - length (in seconds) between repetitions, for fMRI analyses
+%   params.TR - length (in seconds) between repetitions, for fMRI analyses.
+%     see also: params.bound_by_trigger
 %   params.link2pres - structure with settings to link up to a presentation 
 %     response file ... MAKE SURE that you specify filt criteria that will 
 %     return a set of items that then have a 1 to 1 correlation with event
@@ -57,7 +78,8 @@ function ri = read_biopac(fname,params)
 %       will no be applied
 %     .bound_by_last_pulse - if set to 1, and if EVENT_TYPE={'Pulse'},
 %       EVENT_CODE = {'255'} filtering criteria returns any rows, all data
-%       after sample = ((lastPulseTime+TR*1000)/stime) will be dropped
+%       after sample = ((lastPulseTime+TR*1000)/stime) will be dropped. If
+%       no params.TR is specified, TR=median(diff(pulse_onsets_in_ms))/1000
 % 
 % OUTPUT
 %   ri - 'runinfo' struct, in the form of read_keithley.m and read_mate.m,
@@ -71,13 +93,13 @@ ri = struct('signal',struct(),'meta',struct());
 global r
 
 r = init_results_struct;
-r.type = 'fmri_physio';  % Identify the type of this reporting instance
+r.type = 'physio_biopac';  % Identify the type of this reporting instance
 r.report_on_fly = 1;
 
 if ~isempty(fname) && exist(fname,'file')
   % read data
   pdata = load_acq(fname);
-  chans = {pdata.hdr.per_chan_data(:).comment_text};    
+  chans = {pdata.hdr.per_chan_data(:).comment_text};
 else
   % data can't be found, skip this file
   msg = sprintf('couldn''t find biopac file %s, SKIPPING\n',fname);
@@ -95,7 +117,23 @@ ri.meta.stime = stime;
 if isfield(params,'TR')
   TR = params.TR;
 else
-  error('no TR found in the params struct\n');
+  TR = 0;
+  warning('no TR found in the params struct\n');
+end
+
+% signal bounds?
+if isfield(params,'signal_bounds') && length(params.signal_bounds) == 2
+  sig_start = params.signal_bounds(1)*60*srate;
+  sig_end = params.signal_bounds(2)*60*srate;
+  if ~isnumeric(sig_start) || sig_start < 1
+    sig_start = 1;
+  end
+  if ~isnumeric(sig_end) || sig_end < 1 || sig_end > size(pdata.data,1)
+    sig_end = size(pdata.data,1);
+  end
+else
+  sig_start = 1;
+  sig_end = size(pdata.data,1);
 end
 
 % find channels, get data
@@ -107,7 +145,7 @@ if isfield(params,'channels')
     name = params.channels(ic).name;
     cidx = strmatch(ctxt,ctxts);
     if ~isempty(cidx)
-      ri.signal.(name) = pdata.data(:,cidx);
+      ri.signal.(name) = pdata.data(sig_start:sig_end,cidx);
     end
   end
 end
@@ -122,14 +160,17 @@ end
 if isfield(ri,'trigger') && isfield(ri.trigger,'onsets') ...
       && ~isempty(ri.trigger.onsets) && isfield(params,'bound_by_trigger') ...
       && params.bound_by_trigger
+  % check for TR
+  if ~TR
+    warning('estimating TR from trigger onsets');
+    TR = median(diff(ri.trigger.onsets*stime))/1000;
+    warning('TR estimated to be %ds',TR);
+  end
+
   % bound by triggers
   epoch_start = ri.trigger.onsets(1);
   epoch_end = ri.trigger.onsets(end)+TR*srate; % add one TR at the end
   
-  if ~exist('TR','var')
-    TR = median(diff(ri.trigger.onsets*stime))/1000;
-  end
-
   flds = fieldnames(ri.signal);
   nflds = length(flds);
   for ifld = 1:nflds
@@ -236,7 +277,9 @@ elseif isfield(params,'link2pres') ...
     
     if ~isempty(lpdata.data{1})
       if ~exist('TR','var')
+        warning('estimating TR from pulse data');
         TR = median(diff(lpdata.data{pcol.RUN_REL_TIME}))/1000;
+        warning('TR estimated to be %ds',TR);
       end
       
       % the end of the epoch = run_rel_time/stime + epoch_start
@@ -259,4 +302,6 @@ elseif isfield(params,'link2pres') ...
     end
     ri.signal.(fld) = ri.signal.(fld)(epoch_start:epoch_end);
   end
+else
+  warning('could not generate run-length epochs');
 end
