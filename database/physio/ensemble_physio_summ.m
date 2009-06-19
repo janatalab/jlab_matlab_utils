@@ -140,24 +140,25 @@ function outdata = ensemble_physio_summ(indata,defs)
 %           calculation of the specific SCR integral
 %       .spc_integral.end (default 6) - time, in seconds, to end
 %           calculation of the specific SCR integral
-%   	.proxlim (default 0.6) - limit of proximity of peak heights, in
-%           seconds. for each peak found, if there are other peaks within
-%           +/- proxlim seconds of that peak, all but the highest peaks
-%           will be discarded.
-%   	.find_peaks.thresh (default 0) - proportion of total signal
-%           range below which peaks will not be considered. for example,
-%           for .thresh = 0.5, peaks will only be returned if their height 
-%           is more than half of the total signal range. This is passed on
-%           to find_peaks, but is always set to 0, since we want to be able
-%           to find peaks across the entire range of signal.
-%   	.peak_heights.calcFrom (default 'left') - parameter passed to
-%           'peak_heights', indicating from which side of a peak to find the
-%           trough used to calculate peak height
-%       .peak_heights.transformation (default 'none') - parameter passed to
-%           'peak_heights' to indicate the transformation, if any, to
-%           perform on peak height values before returning them.
-%   	.height_thresh (default 0.02) - peak heights below this value will
-%           be rejected
+%       .find_peaks - the following parameters are sent to find_peaks:
+%   		.thresh (default 0) - proportion of total signal
+%               range below which peaks will not be considered. for
+%               example, for .thresh = 0.5, peaks will only be returned if
+%               their height is more than half of the total signal range.
+%               This is passed on to find_peaks, but is always set to 0,
+%               since we want to be able to find peaks across the entire
+%               range of signal.
+%           .peak_height_window (default 0.6) - sliding window in
+%               which only the highest peak is retained. for each peak
+%               found, if there are other peaks within +/- seconds of that
+%               peak, all but the highest peak will be discarded.
+%           .peak_heights.calcFrom (default 'left') - which side of a peak
+%               to find the trough used to calculate peak height
+%           .peak_heights.transformation (default 'none') - the
+%               transformation, if any, performed on peak height values
+%               before returning them.
+%   		.peak_height_thresh (default 0.02) - peak heights below
+%               this value will be rejected
 %   defs.physio_summ.pulse - settings for pulse ox. data summary
 %   	.find_peaks.thresh (default 0.5) - proportion of total signal
 %           range below which peaks will not be considered. for example,
@@ -335,13 +336,15 @@ try pargs = ps.pargs; catch pargs = {'-dpsc','-append'}; end
 try scr.zscore = ps.scr.zscore; catch scr.zscore = ''; end
 try scr.int_begin = ps.scr.int_begin; catch scr.int_begin = 2; end % in sec
 try scr.int_end = ps.scr.int_end; catch scr.int_end = 6; end % in seconds
-try scr.proxlim = ps.scr.proxlim; catch scr.proxlim = 0.6; end % in seconds
 try scr.pkh.calcFrom = ps.peak_heights.calcFrom;
   catch scr.pkh.calcFrom = 'left'; end
 try scr.pkh.transformation = ps.peak_heights.transformation;
   catch scr.pkh.transformation = 'none'; end
 try scr.pk.thresh = ps.scr.find_peaks.thresh; catch scr.pk.thresh = 0; end
-try scr.height_thresh = ps.scr.height_thresh; catch scr.height_thresh = 0.02; end
+try scr.pk.peak_height_window = ps.scr.find_peaks.peak_height_window;
+  catch scr.pk.peak_height_window = 0.6; end % in seconds
+try scr.pk.peak_height_thresh = ps.scr.find_peaks.peak_height_thresh;
+  catch scr.pk.peak_height_thresh = 0.02; end
 
 % verify integral beginning and ending points
 if scr.int_begin > scr.int_end
@@ -738,52 +741,55 @@ for isub=1:nsub_proc
                 pksig = epochs(:,iep);
                 
                 % get peaks
-                pidxs = find_peaks(pksig,scr.pk);
+                [pidxs,heights,bidxs] = find_peaks(pksig,scr.pk);
 
-                % get peak heights
-                [heights,bidxs]= peak_heights...
-                    ('signal',pksig,'peakIdxs',pidxs,'params',scr.pkh);
-                
-                % remove peaks that do not meet the threshold criterion
-                peakmask = heights > scr.height_thresh;
-                pidxs(~peakmask)=[];
-                heights(~peakmask)=[];
-                bidxs(~peakmask)=[];
+%                 % get peak heights
+%                 [heights,bidxs]= peak_heights...
+%                     ('signal',pksig,'peakIdxs',pidxs,'params',scr.pkh);
+%                 
+%                 % remove peaks that do not meet the threshold criterion
+%                 peakmask = heights > scr.height_thresh;
+%                 pidxs(~peakmask)=[];
+%                 heights(~peakmask)=[];
+%                 bidxs(~peakmask)=[];
 
                 % remove peaks whose troughs occur before 1 sec after
                 % stimulus onset
-                pidxs(bidxs < (baseline+1)*EEG.srate) = [];
+                rmbase = bidxs < (baseline+1)*EEG.srate
+                pidxs(rmbase) = [];
+                heights(rmbase) = [];
+                bidxs(rmbase) = [];
                 
-                % remove peaks within +/- 'proxlim' seconds of each peak
-                pidxs_mod = pidxs;
-                for ip=1:length(pidxs)
-                    
-                  % get peak window
-                  peak_start=pidxs(ip)-round(EEG.srate*scr.proxlim);
-                  peak_end  =pidxs(ip)+round(EEG.srate*scr.proxlim);
-                  if peak_start < 0, peak_start = 0; end
-                  if peak_end > EEG.pnts, peak_end = EEG.pnts; end
-                  peakwindow= (peak_start:peak_end);
-
-                  % get peaks within window
-                  windowidxs=intersect(peakwindow, pidxs);
-                  
-                  % get peak heights, remove max peak from windowidxs
-                  [windowheights]= peak_heights('signal',pksig,...
-                      'peakIdxs',windowidxs,'params',scr.pkh);
-                  windowidxs(windowheights==max(windowheights)) = [];
-
-                  % remove windowidxs from pidxs_mod
-                  if ~isempty(windowidxs) && ~isempty(pidxs_mod)
-                    pidxs_mod(ismember(pidxs_mod,windowidxs)) = [];
-                  end
-                end
-                pidxs = pidxs_mod;
+%                 % remove peaks within +/- 'proxlim' seconds of each peak
+%                 pidxs_mod = pidxs;
+%                 for ip=1:length(pidxs)
+%                     
+%                   % get peak window
+%                   peak_start=pidxs(ip)-round(EEG.srate*scr.proxlim);
+%                   peak_end  =pidxs(ip)+round(EEG.srate*scr.proxlim);
+%                   if peak_start < 0, peak_start = 0; end
+%                   if peak_end > EEG.pnts, peak_end = EEG.pnts; end
+%                   peakwindow= (peak_start:peak_end);
+% 
+%                   % get peaks within window
+%                   windowidxs=intersect(peakwindow, pidxs);
+%                   
+%                   % get peak heights, remove max peak from windowidxs
+%                   [windowheights]= peak_heights('signal',pksig,...
+%                       'peakIdxs',windowidxs,'params',scr.pkh);
+%                   windowidxs(windowheights==max(windowheights)) = [];
+% 
+%                   % remove windowidxs from pidxs_mod
+%                   if ~isempty(windowidxs) && ~isempty(pidxs_mod)
+%                     pidxs_mod(ismember(pidxs_mod,windowidxs)) = [];
+%                   end
+%                 end
+%                 pidxs = pidxs_mod;
                 
                 if ~isempty(pidxs)
-                  % get peak heights
-                  heights = peak_heights('signal',pksig,'params',...
-                      scr.pkh,'peakIdxs',pidxs);
+%                   % get peak heights
+%                   heights = peak_heights('signal',pksig,'params',...
+%                       scr.pkh,'peakIdxs',pidxs);
 
                   % save to peak stat vectors
                   npeaks(iep) = length(pidxs);
