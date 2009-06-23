@@ -100,10 +100,10 @@ for in=1:length(indata)
         for ie=1:ne
           % set sampling rate
           masdp.samplingRate = srates(ie);
-          
+                    
           % edit epoch
           [lsig,lpeaks] = manual_adjust_signal_data('signal',signals{ie},...
-              'peaks',peaks{ie},'params',masdp);
+              'peaks',peaks(ie),'params',masdp);
           
           % repack data
           data.data{cols.signal}{ie} = lsig;
