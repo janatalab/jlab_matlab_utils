@@ -630,6 +630,10 @@ if EXTRACT_DATA
                 'epoch onsets\n'],subid,isess,rnum);
             etime = min(diff(estimes));
           end
+          
+          % account for raw signal baseline period
+          estimes = estimes - EEG.xmin;
+          eetimes = eetimes - EEG.xmin;
 
           if ~exist('etime','var') && ne ~= ns || any (estimes > eetimes)
             % end time not specified, 
@@ -671,8 +675,7 @@ if EXTRACT_DATA
           end
           ns = length(estimes);
           ne = length(eetimes);
-        
-          %%%%% FIXME: estimes + EEG.xmin?
+
           % import event onsets
           EEG = pop_importevent(EEG,'append','no','event',[ones(ns,1) ...
               estimes],'fields',{'type','latency'},'timeunit',1);
