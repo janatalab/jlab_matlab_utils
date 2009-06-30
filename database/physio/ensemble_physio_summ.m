@@ -1,4 +1,4 @@
- function outdata = ensemble_physio_summ(indata,defs)
+function outdata = ensemble_physio_summ(indata,defs)
 
 % calculates summary statistics for physio data
 % 
@@ -646,8 +646,8 @@ if EXTRACT_DATA
           % find epoch length, if not explicitly provided
           if ~exist('etime','var') 
             % make sure to remove epochs that exceed the samples in EEG
-            ee_end_idxs = eetimes > EEG.pnts/EEG.srate;
-            if ~isempty(ee_end_idxs)
+            ee_end_idxs = eetimes > (EEG.pnts/EEG.srate);
+            if any(ee_end_idxs)
               warning('%d epochs out of bounds, removing\n',length(ee_end_idxs));
             end
             eetimes(ee_end_idxs) = []; % remove exceeding epochs from eetimes
@@ -662,17 +662,17 @@ if EXTRACT_DATA
           end
 
           % double check that all epochs end before the end of the data set
-          if any(estimes > EEG.pnts/EEG.srate)
-            ee_end_idxs = (estimes + etime) > EEG.pnts/EEG.srate;
-            if ~isempty(ee_end_idxs)
-              warning('%d epochs out of bounds, removing\n',length(ee_end_idxs));
-            end
+          badtimes = (estimes+etime) > (EEG.pnts/EEG.srate);
+          if any(badtimes)
+            ee_end_idxs = find(badtimes);
+            warning('%d epochs out of bounds, removing\n',length(ee_end_idxs));
             eetimes(ee_end_idxs) = []; % remove exceeding epochs from eetimes
             estimes(ee_end_idxs) = []; % remove exceeding epochs from estimes
           end
           ns = length(estimes);
           ne = length(eetimes);
         
+          %%%%% FIXME: estimes + EEG.xmin?
           % import event onsets
           EEG = pop_importevent(EEG,'append','no','event',[ones(ns,1) ...
               estimes],'fields',{'type','latency'},'timeunit',1);

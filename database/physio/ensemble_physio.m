@@ -166,6 +166,9 @@ for isub=1:nsub_proc
     physio = sinfo(isub).sessinfo(isess).physio;
     pparams = init_physmon_params(physio.source);
     pparams.channels = physio.channels;
+    if isfield(physio,'baseline')
+      pparams.baseline = physio.baseline;
+    end
     if isfield(physio,'link2pres')
       pparams.link2pres = physio.link2pres;
     end
@@ -262,10 +265,15 @@ for isub=1:nsub_proc
         signal(ic,:) = ri.signal.(snames{ic});
         chanlocs(ic).labels = snames{ic};
       end
+      if isfield(ri.meta,'baseline_samps')
+        xmin = -ri.meta.baseline_samps/ri.meta.srate;
+      else
+        xmin = 0;
+      end
       
       EEG = pop_importdata('dataformat','array','data',signal,'srate',...
           ri.meta.srate,'subject',subid,'session',sess.ensemble_id,...
-          'chanlocs',chanlocs,'nbchan',nchans,'pnts',npts);
+          'chanlocs',chanlocs,'nbchan',nchans,'pnts',npts,'xmin',xmin);
       
       set_fname = sprintf('%s_sess%d_run%d_physio.set',subid,isess,irun);
       pop_saveset(EEG,'filename',set_fname,'filepath',physio_outdir);
@@ -283,7 +291,7 @@ for isub=1:nsub_proc
         for i=1:nsig
           sig = sigs{i};
           subplot(nsig,1,i);
-          plot(EEG.data(i,:));
+          plot(EEG.data(i,abs(EEG.xmin*EEG.srate)+1:end));
           ylabel(sig);
         end % for i=1:nsig
         if isfield(defs,'figs') && isfield(defs.figs,'write2file') && ...
@@ -350,7 +358,7 @@ for isub=1:nsub_proc
           for i=1:nsig
             sig = sigs{i};
             subplot(nsig,1,i);
-            plot(EEGf.data(i,:));
+            plot(EEGf.data(i,abs(EEGf.xmin*EEGf.srate)+1:end));
             ylabel(sig);
           end % for i=1:nsig
           if isfield(defs,'figs') && isfield(defs.figs,'write2file') && ...

@@ -1,6 +1,39 @@
 function outdata = ensemble_fmri_build_model_l1(indata,defs)
 
-% builds level 1 statistical model
+% builds level 1 statistical model, optionally estimates model as well
+% 
+%   outdata = ensemble_fmri_build_model_l1(indata,defs)
+% 
+% This function builds and then estimates first-level general linear model
+% analyses of fMRI data, using either SPM or FSL.
+% 
+% NOTE: this function expects that presentation logfiles exist for all runs
+% that you want to analyze. If this data is not either provided through 
+% 'pres_paths' in the indata, or findable on the disk using behav_indir,
+% the function will not build the model.
+% 
+% REQUIRES
+%   indata
+%       sinfo
+%       {'epi','realign_epi'}
+%       paths
+% 
+% OPTIONAL INPUTS
+%   indata
+%       coplanar
+%       modelspec - contains a pre-built model, if you want to build in one
+%           step and then estimate in another step
+%       physio_paths
+%       pres_paths - if not found, will use 'behav_indir' from paths and
+%           fmri_sess_paths, and will look for a typically-constructed
+%           presentation data .mat file at that location. If not found, and
+%           no pres_paths are given, the function will not run.
+% 
+% OUTPUT
+%   sinfo
+%   modelspec
+% 
+% FIXME: no permutation testing handled in FSL right now ....
 % 
 % FB 2008.08.27
 
@@ -36,6 +69,9 @@ for idata = 1:length(indata)
         case 'physio_paths'
           physio_paths = indata{idata};
           physcol = set_var_col_const(physio_paths.vars);
+        case 'pres_paths'
+          pres_paths = indata{idata};
+          prescol = set_var_col_const(pres_paths.vars);
       end
   end
 end
@@ -118,17 +154,39 @@ try ESTIMATE_MODEL = defs.build_model_l1.ESTIMATE_MODEL; catch ESTIMATE_MODEL=0;
 try PLOT_DESMAT_COV = defs.build_model_l1.PLOT_DESMAT_COV; catch PLOT_DESMAT_COV=0; end
 try USE_SPM = defs.build_model_l1.USE_SPM; catch USE_SPM = 0; end
 try USE_FSL = defs.build_model_l1.USE_FSL; catch USE_FSL = 0; end
+try SLICE_BASED = curr_model.slice_based; catch SLICE_BASED = 0; end
+try ADD_MEAN_TO_RESID = curr_model.add_mean_to_resid; catch ADD_MEAN_TO_RESID = 1; end
+% 
+% get other vars
+try intensity_cutoff = params.build_model_l1.intensity_cutoff; catch intensity_cutoff = 10; end
 
+% check flags/vars
 if ~BUILD_MODEL && ~exist('modelspec','var')
     msg = sprintf('BUILD_MODEL not selected, but no model was specified');
     r = update_report(r,msg);
     return
 end
 
-try uses_permute = ~isempty(curr_model.permute.permute_type);
-  uses_permute = 1;
-catch
-  uses_permute = 0;
+if SLICE_BASED && (~USE_FSL || USE_SPM)
+    msg = sprintf(['FSL is currently the only package supporting slice-'...
+        'based modeling.']);
+    r = update_report(r,msg);
+    return
+end
+
+if isfield(current_model,'permute') && ...
+        isfield(curr_model.permute,'permute_type') && ...
+        ~isempty(curr_model.permute.permute_type) && ...
+        isfield(curr_model.permute,'niter')
+  nperm = curr_model.permute.niter
+else
+  nperm = 1;
+end
+
+if niter > 1 && USE_FSL
+  msg = sprintf('permutation testing not yet supported in FSL, turning off');
+  r = update_report(r,msg);
+  niter = 1;
 end
 
 if isfield(curr_model,'combine_runs') && isnumeric(curr_model.combine_runs)...
@@ -138,24 +196,29 @@ else
   combine_runs = 0;
 end
 
-if USE_FSL && ~USE_SPM
-  msg = sprintf('FSL not supported yet ...\n');
-  r = update_report(r,msg);
-  return
-elseif ~USE_FSL && ~USE_SPM
+if (~USE_FSL && ~USE_SPM) || (USE_FSL && USE_SPM)
   msg = sprintf(['\t\tyou must specify either SPM or FSL to carry out '...
       'the analyses\n']);
   r = update_report(r,msg);
   return
 end
 
-% Set stuff up for specifying an SPM job.  Specify jobs on a subject level
 if USE_SPM
+  % Set stuff up for specifying an SPM job. Specify jobs on a subject level
   njob = 0;  % counter for number of jobs we are specifying
   jobs = {}; 
 
   % figure out if we're going to run the job
   RUN_SPM = defs.fmri.jobctl.run_spm;
+elseif USE_FSL
+  % set stuff up for specifying an FSL job.
+  fsft = create_fsf; % fsf template
+  if isfield(curr_model,'fsf_defs')
+    fsft = set_fsf_defaults(fsft,curr_model.fsf_defs);
+  else
+    msg = sprintf('no fsf defaults provided');
+    r = update_report(r,msg);
+  end
 end % if USE_SPM
 
 exp_inroot = defs.paths.inroot;
@@ -174,15 +237,6 @@ for isub=1:nsub_proc
   spfilt.include.all.subject_id = {subid};
   spaths = ensemble_filter(pathdata,spfilt);
   
-  % Here we need to set up output variables and file names that have to do
-  % with subject specific things but which have to accommodate multiple sessions.
-  if USE_SPM
-    njob = njob+1;
-    nspat = 0;  % counter  for number of spatial analyses within a job
-    nstat = 0;  % counter for number of stats jobs
-    ncon = 0;  % counter for number of contrast jobs
-  end
-
   didx = strmatch('sub_indir',spaths.data{pacol.path_type});
   if didx
     sub_indir = spaths.data{pacol.path}(didx);
@@ -199,6 +253,15 @@ for isub=1:nsub_proc
     check_dir(sub_outdir,1);
   end
   
+  % Here we need to set up output variables and file names that have to do
+  % with subject specific things but which have to accommodate multiple sessions.
+  if USE_SPM
+    njob = njob+1;
+    nspat = 0;  % counter  for number of spatial analyses within a job
+    nstat = 0;  % counter for number of stats jobs
+    ncon = 0;  % counter for number of contrast jobs
+  end
+
   % Determine number of sessions for this subject
   nsess = length(sinfo(isub).sessinfo);
   
@@ -235,41 +298,41 @@ for isub=1:nsub_proc
 	  strmatch(sess.protocol_id,{defs.fmri.protocol.id},'exact');
     protocol = defs.fmri.protocol(protocol_idx);
     
-    if USE_SPM
-      spmopts = defs.fmri.spm.opts(expidx).spmopts;
-    
-      if BUILD_MODEL
+    if BUILD_MODEL
 
-        % FIXME: load pres_matfname from indata???
-        % Load the Presentation files for this session
-        pres_matfname = fullfile(behav_indir,sprintf('%s_sess%d_present.mat', subid, isess));
-        if exist(pres_matfname,'file')
-          pres_info = load(pres_matfname);
-          msg = sprintf('loaded presentation .mat file %s',pres_matfname);
-          r = update_report(r,msg);
-        else
-          % no presentation data found, skip this session
-          msg = sprintf(['presentation .mat file (%s) not found ... skipping '...
-              '%s session %d\n'],pres_matfname,subid,isess);
-          r = update_report(r,msg);
-          continue
-        end
-        PL = set_pres_col_const(pres_info.vars);
+      % Load the Presentation files for this session
+      if exist('pres_paths','var')
+        presfilt.include.all.subject_id = {subid};
+        presfilt.include.all.session = isess;
+        lprespath = ensemble_filter(pres_paths,presfilt);
+        pres_matfname = lprespath.data{prescol.path};
+      end
       
-        if ~uses_permute
-	      nperm = 1;
-        else
-	      nperm = curr_model.permute.niter;
-        end
-
+      if ~exist('pres_matfname','var') || ~exist(pres_matfname,'file')
+        pres_matfname = fullfile(behav_indir,sprintf('%s_sess%d_present.mat', subid, isess));
+      end
+      
+      if exist(pres_matfname,'file')
+        pres_info = load(pres_matfname);
+        msg = sprintf('loaded presentation .mat file %s',pres_matfname);
+        r = update_report(r,msg);
+      else
+        % no presentation data found, skip this session
+        msg = sprintf(['presentation .mat file (%s) not found ... skipping '...
+            '%s session %d\n'],pres_matfname,subid,isess);
+        r = update_report(r,msg);
+        continue
+      end
+      PL = set_pres_col_const(pres_info.vars);
+            
+      if USE_SPM
+        spmopts = defs.fmri.spm.opts(expidx).spmopts;
         build_model_idx_offset = nstat+1;
+
         for iperm = 1:nperm
  	      fprintf('Initializing model permutation %d/%d\n', iperm, nperm);
 	
-          % Initialize a stats structure for this session
-          nstat = nstat+1;
-
-          % Initialize an fmri_spec using defaults specified in autobio_fmri_v1_globals
+          % Initialize an fmri_spec using defaults
           fmri_spec = defs.fmri.spm.defaults.stats.fmri.fmri_spec;
 
           % Modify values accordingly
@@ -280,10 +343,10 @@ for isub=1:nsub_proc
           check_dir(model_outdir);
 	
           % Directory to output SPM.mat file to
-          if ~uses_permute
-            curr_dir = model_outdir;
-          else
+          if niter > 1
             curr_dir = fullfile(model_outdir,sprintf('perm%04d', iperm));
+          else
+            curr_dir = model_outdir;
           end
           check_dir(curr_dir);
        
@@ -297,10 +360,11 @@ for isub=1:nsub_proc
           try mask_fname = curr_model.mask; 
             if isfield(curr_model,'maskmodel') && ~isempty(curr_model.maskmodel)
               mask_fname = fullfile(anal_outdir,'spm', ...
-                sprintf('model_%02d', curr_model.maskmodel), mask_fname);
+                  sprintf('model_%02d', curr_model.maskmodel), mask_fname);
             end
           catch mask_fname = [];
           end
+        
           if isempty(mask_fname)
             mask_fname = fullfile(anat_outdir, ...
               sprintf('sw%s_%s_mask.nii', subid, sess.id));
@@ -309,99 +373,104 @@ for isub=1:nsub_proc
             fprintf('Using mask: %s\n', mask_fname);
             fmri_spec.mask = {mask_fname};
           end
+          
+          % Initialize a stats structure for this session
+          nstat = nstat+1;
 
           jobs{njob}.stats{nstat}.fmri_spec = fmri_spec;
-        end % for iperm
-      end % if BUILD_MODEL
-    
-    end % if USE_SPM
-
-
-if BUILD_MODEL
+        end % for iperm        
+      elseif USE_FSL
+        % Specify base model directory and make sure it exists
+        model_outdir = fullfile(fsl_outdir, sprintf('model_%02d', model_id));
+        check_dir(model_outdir);
         
-    %
-    % START OF RUN LOOP
-    %
+        % Delete the contents of this directory
+        unix_str = sprintf('rm %s', fullfile(model_outdir,'*'));
+        status = unix(unix_str);
+      end
 
-    % get # of runs
-    if exist('epidata','var')
-      % filter epidata by subject, session, run
-      epiFilt = struct();
-      epiFilt.include.all.subject_id = {subid};
-      epiFilt.include.all.session = [isess];
-      sessdata = ensemble_filter(epidata,epiFilt);
+      %
+      % START OF RUN LOOP
+      %
+
+      % get # of runs
+      if exist('epidata','var')
+        % filter epidata by subject, session, run
+        epiFilt = struct();
+        epiFilt.include.all.subject_id = {subid};
+        epiFilt.include.all.session = [isess];
+        sessdata = ensemble_filter(epidata,epiFilt);
         
-      [runm,urun] = make_mask_mtx(sessdata.data{epicol.run});
-      nruns = length(urun);
-    else
-      nruns = 0;
-    end
+        [runm,urun] = make_mask_mtx(sessdata.data{epicol.run});
+        nruns = length(urun);
+      else
+        nruns = 0;
+      end
 
-    nvols = [];
-    for irun = 1:nruns
-      % get epi file list
-      lmask = runm(:,irun);
-      flist = sessdata.data{epicol.path}(lmask);
+      nvols = [];
+      for irun = 1:nruns
+        % get epi file list
+        lmask = runm(:,irun);
+        flist = sessdata.data{epicol.path}(lmask);
         
-      % get presentation data for this run
-      presfilt.include.all.RUN=irun;
-      rinfo = ensemble_filter(pres_info,presfilt);
+        % get presentation data for this run
+        presfilt.include.all.RUN=irun;
+        rinfo = ensemble_filter(pres_info,presfilt);
 
-      % Only execute analyses if this run exists or if we are dealing with a
-      % model that is using residuals from a previous model, rather than the
-      % EPI data
-      try using_resid = strcmp(curr_model.srcdata,'residuals'); catch ...
-	    using_resid = 0; end
+        % Only execute analyses if this run exists or if we are dealing with a
+        % model that is using residuals from a previous model, rather than the
+        % EPI data
+        try using_resid = strcmp(curr_model.srcdata,'residuals'); catch ...
+	      using_resid = 0; end
       
-      if ~isempty(flist) || using_resid
-          
+        if ~isempty(flist) || using_resid
+
+          % Check for congruency in number of pulses recorded by
+          % Presentation and the number of volumes we actually have.
+
+          % check # of pulses, etc
+          pulsfilt.include.all.EVENT_TYPE = {'Pulse'};
+          puls_info = ensemble_filter(rinfo,pulsfilt);
+          pulse_times = puls_info.data{PL.RUN_REL_TIME};
+          npulses = length(pulse_times);
+          [cpp] = check_pulse_periods(pulse_times);
+
+          predicted_nvol = npulses + cpp.data.nmiss;
+
+          actual_nvol = length(flist);
+          if actual_nvol == 1
+            % is this a 4-d nifti file?
+            unixstr = sprintf('fslval %s dim4',flist{1});
+            [status,actual_nvol] = unix(unixstr);
+            actual_nvol = str2num(actual_nvol);
+          end
+          nvols(irun) = actual_nvol;
+
+          if actual_nvol < predicted_nvol
+              msg = sprintf(['WARNING: Have fewer volumes (%d) than '...
+                  'expected (%d)\n'], actual_nvol, predicted_nvol);
+              r = update_report(r,msg);
+          elseif actual_nvol > predicted_nvol
+              msg = sprintf(['WARNING: Have more volumes (%d) than '...
+                  'expected (%d)\n'], actual_nvol, predicted_nvol);
+              r = update_report(r,msg);
+          end
+
+          estimated_tr = median(diff(pulse_times))/1000;
+          if abs(diff([estimated_tr protocol.epi.tr])) > 0.02
+            warning(sprintf(['WARNING: Stated TR (%f) and median pulse '...
+                'period (%f), for %f/%f pulses, do not match!!!\n'],...
+                protocol.epi.tr,estimated_tr,npulses,actual_nvol));
+          end
+
+          % Copy some scanning parameters to the run info structure
+          epifstubfmt = defs.fmri.protocol(expidx).epi.fstubfmt;
+
 % Add run specific stuff to the model structures
 if USE_SPM
 	  
   % Add the list of input files
   spmsess.scans = cellstr(flist);
-	  
-  % Check for congruency in number of pulses recorded by Presentation
-  % and the number of volumes we actually have.
-  % Since I was terminating the run by hand (autobio_fmri_v1), the full volume
-  % following the scanner pulse was probably not collected for the
-  % last volume, so eliminate the expectation that the volume was
-  % collected.
-  %       
-  % For nostalgia, the runs should always be completed, therefore
-  % predicted_nvol need not be adjusted.
-  
-  % check # of pulses, etc
-  pulsfilt.include.all.EVENT_TYPE = {'Pulse'};
-  puls_info = ensemble_filter(rinfo,pulsfilt);
-  pulse_times = puls_info.data{PL.RUN_REL_TIME};
-  [cpp] = check_pulse_periods(pulse_times);
-
-  switch exp_id
-      case {'nostalgia_fmri_v1'}
-          predicted_nvol = length(puls_info.data{1}) + cpp.data.nmiss;
-  end
-
-  actual_nvol = length(spmsess.scans);
-  nvols(irun) = actual_nvol;
-
-  if actual_nvol < predicted_nvol
-      msg = sprintf('WARNING: Have fewer volumes (%d) than expected (%d)\n', actual_nvol, predicted_nvol);
-      r = update_report(r,msg);
-  elseif actual_nvol > predicted_nvol
-      msg = sprintf('WARNING: Have more volumes (%d) than expected (%d)\n', actual_nvol, predicted_nvol);
-      r = update_report(r,msg);
-  end
-	  
-  estimated_tr = median(diff(pulse_times))/1000;
-  if abs(diff([estimated_tr protocol.epi.tr])) > 0.02
-    warning(sprintf(['WARNING: Stated TR (%f) and median pulse period '...
-        '(%f), for %f/%f pulses, do not match!!!\n'],protocol.epi.tr,...
-        estimated_tr,length(pulse_times),actual_nvol));
-  end
-
-  % Copy some scanning parameters to the run info structure
-  epifstubfmt = defs.fmri.protocol(expidx).epi.fstubfmt;
   
   rinfo.scanner.actual_nvol = actual_nvol;
   rinfo.scanner.TR = protocol.epi.tr;
@@ -430,14 +499,6 @@ if USE_SPM
     end
   end
   
-  % If we are doing design matrix permutations, then we need to set up
-  % the loop for that here
-  if ~uses_permute
-    nperm = 1;
-  else
-    nperm = curr_model.permute.niter;
-  end
-
   for iperm = 1:nperm
     fprintf('Specifying design matrix for permutation %d/%d\n', iperm, nperm);
 
@@ -618,7 +679,205 @@ if USE_SPM
       jobs{njob}.stats{stat_idx}.fmri_spec.sess = cs;
     end % if irun == 1
   end % for iperm
-end % if USE_SPM
+
+elseif USE_FSL
+    
+  %% FIXME: check for a 4D nifti file?
+
+  epifname = flist{1};
+
+  fsl_str = sprintf('fslval %s dim1', epifname);
+  [status, nx] = unix(fsl_str);
+  nx = str2num(nx);
+
+  fsl_str = sprintf('fslval %s dim2', epifname);
+  [status, ny] = unix(fsl_str);
+  ny = str2num(ny);
+
+  fsl_str = sprintf('fslval %s dim3', epifname);
+  [status, nz] = unix(fsl_str);
+  nslices = str2num(nz);
+
+  % Estimate the threshold intensity that we want to use for this run and
+  % this subject
+  fsl_str = sprintf('fslstats %s -M', epifname);
+  [status, mean_intensity] = unix(fsl_str);
+  mean_intensity = str2num(mean_intensity);
+  thresh = mean_intensity*intensity_cutoff/100;
+
+  % Calculate the mean of the EPI volume
+  [fpath, fstub, fext] = fileparts(epifname);
+  meanfname = fullfile(fpath, sprintf('%s_mean.nii.gz', strtok(fstub,'.')));
+  fsl_str = sprintf('fslmaths %s -Tmean %s', epifname, meanfname);
+  fprintf(logfid,'%s\n', fsl_str);
+  status = unix(fsl_str);
+  if status
+    error('Failed to calculate mean of input EPI data file')
+  end
+
+  if SLICE_BASED
+    for islice = 1:nslices
+	  % Specify the output directory
+  	  featdir = fullfile(rundir, sprintf('slice%02d.feat', islice));  % just the
+  	  % stub. 
+	  check_dir(featdir);
+	
+	  funcfname = fullfile(epidir, sprintf('slice%02d_data.nii.gz', islice));
+	
+	  % Create the fsf file
+	  fsf = fsft;
+	
+	  fsf.tr = protocol.epi.tr;
+	  fsf.fsldir = featdir;  % determines where design.fsf will be written
+	  fsf.outputdir = featdir;
+	  fsf.feat_files{1} = funcfname;
+      fsf.npts = actual_nvol;
+      
+      % generate EVs
+      fsl.ev = fmri_fsl_generate_evs(
+% % % % % % % % some generic mechanism to add regressors and conditions
+% % 
+% % 	  % Add the physio regressors
+% % 	  nsets = length(phys.ri(irun).ev_info);
+% % 	  nev = 0;
+% % 	  ev = create_ev;
+% % 	  ev_names = {};
+% % 	
+% % 	  ev_info = phys.ri(irun).ev_info;
+% % 	  for iset = 1:nsets
+% % 	    nev_in_set = ev_info(iset).nev;
+% % 	    for iev = 1:nev_in_set
+% % 	      cev = create_ev;
+% % 	      cev.shape = 2;
+% % 	      cev.fname = ev_info(iset).fnames{islice,iev};
+% % 	    
+% % 	      nev = nev+1;
+% % 	      ev(nev) = cev;
+% % 	      ev_names{nev} = ev_info(iset).ev_names{iev};
+% % 	    end % for iev
+% % 	  end % for iset
+% % 	  fsf.ev = ev;
+% % 	
+% % 	  fsf.evs_orig = nev;
+% % 	  fsf.evs_real = nev;
+% % 
+% %   	  %
+% %  	  % Deal with EV orthogonalization
+% % 	  % At the very least, we have to initialize these to zero
+% %  	  %
+% % 	  for iev = 1:nev
+% % 	    fsf.ev(iev).ortho = zeros(1,nev);
+% %       end
+
+% % % % % % % some generic mechanism for adding contrasts
+
+% % 	  % Specify contrasts if we want to run the stats on the individual
+% % 	  % regressors.
+% % 	  % 
+% % 	  % NOTE: This has to be done at this stage rather than after packing all
+% % 	  % of the slice data into a single volume so that the proper template files
+% % 	  % are created for us to copy into the full volume analysis directory
+% % 
+% % 	  fsf = setup_fsl_con(fsf, ev_names, conlist, Fconlist);
+
+	  % Write the fsf file
+	  write_fsf(fsf);
+	
+	  % Retain a copy of the fsf structure so that we can use it during
+	  % subsequent statistical evaluation
+	  fsf_fname = fullfile(featdir, 'fsf.mat');
+	  save(fsf_fname, 'fsf');
+
+	  % Switch to the directory that we'll be evaluating the model in
+	  cd(featdir);
+	
+	  % Extract the relevant slice from the EPI data file
+	  fsl_str = sprintf('fslroi %s %s 0 %d 0 %d %d 1 0 %d', epifname, funcfname, nx, ny, islice-1, phys.ps.sinfo.nvol(run_id));
+	  fprintf(logfid,'%s\n', fsl_str);
+	  status = unix(fsl_str);
+	  if status
+	    error('Failed to extract relevant slice from the EPI data file')
+      end
+
+	  % Extract the relevant slice from the mean data file
+	  slicemeanfname = fullfile(epidir, sprintf('slice%02d_data_mean.nii.gz', islice));
+	  fsl_str = sprintf('fslroi %s %s 0 %d 0 %d %d 1 0 1', meanfname, slicemeanfname, nx, ny, islice-1);
+	  fprintf(logfid,'%s\n', fsl_str);
+	  status = unix(fsl_str);
+	  if status
+	    error('Failed to extract relevant slice from the mean data file')
+      end
+	
+	  % Evaluate the model.
+	  % Rather than calling FEAT which spawns a whole bunch of jobs, let's just
+	  % run those components that we really want
+	
+	  % Check model integrity
+	  fsl_str = 'feat_model design';
+
+	  fprintf(logfid,'%s\n', fsl_str);
+	  status = unix(fsl_str);
+	  if status
+	    error('Checking of model failed')
+      end
+	
+	  % Remove the old stats directory
+	  if exist(stats_dir)
+	    unix_str = sprintf('rm -rf %s', stats_dir);
+	    unix(unix_str);
+      end
+		
+	  % Run the model
+	  fsl_str = sprintf('film_gls -rn %s -noest %s design.mat %1.4f',...
+          stats_dir,funcfname,thresh);
+	  fprintf(logfid,'%s\n', fsl_str);
+	  status = unix(fsl_str);
+	  if status
+	    error('FEAT run failed or was aborted')
+      end
+	
+	  if ADD_MEAN_TO_RESID
+	    % Add the mean back into the residuals
+	    resid_fname = fullfile(stats_dir, 'res4d.nii.gz');
+	    fsl_str = sprintf('fslmaths %s -add %s %s',...
+            resid_fname,slicemeanfname,resid_fname);
+	    fprintf(logfid,'%s\n', fsl_str);
+	    status = unix(fsl_str);
+	    if status
+	      error('Failed to add mean back into the residuals')
+        end
+      end
+	
+	  % Remove the temporary functional data
+	  delete(funcfname);
+	  delete(slicemeanfname);
+	
+	  cd(start_dir)
+    end % for islice
+
+    % Pack all of the slice by slice residuals and parameter estimates into
+    % single volumes
+            
+    % Get a list of the files that we want to pack together
+    stats_flist = dir(fullfile(rundir,'slice01.feat/stats/*.nii.gz'));
+    nstats_images = length(stats_flist);
+    for iimg = 1:nstats_images
+	  merge_list = {};
+	  for islice = 1:nslices
+	    merge_list{islice} = fullfile(rundir, sprintf('slice%02d.feat', islice),'stats',stats_flist(iimg).name);
+      end
+	
+	  outfname = fullfile(fullvolstatsdir,stats_flist(iimg).name);
+	  fsl_str = sprintf('fslmerge -z %s %s',outfname,cell2str(merge_list, ' '));
+	  fprintf(logfid,'%s\n', fsl_str);
+	  status = unix(fsl_str);
+	  if status
+	    error(sprintf('Failed to merge slice files into: %s', outfname))
+	  end
+    end % for iimg = 1:nstats_images
+  else
+  end % if SLICE_BASED
+end % if USE_SPM / elseif USE_FSL
 
       end % if exist_epi
     end % for irun
@@ -628,12 +887,7 @@ end % if USE_SPM
     if USE_SPM && combine_runs && ((isfield(curr_model,'srcdata') && ...
 	  ~strcmp(curr_model.srcdata,'residuals')) || ...
       ~isfield(curr_model,'srcdata'))
-      if ~uses_permute
-	nperm = 1;
-      else
-	nperm = curr_model.permute.niter;
-      end
-	  
+
       for iperm = 1:nperm
 	fprintf('Adding run constants for design matrix for permutation %d/%d\n', iperm, nperm);
 
@@ -663,12 +917,7 @@ end % if USE_SPM
     % Replace list of original file names with list of residual images
     if USE_SPM && isfield(curr_model,'srcdata') && ...
 	  strcmp(curr_model.srcdata,'residuals')
-      if ~uses_permute
-	    nperm = 1;
-      else
-        nperm = curr_model.permute.niter;
-      end
-      
+
       resid_flist = '';
       if isfield(curr_model,'srcdata') && ...
             strcmp(curr_model.srcdata,'residuals')
@@ -709,16 +958,13 @@ end % if BUILD_MODEL
     if ESTIMATE_MODEL & USE_SPM
       % If we are running a model that involves permutations, we have to set
       % that up here.
-      if ~uses_permute
-        nperm = 1;
-      else
+      if nperm > 1
         % Determine how many permutation directories there are
         permlist = dir(fullfile(model_dir,'perm*'));
-        nperm = length(permlist);
       end
 
       for iperm = 1:nperm
-        if uses_permute
+        if nperm > 1
           model_fname = fullfile(model_dir,permlist(iperm).name,'SPM.mat');
         end
 
