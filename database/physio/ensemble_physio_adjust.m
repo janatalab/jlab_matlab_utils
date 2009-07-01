@@ -95,12 +95,23 @@ for in=1:length(indata)
           peaks = cell(ne,1);
           pcol = '';
         end
-        
+
+        if ~isfield(cols,'subject_id')
+          warning('no subject info in indata %d',in);
+          subids = [];
+        else
+          subids = data.data{cols.subject_id};
+        end
+
         % iterate over epochs
         for ie=1:ne
           % set sampling rate
           masdp.samplingRate = srates(ie);
-          vars = {sprintf('epoch %1.0f',ie)};
+          if ~isempty(subids)
+            vars = {sprintf('subject: %s, epoch %1.0f',subids{ie},ie)};
+          else
+            vars = {sprintf('epoch %1.0f',ie)};
+          end
 
           % edit epoch
           [lsig,lpeaks] = manual_adjust_signal_data('signal',signals{ie},...
