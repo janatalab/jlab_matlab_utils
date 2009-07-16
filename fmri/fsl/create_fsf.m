@@ -1,15 +1,40 @@
-function fsf=create_fsf
-% fsf=create_fsf;
-%
+function fsf=create_fsf(varargin)
 % Populates FEAT fsf structure with default values
 %
+%   fsf=create_fsf(varargin);
+%
+% creates a FEAT fsf structure with default values, for feat v5.4 or v5.98.
+% default version is the latest supported version (v5.98), however, you
+% can specify the version by using the 'version' argument
+% 
+%   e.g. fsf = create_fsf('version',5.4)
+% 
+% INPUT
+%   varargin: key,value pairs to set given defaults
+%       'version' (default: 5.98) - possible values in [5.4 5.98]
+% 
 % See also write_fsf
-
+% 
 % 04/22/05 PJ
 
+for ii=1:2:length(varargin)
+  if ischar(varargin{ii})
+    switch varargin{ii}
+      case 'version'
+        vers = varargin{ii+1};
+      otherwise
+        warning('unknown argument %s',varargin{ii});       
+    end
+  end
+end
+
+if ~exist('vers','var') || ~any(ismember([5.4 5.98],vers))
+  vers = 5.98;
+  warning('version set to %d',vers);
+end
 
 % FEAT version number
-fsf.version=5.4;
+fsf.version=vers;
 
 % Analysis level
 % 1 : First-level analysis
@@ -22,12 +47,13 @@ fsf.level=1;
 % 1 : Pre-Stats
 % 3 : Pre-Stats + Stats
 % 2 :             Stats
+% % % % version 5.4
 % 6 :             Stats + Contrasts, Thresholding, Rendering
 % 4 :                     Contrasts, Thresholding, Rendering
+% % % % version 5.98
+% 6:              Stats + Post-Stats
+% 4:                      Post-Stats
 fsf.analysis=7;
-
-% Delay before starting (hours)
-fsf.delay=0;
 
 % Use relative filenames
 fsf.relative_yn=0;
@@ -202,9 +228,6 @@ fsf.reginitial_highres_search=90;
 % Degrees of Freedom for registration to initial structural
 fsf.reginitial_highres_dof=12;
 
-% Do nonlinear registration to initial structural?
-fsf.reginitial_highres_nonlinear_yn=0;
-
 % Registration to main structural
 fsf.reghighres_yn=0;
 
@@ -216,9 +239,6 @@ fsf.reghighres_search=90;
 
 % Degrees of Freedom for registration to main structural
 fsf.reghighres_dof=12;
-
-% Do nonlinear registration to main structural?
-fsf.reghighres_nonlinear_yn=0;
 
 % Registration to standard image?
 fsf.regstandard_yn=1;
@@ -271,3 +291,84 @@ fsf.conmask_mtx = [];
 
 % Do contrast masking at all?
 fsf.conmask1_1=0;
+
+switch vers
+  case 5.4
+      
+    % Delay before starting (hours)
+    fsf.delay=0;
+
+    % Do nonlinear registration to initial structural?
+    fsf.reginitial_highres_nonlinear_yn=0;
+
+    % Do nonlinear registration to main structural?
+    fsf.reghighres_nonlinear_yn=0;
+
+  case 5.98
+      
+    % Perfusion tag/control order
+    fsf.tagfirst=1;
+    
+    % Critical z for design efficiency calculation
+    fsf.critical_z = 5.3;
+    
+    % Noise level
+    fsf.noise = 66;
+    
+    % Noise AR(1) (temporal smoothness
+    fsf.noisear = 0.34;
+    
+    % EPI dwell time (ms)
+    fsf.dwell = 0.7;
+    
+    % EPI TE (ms)
+    fsf.te = 35;
+    
+    % Signal loss threshold
+    fsf.signallossthresh = 10;
+    
+    % Unwarp direction
+    fsf.unwarp_dir = 'y-';
+    
+    % Perfusion subtraction
+    fsf.perfsub_yn = 0;
+    
+    % Add motion parameters to model
+    % 0 : No
+    % 1 : Yes
+    fsf.motionevs = 0;
+    
+    % Robust outlier detection in FLAME?
+    fsf.robust_yn = 0;
+    
+    % additional parameter for Number of EVs
+    fsf.evs_vox = 0;
+    
+    % Create time series plots
+    fsf.tsplot_yn = 0;
+
+    % Control nonlinear warp field resolution
+    fsf.regstandard_nonlinear_warpres = 10;
+    
+    % Add confound EVs text file
+    fsf.confoundevs = 0;
+    
+    % Alternative example_func image (not derive from input 4D dataset)
+    fsf.alternative_example_func = '';
+    
+    % Alternative (to BETting) mask image
+    fsf.alternative_mask = '';
+    
+    % Initial structural space registration initialisation transform
+    fsf.init_initial_highres = '';
+    
+    % Structural space reigstration initialisation transform
+    fsf.init_highres = '';
+    
+    % Standard space reigstration initialisation transform
+    fsf.init_standard = '';
+    
+    % For full FEAT analysis: overwrite existing .feat output dir?
+    fsf.overwrite_yn = 0;
+    
+end

@@ -83,14 +83,14 @@ if isempty(strmatch(destfmt,tmpfmt,'exact'))
 end
 
 % Move the temporary output file to the destination output file
-unix_str = sprintf('mv %s %s', tmp{end},outfname);
+unix_str = sprintf('mv -f %s %s', tmp{end},outfname);
 if verbose, fprintf('%s\n', unix_str); end
 status = unix(unix_str);
 if status, error, end
  
 % If we are dealing with an image pair, make sure we move the .hdr also
 if any(strmatch(destfmt,{'.img'},'exact'))
-  unix_str = sprintf('mv %s %s', fullfile(tmppath, [tmpstub '.hdr']), fullfile(destpath,[deststub '.hdr']));
+  unix_str = sprintf('mv -f %s %s', fullfile(tmppath, [tmpstub '.hdr']), fullfile(destpath,[deststub '.hdr']));
   if verbose, fprintf('%s\n', unix_str); end
   status = unix(unix_str);
   if status, error, end
