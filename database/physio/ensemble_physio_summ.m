@@ -289,8 +289,8 @@ for idata = 1:length(indata)
         gsr_epochs = indata{idata};
         gecol = set_var_col_const(gsr_epochs.vars);
       case {'cardiac_epochs'}
-        card_epochs = indata{idata};
-        cecol = set_var_col_const(card_epochs.vars);
+        cardiac_epochs = indata{idata};
+        cecol = set_var_col_const(cardiac_epochs.vars);
     end
   end
 end
@@ -953,8 +953,8 @@ end % if EXTRACT_DATA
 if CALCULATE_STATS
 
   % get gsr data?
-  if exist('gsr_epoch','var')
-    gdata = gsr_epoch;
+  if exist('gsr_epochs','var')
+    gdata = gsr_epochs;
   elseif exist('gsre_idx','var')
     gdata = outdata.data{gsre_idx};
   else
@@ -962,8 +962,8 @@ if CALCULATE_STATS
   end
   
   % get cardiac data?
-  if exist('cardiac_epoch','var')
-    cdata = cardiac_epoch;
+  if exist('cardiac_epochs','var')
+    cdata = cardiac_epochs;
   elseif exist('carde_idx','var')
     cdata = outdata.data{carde_idx};
   else
@@ -975,6 +975,7 @@ if CALCULATE_STATS
     % add response information
     ridxs = ~ismember(gdata.vars,xvars);
     rvars = gdata.vars{ridxs};
+    if ~iscell(rvars), rvars = {rvars}; end
 
     % initialize a gsr summary data output structure
     outdata.vars = [outdata.vars 'gsr_summ'];
@@ -1011,15 +1012,23 @@ if CALCULATE_STATS
     % calculate stats for each epoch
     for ie=1:ng
       sig   = gdata.data{gcol.signal}{ie};
-      srate = gdata.data{gcol.srate}{ie};
+      srate = gdata.data{gcol.srate}(ie);
       pidxs = gdata.data{gcol.peakidxs}{ie};
-      hghts = peak_heights('signal',sig,'params',scr.pk.peak_heights,...
-          'peakIdxs',pidxs);
+      if iscell(pidxs), pidxs = pidxs{1}; end
+      if isempty(pidxs)
+        pidxs = NaN;
+        hghts = NaN;
+      else
+        hghts = peak_heights('signal',sig,'params',scr.pk.peak_heights,...
+            'peakIdxs',pidxs);
+      end
+      
+      baseline_end = baseline*srate;
 
       % calculate integral within integral window defined by
       % int_begin and int_end
       startint = baseline_end + scr.int_begin*srate + 1;
-      endint   = baseline_end + scr.int_end*srate + 1;
+      endint   = min([(baseline_end + scr.int_end*srate) length(sig)]);
 
       integral = trapz(sig(startint:endint));
       mscl = mean(sig(startint:endint));
@@ -1030,10 +1039,10 @@ if CALCULATE_STATS
       outdata.data{gsr_idx} = ensemble_add_data_struct_row(...
           outdata.data{gsr_idx},...
           'subject_id',gdata.data{gcol.subject_id}{ie},...
-          'session',gdata.data{gcol.session}{ie},...
-          'ensemble_id',gdata.data{gcol.ensemble_id}{ie},...
-          'run',gdata.data{gcol.run}{ie},...
-          'trial',gdata.data{gcol.trial}{ie},...
+          'session',gdata.data{gcol.session}(ie),...
+          'ensemble_id',gdata.data{gcol.ensemble_id}(ie),...
+          'run',gdata.data{gcol.run}(ie),...
+          'trial',gdata.data{gcol.trial}(ie),...
           'integral',integral(:),'scl',mscl(:),'ttl_integral',...
           ttl_int(:),'ttl_scl',ttlmscl(:),...
           'npeaks',length(pidxs),'mean_peak_height',mean(hghts),...
@@ -1045,8 +1054,8 @@ if CALCULATE_STATS
     % pass on response information
     for ir = 1:length(rvars)
       % get column indices
-      ri = gcol.(rvars(ir));
-      ro = gsr_cols.(rvars(ir));
+      ri = gcol.(rvars{ir});
+      ro = gsr_cols.(rvars{ir});
 
       % save into outdata
       outdata.data{gsr_idx}.data{ro} = gdata.data{ri};
@@ -1059,6 +1068,7 @@ if CALCULATE_STATS
     % add response information
     ridxs = ~ismember(cdata.vars,xvars);
     rvars = cdata.vars{ridxs};
+    if ~iscell(rvars), rvars = {rvars}; end
 
     % initialize a cardiac summary data output structure
     outdata.vars = [outdata.vars 'cardiac_summ'];
@@ -1080,15 +1090,17 @@ if CALCULATE_STATS
       outdata.data{card_idx}.data{card_cols.(rvars{in})} = {};
     end
 
-    % initialize gsr vars
+    % initialize cardiac vars
     ccol = set_var_col_const(cdata.vars);
     nc = length(cdata.data{1});
     
     % iterate over epochs
     for iep=1:nc
-%       sig   = cdata.data{ccol.signal}{ie};
-      srate = cdata.data{ccol.srate}{ie};
+      iep
+      srate = cdata.data{ccol.srate}(ie);
       pidxs = cdata.data{ccol.peakidxs}{ie};
+      if iscell(pidxs), pidxs = pidxs{1}; end
+      if isempty(pidxs), pidxs = nan; end
 
       dtimes = diff(pidxs);
 
@@ -1108,10 +1120,10 @@ if CALCULATE_STATS
       outdata.data{card_idx} = ensemble_add_data_struct_row(...
           outdata.data{card_idx},...
           'subject_id', cdata.data{ccol.subject_id}{ie},...
-          'session',    cdata.data{ccol.session}{ie},...
-          'ensemble_id',cdata.data{ccol.ensemble_id}{ie},...
-          'run',        cdata.data{ccol.run}{ie},...
-          'trial',      cdata.data{ccol.trial}{ie},...
+          'session',    cdata.data{ccol.session}(ie),...
+          'ensemble_id',cdata.data{ccol.ensemble_id}(ie),...
+          'run',        cdata.data{ccol.run}(ie),...
+          'trial',      cdata.data{ccol.trial}(ie),...
           'heart_rate',hr_bpm,'hr_variance',hr_var,'hr_slope',hr_slope);
 
     end % for iep=1:nc
@@ -1120,8 +1132,8 @@ if CALCULATE_STATS
     % pass on response information
     for ir = 1:length(rvars)
       % get column indices
-      ri = ccol.(rvars(ir));
-      ro = card_cols.(rvars(ir));
+      ri = ccol.(rvars{ir});
+      ro = card_cols.(rvars{ir});
 
       % save into outdata
       outdata.data{card_idx}.data{ro} = cdata.data{ri};
@@ -1130,39 +1142,57 @@ if CALCULATE_STATS
   end % if exist('cdata
 
   if SAVE_DATA
-    pfilt = struct();
-    pfilt.include.all.subject_id = {subid};
-    pfilt.include.all.path_type = {'physio_outdir'};
-    lpathdata = ensemble_filter(pathdata,pfilt);
-    if ~isempty(lpathdata.data{1})
-      physdir = lpathdata.data{pcol.path}{1};
-      check_dir(physdir);
+    for ic=1:nchan
+      c = channels{ic};
+      % get channel idxs
+      switch c
+        case {'gsr','scr'}
+          oidx = gsr_idx;
+          ocol = gsr_cols;
+        case {'cardiac','pulse'}
+          oidx = card_idx;
+          ocol = card_cols;
+        otherwise
+          warning('unknown channel type (%s)\n',c);
+      end % switch c
 
-      for ic=1:nchan
-        c = channels{ic};
-        % get channel idxs
-        switch c
-          case {'gsr','scr'}
-            oidx = gsr_idx;
-          case {'cardiac','pulse'}
-            oidx = card_idx;
-          otherwise
-            warning('unknown channel type (%s)\n',c);
-        end % switch c
+      % find unique subjects in calculated data
+      us = unique(outdata.data{oidx}.data{ocol.subject_id});
+      ns = length(us);
+      
+      % iterate over subjects
+      for is=1:ns
+        subid = us{is};
         
-        xsp.export = export;
-        xsp.export.fname = fullfile(physdir,sprintf('%s_%s_export.txt',...
-            subid,outdata.data{oidx}.type));
-        xsp.sas = sas;
-        xsp.sas.fname = fullfile(physdir,sprintf('%s_%s_export.sas',...
-            subid,outdata.data{oidx}.type));
-        xsp.sas.libname=sprintf('s%s_%s',subid,outdata.data{oidx}.type);
-        ensemble_export_sastxt(outdata.data{oidx},xsp);
-      end
-    else
-      warning(['could not find physio_outdir in pathdata, not saving '...
-          'data for subject %s'],subid);
-    end
+        % get output data for this subject
+        pfilt = struct();
+        pfilt.include.all.subject_id = {subid};
+        odata = ensemble_filter(outdata.data{oidx},pfilt);
+        
+        % get path data for this subject
+        pfilt.include.all.path_type = {'physio_outdir'};
+        lpathdata = ensemble_filter(pathdata,pfilt);
+        if isempty(lpathdata.data{1})
+          warning(['could not find physio_outdir in pathdata, not '...
+              'saving data for subject %s'],subid);
+        elseif isempty(odata.data{1})
+          warning('could not find output data for subject %s, SKIPPING',...
+              subid);
+        else
+          physdir = lpathdata.data{pcol.path}{1};
+          check_dir(physdir);
+
+          xsp.export = export;
+          xsp.export.fname = fullfile(physdir,...
+              sprintf('%s_%s_export.txt',subid,odata.type));
+          xsp.sas = sas;
+          xsp.sas.fname = fullfile(physdir,sprintf('%s_%s_export.sas',...
+              subid,odata.type));
+          xsp.sas.libname=sprintf('s%s_%s',subid,odata.type);
+          ensemble_export_sastxt(odata,xsp);
+        end % if ~isempty(lpathdata.data{1
+      end % for is=1:ns
+    end % for ic=1:nchan
   end % if SAVE_DATA
 
 end % if CALCULATE_STATS

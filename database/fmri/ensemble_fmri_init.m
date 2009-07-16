@@ -735,7 +735,7 @@ for isub=1:nsub_proc
 
                 new_fname = fullfile(fpath,sprintf('%s.nii', fstub));
                 % Move the tmp file in place of the original image file
-                unix_str = sprintf('mv %s %s', tmp_file, new_fname);
+                unix_str = sprintf('mv -f %s %s', tmp_file, new_fname);
                 msg = sprintf('%s\n', unix_str);
                 r = update_report(r,msg);
                 status = unix(unix_str);
