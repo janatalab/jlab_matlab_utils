@@ -1,4 +1,6 @@
 function attrib_id = mysql_stimfld2attrib(varargin)
+% Associates stimuli with an attribute
+%
 % attrib_id = mysql_stimfld2attrib(varargin)
 %
 % Input arguments are tag/value pairs
@@ -10,6 +12,7 @@ function attrib_id = mysql_stimfld2attrib(varargin)
 % 'conn_id' - mysql connection ID
 
 % 03/31/09 PJ
+% 07/18/09 PJ - extracted portion of code into mysql_check_attribute
 
 % Parse the input arguments
 narg = length(varargin);
@@ -30,27 +33,16 @@ end
 
 % Check for connection to database
 try conn_id(1);
+  tmp_conn_id = 0;
 catch   
   mysql_make_conn;
   conn_id = 0;
+  tmp_conn_id = 1;
 end
 
-% Check to see if the attribute tag already exists
-mysql_str = sprintf('SELECT attribute_id FROM attribute WHERE name="%s";', attrib_tag);
-[attrib_id] = mysql(conn_id, mysql_str);
-
-if isempty(attrib_id)
-  % Create the attribute if necessary
-  mysql_str = sprintf(['INSERT INTO attribute (name,class) ' ...
-	'VALUES ("%s","stim_set");'], attrib_tag);
-  mysql(conn_id,mysql_str);
-
-  % Get the attribute ID
-  mysql_str = sprintf('SELECT attribute_id FROM attribute WHERE name="%s";', attrib_tag);
-  [attrib_id] = mysql(conn_id, mysql_str);
-else
-  fprintf('Found attribute (%s), ID=%d\n', attrib_tag, attrib_id);
-end
+create_attrib = true;
+params.conn_id = conn_id;
+attrib_id = mysql_check_attribute(attrib_tag, create_attrib, params);
 
 %
 % Get the list of stimulus IDs that correspond to the current stimulus set
@@ -90,6 +82,6 @@ else
 end
 
 % Close connection if necessary
-if ~conn_id
+if tmp_conn_id
   mysql(conn_id,'close');
 end

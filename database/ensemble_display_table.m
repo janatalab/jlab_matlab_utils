@@ -12,6 +12,7 @@ function ensemble_display_table(data_st,params)
 % 05/01/2007 Petr Janata
 % 05/04/2007 PJ - fixed handling of cell arrays of strings that are passed
 %                 in as a "single" value
+% 07/24/2009 PJ - added optional replacement of NaNs
 
 % Check integrity of data struct
 
@@ -35,7 +36,10 @@ end
 fid = ensemble_init_fid(params);
 
 % Print some header information
-fprintf(fid,'\nTable generated on: %s\n\n', datestr(datenum(now),0));
+try add_datestamp = params.add_datestamp; catch add_datestamp = false; end
+if add_datestamp
+  fprintf(fid,'\nTable generated on: %s\n\n', datestr(datenum(now),0));
+end
 
 % Print the column names
 colnames = data_st.data{cols.column_labels};
@@ -52,6 +56,12 @@ for icol = 1:ncols
   end
 end
 
+% See whether we are going to replace NaNs
+try replace_nan = params.replace_nan; catch replace_nan = false; end
+if replace_nan
+  try nan_str = params.nan_str; catch nan_str = '.'; end
+end
+
 % Print rows
 nrows = length(data_st.data{cols.data}{1});
 for irow = 1:nrows
@@ -65,6 +75,10 @@ for irow = 1:nrows
       end
     else
       data_val = data_st.data{cols.data}{icol}(irow);
+      if isnan(data_val) && replace_nan
+        data_val = nan_str;
+        format_str = '%s';
+      end
     end
     fprintf(fid, format_str, data_val);
     if icol < ncols, fprintf(fid,'\t');
