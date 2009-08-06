@@ -43,9 +43,6 @@ r.report_on_fly = 1;
 load new_seismic;
 colormap(new_seismic);
 
-% init EEGLAB
-eeglab('initpaths');
-
 % Parse out the input data
 for idata = 1:length(indata)
   if isfield(indata{idata},'type')
@@ -128,6 +125,9 @@ ecdparams.outDataName = 'physio_data';
 
 try SIG_CHECK = defs.SIG_CHECK; catch SIG_CHECK = 1; end
 try LINK2FMRI = defs.LINK2FMRI; catch LINK2FMRI = 0; end
+
+% init EEGLAB
+eeglab('initpaths');
 
 %
 % START OF THE SUBJECT LOOP

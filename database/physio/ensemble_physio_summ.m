@@ -18,8 +18,8 @@ function outdata = ensemble_physio_summ(indata,defs)
 % artifacts from the data.
 % 
 % NOTE: this script assumes that pre-processed physio data have been saved
-% into eeglab data structures, and that presentation log files are
-% available to guide signal epoching
+% into eeglab .set files, and that presentation log files are available to
+% guide signal epoching
 % 
 % REQUIRES
 % 
@@ -42,10 +42,10 @@ function outdata = ensemble_physio_summ(indata,defs)
 %   from locations identified in 'physio_paths', for those subjects that
 %   exist in 'sinfo'. By default, ensemble_physio (which generates
 %   physio_paths) generates a non-filtered raw data file for each
-%   subject/session/run, and saves these to physio_paths, but given
+%   subject/session/run, and saves these to physio_paths, and given
 %   filtering criteria, also saves a filtered data file to disk in the same
 %   location as the raw data file, and saves the path to the filtered data
-%   file into physio paths, with '_filtered' appended to the end of the
+%   file into physio_paths, with '_filtered' appended to the end of the
 %   filename, before the extension. If the following parameter is set to 1,
 %   ensemble_physio_summ will search for and attempt to load the
 %   filtered data file as opposed to the raw data file. If set to 0, it
@@ -66,7 +66,7 @@ function outdata = ensemble_physio_summ(indata,defs)
 %       'filter', this is treated as a filter criteria for the included
 %       presentation data, to filter for events to be treated as epoch
 %       onsets. If a numeric vector, treated as a vector of epochs onsets
-%       in seconds.
+%       in seconds. If zero, no epoching will be conducted.
 %   defs.physio_summ.epoch_end (default 0) - if single-length numeric, this
 %       is treated as the epoch length in seconds. If a numeric vector of
 %       the same length as epoch_start or the onset vector returned by
@@ -80,7 +80,13 @@ function outdata = ensemble_physio_summ(indata,defs)
 %       epoch length will be used if a vector is found as the result of a
 %       filter. If a filter criterion is used and the field 'minimum_end'
 %       exists and is set to = 1, the minimum epoch time (offset-onset)
-%       will be used for all epochs.
+%       will be used for all epochs. If this variable is set to 0 and
+%       defs.physio_summ.epoch_start is not set to 0, epoch lengths will be
+%       set to the maximum interval between epoch starts. NOTE: this will
+%       cause overlapping signal between some epochs where there is a
+%       variance in the inter-start interval. If this is a problem, you
+%       should set 'minimum_end' = 1, so that the epoch length gets set to
+%       the minimum inter-start interval.
 %   defs.physio_summ.baseline (default 2) - pre-epoch baseline to be added to
 %       epoch when calculating and extracting epochs. this value is assumed
 %       to be in 'seconds'.
@@ -228,6 +234,7 @@ function outdata = ensemble_physio_summ(indata,defs)
 %   defs.physio_summ.SAVE_DATA (default 0)
 %   defs.physio_summ.export (default 0)
 %   defs.physio_summ.sas (default 0)
+%   defs.physio_summ.export_stub (default '')
 % 
 % FIXME - should be re-written, to include a mechanism by which channels to
 % analyze are identified by EEG.chanlocs name as sub-fields of the params
@@ -369,6 +376,7 @@ try baseline = ps.baseline; catch baseline = 2; end % in seconds
 try use_filtered = ps.use_filtered; catch use_filtered = 0; end
 try ep_per_fig = ps.ep_per_fig; catch ep_per_fig = 3; end
 try pargs = ps.pargs; catch pargs = {'-dpsc','-append'}; end
+try export_stub = ps.export_stub; catch export_stub = ''; end
 
 % check required datasets, based upon steps taken
 if EXTRACT_DATA
@@ -401,11 +409,13 @@ if scr.int_begin > scr.int_end
 end
 
 % get pulse analysis parameters
-try pulse.pk.thresh = ps.pulse.find_peaks.thresh;
-catch pulse.pk.thresh = 0.5; end
+try pulse.pk = ps.pulse.find_peaks;
+catch pulse.pk.thresh = 0.5; pulse.pk.peak_height_window = 0.3; end
 
 % get types of responses to include in output data
-if isstruct(responses)
+if isstruct(responses) && (isnumeric(epoch_start) && ...
+        (length(epoch_start) < 1 || epoch_start)) || ...
+        (isstruct(epoch_start) && isfield(epoch_start,'filter'))
   resp_names = {responses.type};
   nresp = length(resp_names);
 else
@@ -576,7 +586,9 @@ if EXTRACT_DATA
         EEG = pop_loadset('filename',sprintf('%s%s',fn,fx),'filepath',fp);
       
         % set up epochs using presentation data
-        if ~isempty(epoch_start) && ~isempty(epoch_end)
+        if (isnumeric(epoch_start) && (length(epoch_start) > 1 || ...
+                epoch_start)) || ...
+                (isstruct(epoch_start) && isfield(epoch_start,'filter'))
 
           %%%% find beginnings of epochs
           % FIXME: add ability to handle multiple epoch definitions, for
@@ -688,177 +700,175 @@ if EXTRACT_DATA
                 subid,isess,rnum);
           end
           
-          % set sampling rate
-          scr.pk.Fs = EEG.srate;
-          
-          % fill out an ns-length cell and array for session/run info
-          lsubids = cell(ns,1);
-          for iep=1:ns, lsubids{iep} = subid; end
-          lsess = repmat(isess,ns,1);
-          lrun = repmat(rnum,ns,1);
-          lesess = repmat(sess.ensemble_id,ns,1);
+        else
+          ns = 1;
+        end % if (isnumeric(epoch_start
         
-          % set up a figure file for tsub/sess/run
-          if GRAPH_EPOCHS && SAVE_EPOCHS
-            figfname = fullfile(fp,sprintf('%s_epochs.ps',fn));
+        % set sampling rate
+        scr.pk.Fs = EEG.srate;
+        pulse.pk.Fs = EEG.srate;
+
+        % set up a figure file for tsub/sess/run
+        if GRAPH_EPOCHS && SAVE_EPOCHS
+          figfname = fullfile(fp,sprintf('%s_epochs.ps',fn));
+        end
+        
+        for ic=1:nchan
+          c = channels{ic};
+
+          baseline_end = (baseline*EEG.srate)+1; % next sample after end of baseline
+
+          % extract channel location
+          cidx = strmatch(c,{EEG.chanlocs.labels});
+          if isempty(cidx)
+            warning(['no channel label found for %s, skipping for '...
+                'sub %s, session %d, run %d'],c,subid,isess,rnum);
+            continue
           end
-        
-          for ic=1:nchan
-            c = channels{ic};
 
-            baseline_end = (baseline*EEG.srate)+1; % next sample after end of baseline
-
-            % extract channel location
-            cidx = strmatch(c,{EEG.chanlocs.labels});
-            if isempty(cidx)
-              warning(['no channel label found for %s, skipping for '...
-                  'sub %s, session %d, run %d'],c,subid,isess,rnum);
-              continue
-            end
-
-            switch c
-              case {'gsr','scr'}
+          switch c
+            case {'gsr','scr'}
+            
+              % extract all epochs for this channel
+              epochs = squeeze(EEG.data(cidx,:,:));
               
-                % extract all epochs for this channel
-                epochs = squeeze(EEG.data(cidx,:,:));
+              sepoch = size(epochs);
+              if (sepoch(1) == ns && sepoch(2) ~= ns)
+                epochs = epochs';
+                sepoch = size(epochs);
+              end
 
-                % subtract baseline for each epoch
-                for iep=1:ns
-                  mbase = mean(epochs(1:(baseline*EEG.srate),iep));
-                  pksig = epochs(:,iep) - mbase;
+              % subtract baseline for each epoch
+              for iep=1:ns
+                mbase = mean(epochs(1:(baseline*EEG.srate),iep));
+                pksig = epochs(:,iep) - mbase;
                 
-                  % get peaks
-                  [pidxs,heights,bidxs] = find_peaks(pksig,scr.pk);
+                % get peaks
+                [pidxs,heights,bidxs] = find_peaks(pksig,scr.pk);
 
-                  % remove peaks whose troughs occur before 1 sec after
-                  % stimulus onset
-                  rmbase = bidxs < (baseline+1)*EEG.srate;
-                  pidxs(rmbase) = [];
-                  heights(rmbase) = [];
-                  bidxs(rmbase) = [];
+                % remove peaks whose troughs occur before 1 sec after
+                % stimulus onset
+                rmbase = bidxs < (baseline+1)*EEG.srate;
+                pidxs(rmbase) = [];
+                heights(rmbase) = [];
+                bidxs(rmbase) = [];
 
-                  % graph??
-                  if GRAPH_EPOCHS
-                    m = mod(iep-1,ep_per_fig);
-                    if m == 0, figure(); end
-                    subplot(ep_per_fig,1,m+1);
-                    plot(pksig);
-                    title(sprintf(['%s, sess %d, run %d, signal %s, epoch'...
-                        ' %d'],subid,isess,rnum,c,iep));
-                    hold on;
-                    for ipk = 1:length(pidxs)
-                      plot(pidxs(ipk),pksig(pidxs(ipk)),'g*');
-                    end
-                    hold off;
-                  
-                    if SAVE_EPOCHS && (m+1) == ep_per_fig
-                      % save graphed epochs to a file
-                      print(pargs{:},figfname);
-                    end
+                % graph??
+                if GRAPH_EPOCHS
+                  m = mod(iep-1,ep_per_fig);
+                  if m == 0, figure(); end
+                  subplot(ep_per_fig,1,m+1);
+                  plot(pksig);
+                  title(sprintf(['%s, sess %d, run %d, signal %s, epoch'...
+                      ' %d'],subid,isess,rnum,c,iep));
+                  hold on;
+                  for ipk = 1:length(pidxs)
+                    plot(pidxs(ipk),pksig(pidxs(ipk)),'g*');
                   end
+                  hold off;
+                  
+                  if SAVE_EPOCHS && (m+1) == ep_per_fig
+                    % save graphed epochs to a file
+                    print(pargs{:},figfname);
+                  end
+                end
                 
-                  % save signal out to gsr_epochs
-                  outdata.data{gsre_idx} = ensemble_add_data_struct_row(...
+                % save signal out to gsr_epochs
+                outdata.data{gsre_idx} = ensemble_add_data_struct_row(...
                     outdata.data{gsre_idx},'subject_id',subid,'session',...
                     isess,'ensemble_id',sess.ensemble_id,'run',rnum,...
                     'trial',iep,'signal',{pksig},'srate',EEG.srate,...
                     'peakidxs',pidxs);
-                end % for iep=1:ns
+              end % for iep=1:ns
               
-                % save final figure to file if not already saved
-                if SAVE_EPOCHS && (m+1) ~= ep_per_fig
-                  print(pargs{:},figfname);
-                end
+              % save final figure to file if not already saved
+              if SAVE_EPOCHS && (m+1) ~= ep_per_fig
+                print(pargs{:},figfname);
+              end
 
-              case {'cardiac','pulse'}
+            case {'cardiac','pulse'}
                 
-                % iterate over epochs
-                for iep=1:ns
-                  % find peaks
-                  pksig = EEG.data(cidx,baseline_end+1:end,iep);
-                  pidxs = find_peaks(pksig,pulse.pk);
+              % iterate over epochs
+              for iep=1:ns
+                % find peaks
+                pksig = EEG.data(cidx,baseline_end+1:end,iep);
+                pidxs = find_peaks(pksig,pulse.pk);
 
-                  % save signal out to cardiac_epochs
-                  outdata.data{carde_idx} = ensemble_add_data_struct_row(...
+                % save signal out to cardiac_epochs
+                outdata.data{carde_idx} = ensemble_add_data_struct_row(...
                     outdata.data{carde_idx},'subject_id',subid,'session',...
                     isess,'ensemble_id',sess.ensemble_id,'run',rnum,...
                     'trial',iep,'signal',{pksig'},'srate',EEG.srate,...
                     'peakidxs',pidxs);
 
-                  % graph??
-                  if GRAPH_EPOCHS
-                    m = mod(iep-1,ep_per_fig);
-                    if m == 0, figure(); end
-                    subplot(ep_per_fig,1,m+1);
-                    plot(pksig);
-                    title(sprintf(['%s, sess %d, run %d, signal %s, epoch'...
-                        ' %d'],subid,isess,rnum,c,iep));
-                    hold on;
-                    for ipk = 1:length(pidxs)
-                      plot(pidxs(ipk),pksig(pidxs(ipk)),'g*');
-                    end
-                    hold off;
-
-                    if SAVE_EPOCHS && (m+1) == ep_per_fig
-                      % save graphed epochs to a file
-                      print(pargs{:},figfname);
-                    end
+                % graph??
+                if GRAPH_EPOCHS
+                  m = mod(iep-1,ep_per_fig);
+                  if m == 0, figure(); end
+                  subplot(ep_per_fig,1,m+1);
+                  plot(pksig);
+                  title(sprintf(['%s, sess %d, run %d, signal %s, epoch'...
+                      ' %d'],subid,isess,rnum,c,iep));
+                  hold on;
+                  for ipk = 1:length(pidxs)
+                    plot(pidxs(ipk),pksig(pidxs(ipk)),'g*');
                   end
-                end % for iep=1:ns
-              
-                % save final figure to file if not already saved
-                if SAVE_EPOCHS && (m+1) ~= ep_per_fig
-                  print(pargs{:},figfname);
+                  hold off;
+
+                  if SAVE_EPOCHS && (m+1) == ep_per_fig
+                    % save graphed epochs to a file
+                    print(pargs{:},figfname);
+                  end
                 end
-
-              otherwise
-                warning('unknown channel %s',c);
+              end % for iep=1:ns
               
-            end % switch c
+              % save final figure to file if not already saved
+              if SAVE_EPOCHS && (m+1) ~= ep_per_fig
+                print(pargs{:},figfname);
+              end
 
-            % add response information
-            for iresp = 1:length(resp_names)
-              % get all responses
-              rname = resp_names{iresp};
-              respdata = lresp{iresp};
-              nrespd = length(respdata);
-              % check against length of events (ns)
-              if nrespd < ns
-                warning(['data for response %s of different length (%d) '...
-                    'than number of epochs (%d), these are not being '...
-                    'added to the output\n'],rname,nrespd,ns);
+            otherwise
+              warning('unknown channel %s',c);
+              
+          end % switch c
+
+          % add response information
+          for iresp = 1:length(resp_names)
+            % get all responses
+            rname = resp_names{iresp};
+            respdata = lresp{iresp};
+            nrespd = length(respdata);
+            % check against length of events (ns)
+            if nrespd < ns
+              warning(['data for response %s of different length (%d) '...
+                  'than number of epochs (%d), these are not being '...
+                  'added to the output\n'],rname,nrespd,ns);
+              continue
+            elseif ns < nrespd
+              warning(['more responses (%d) than epochs (%d), assume '...
+                  'that epochs were dropped from the end, and dropping '...
+                  'extra responses'],nrespd,ns);
+              respdata(ns+1:end) = [];
+            end
+
+            % get indices for this channel and this response
+            switch c
+              case {'gsr','scr'}
+                oidx = gsre_idx;
+                ridx = gsre_cols.(rname);
+              case {'cardiac','pulse'}
+                oidx = carde_idx;
+                ridx = carde_cols.(rname);
+              otherwise
+                warning('unknown channel type (%s)\n',c);
                 continue
-              elseif ns < nrespd
-                warning(['more responses (%d) than epochs (%d), assume '...
-                    'that epochs were dropped from the end, and dropping '...
-                    'extra responses'],nrespd,ns);
-                respdata(ns+1:end) = [];
-              end
+            end
 
-              % get indices for this channel and this response
-              switch c
-                case {'gsr','scr'}
-                  oidx = gsre_idx;
-                  ridx = gsre_cols.(rname);
-                case {'cardiac','pulse'}
-                  oidx = carde_idx;
-                  ridx = carde_cols.(rname);
-                otherwise
-                  warning('unknown channel type (%s)\n',c);
-                  continue
-              end
-
-              % save into outdata
-              outdata.data{oidx}.data{ridx}(end-ns+1:end) = respdata;
+            % save into outdata
+            outdata.data{oidx}.data{ridx}(end-ns+1:end) = respdata;
             
-            end % for iresp=1:length(resp_names
-          end % for ic=1:nchan
-        else
-          
-            warning(['no epoch start or end identified ... we could '...
-                'treat the entire signal as one big epoch, but this '...
-                'has not been coded yet']);
-        end % if isstruct(epoch_start
+          end % for iresp=1:length(resp_names
+        end % for ic=1:nchan
       end % for irun=1:
     end % for isess = 1:
 
@@ -880,7 +890,7 @@ if EXTRACT_DATA
         figfname = fullfile(physdir,sprintf('%s_epochs_by_resp.ps',subid));
         % graph epochs by response type
         for iresp=1:length(resp_names)
-          r = resp_names{iresp};
+          rname = resp_names{iresp};
           for ic=1:nchan
             c = channels{ic};
             % get channel and response indexes
@@ -901,7 +911,7 @@ if EXTRACT_DATA
             % get mask matrix
             if iscell(outdata.data{eidx}.data{ridx}) && ...
                     all(cellfun(@isempty,outdata.data{eidx}.data{ridx}))
-              warning('no responses for response_name %s\n',r);
+              warning('no responses for response_name %s\n',rname);
               continue
             end
 
@@ -974,7 +984,7 @@ if CALCULATE_STATS
       
     % add response information
     ridxs = ~ismember(gdata.vars,xvars);
-    rvars = gdata.vars{ridxs};
+    rvars = {gdata.vars{ridxs}};
     if ~iscell(rvars), rvars = {rvars}; end
 
     % initialize a gsr summary data output structure
@@ -1015,13 +1025,27 @@ if CALCULATE_STATS
       srate = gdata.data{gcol.srate}(ie);
       pidxs = gdata.data{gcol.peakidxs}{ie};
       if iscell(pidxs), pidxs = pidxs{1}; end
+      if ~isempty(epoch_end) && isnumeric(epoch_end)
+        end_samp = epoch_end*srate;
+        sig = sig(1:end_samp);
+        pidxs(pidxs > end_samp) = [];
+      end
       if isempty(pidxs)
-        pidxs = NaN;
-        hghts = NaN;
+        pidxs = [];
+        hghts = [];
+        mpkhght = NaN;
+        pkhghtv = NaN;
+        fpktime = NaN;
+        fpkhght = NaN;
       else
         hghts = peak_heights('signal',sig,'params',scr.pk.peak_heights,...
             'peakIdxs',pidxs);
+        mpkhght = mean(hghts);
+        pkhghtv = var(hghts);
+        fpktime = pidxs(1)/srate;
+        fpkhght = hghts(1);
       end
+      npeaks = length(pidxs);
       
       baseline_end = baseline*srate;
 
@@ -1045,9 +1069,9 @@ if CALCULATE_STATS
           'trial',gdata.data{gcol.trial}(ie),...
           'integral',integral(:),'scl',mscl(:),'ttl_integral',...
           ttl_int(:),'ttl_scl',ttlmscl(:),...
-          'npeaks',length(pidxs),'mean_peak_height',mean(hghts),...
-          'peak_height_variance',var(hghts),...
-          'first_peak_time',pidxs(1)/srate,'first_peak_height',hghts(1));
+          'npeaks',npeaks,'mean_peak_height',mpkhght,...
+          'peak_height_variance',pkhghtv,...
+          'first_peak_time',fpktime,'first_peak_height',fpkhght);
 
     end % for ie=1:ng
     
@@ -1067,7 +1091,7 @@ if CALCULATE_STATS
       
     % add response information
     ridxs = ~ismember(cdata.vars,xvars);
-    rvars = cdata.vars{ridxs};
+    rvars = {cdata.vars{ridxs}};
     if ~iscell(rvars), rvars = {rvars}; end
 
     % initialize a cardiac summary data output structure
@@ -1096,10 +1120,14 @@ if CALCULATE_STATS
     
     % iterate over epochs
     for iep=1:nc
-      iep
-      srate = cdata.data{ccol.srate}(ie);
-      pidxs = cdata.data{ccol.peakidxs}{ie};
+      srate = cdata.data{ccol.srate}(iep);
+      pidxs = cdata.data{ccol.peakidxs}{iep};
       if iscell(pidxs), pidxs = pidxs{1}; end
+      if ~isempty(epoch_end) && isnumeric(epoch_end)
+        end_samp = epoch_end*srate;
+        sig = sig(1:end_samp);
+        pidxs(pidxs > end_samp) = [];
+      end
       if isempty(pidxs), pidxs = nan; end
 
       dtimes = diff(pidxs);
@@ -1119,11 +1147,11 @@ if CALCULATE_STATS
       % save to outdata
       outdata.data{card_idx} = ensemble_add_data_struct_row(...
           outdata.data{card_idx},...
-          'subject_id', cdata.data{ccol.subject_id}{ie},...
-          'session',    cdata.data{ccol.session}(ie),...
-          'ensemble_id',cdata.data{ccol.ensemble_id}(ie),...
-          'run',        cdata.data{ccol.run}(ie),...
-          'trial',      cdata.data{ccol.trial}(ie),...
+          'subject_id', cdata.data{ccol.subject_id}{iep},...
+          'session',    cdata.data{ccol.session}(iep),...
+          'ensemble_id',cdata.data{ccol.ensemble_id}(iep),...
+          'run',        cdata.data{ccol.run}(iep),...
+          'trial',      cdata.data{ccol.trial}(iep),...
           'heart_rate',hr_bpm,'hr_variance',hr_var,'hr_slope',hr_slope);
 
     end % for iep=1:nc
@@ -1184,11 +1212,11 @@ if CALCULATE_STATS
 
           xsp.export = export;
           xsp.export.fname = fullfile(physdir,...
-              sprintf('%s_%s_export.txt',subid,odata.type));
+              sprintf('%s_%s_%sexport.txt',subid,odata.type,export_stub));
           xsp.sas = sas;
-          xsp.sas.fname = fullfile(physdir,sprintf('%s_%s_export.sas',...
-              subid,odata.type));
-          xsp.sas.libname=sprintf('s%s_%s',subid,odata.type);
+          xsp.sas.fname = fullfile(physdir,sprintf('%s_%s_%sexport.sas',...
+              subid,odata.type,export_stub));
+          xsp.sas.libname=sprintf('s%s_%s%s',subid,odata.type,export_stub);
           ensemble_export_sastxt(odata,xsp);
         end % if ~isempty(lpathdata.data{1
       end % for is=1:ns

@@ -23,6 +23,7 @@ function outdata = ensemble_fmri_make4Dnifti(indata,defs)
 %   defs.make4Dnifti.CONCAT = {by_subject|by_session|by_run|all(default)}
 %   defs.make4Dnifti.bet_params = string of parameters to send to bet ...
 %       default is '-m -f 0.4'
+%   defs.make4Dnifti.tmpdir = path to directory to place temporary files
 % 
 % RETURNS
 %   4D nifti files in 'epi'
@@ -190,6 +191,16 @@ if isfield(defs,'make4Dnifti')
   end
 end
 
+%%% where to store temporary files?
+if isfield(defs,'make4Dnifti') && isfield(defs.make4Dnifti,'tmpdir') ...
+        && ischar(defs.make4Dnifti.tmpdir) ...
+        && ~isempty(defs.make4Dnifti.tmpdir)
+  check_dir(defs.make4Dnifti.tmpdir);
+  tmpstub = fullfile(defs.make4Dnifti.tmpdir,'tmp_make4Dnifti');
+else
+  tmpstub = 'tmp_make4Dnifti';
+end
+
 %%%% temporary ... must code for this
 if ~isempty(strmatch(CONCAT,{'by_subject','all'}))
   error('all/by_subject concatenation not yet supported');
@@ -316,22 +327,22 @@ for isub=1:nsub_proc
       
       % calculate z-score
       zfname = fullfile(outpath,sprintf('zscore_run%d',lrun));
-      fstr = sprintf('fslmaths %s -sub %s tmp',outfname,meanfname);
+      fstr = sprintf('fslmaths %s -sub %s %s',outfname,meanfname,tmpstub);
       status = unix(fstr);
       if status
         error('error mean-centering images: %s, sess %d, run %d',...
             subid,isess,lrun);
       end
 
-      fstr = sprintf('fslmaths tmp -div %s -mas %s %s',...
-          stdfname,maskfname,zfname);
+      fstr = sprintf('fslmaths %s -div %s -mas %s %s',...
+          tmpstub,stdfname,maskfname,zfname);
       status = unix(fstr);
       if status
         error('error calculating std images: %s, sess %d, run %d',...
             subid,isess,lrun);
       end
 
-      unix('rm tmp.*'); % clean up temp file
+      unix(sprintf('rm %s*',tmpstub)); % clean up temp file
 
       run_files{irun} = zfname;
 
