@@ -88,10 +88,11 @@ outdata.vars = [outdata.vars 'modelspec'];
 mod_idx = length(outdata.vars);
 outdata.data{mod_idx} = ensemble_init_data_struct();
 outdata.data{mod_idx}.vars = {'subject_id','session','model_id','path'};
-outdata.data{mod_idx}.data{1} = {};
-outdata.data{mod_idx}.data{2} = [];
-outdata.data{mod_idx}.data{3} = [];
-outdata.data{mod_idx}.data{4} = {};
+modcol = set_var_col_const(outdata.data{mod_idx}.vars);
+outdata.data{mod_idx}.data{modcol.subject_id} = {};
+outdata.data{mod_idx}.data{modcol.session} = [];
+outdata.data{mod_idx}.data{modcol.model_id} = [];
+outdata.data{mod_idx}.data{modcol.path} = {};
 
 % get model
 try curr_model = defs.model;
@@ -105,12 +106,9 @@ end
 % get flags
 try USE_SPM = defs.build_model_l1.USE_SPM; catch USE_SPM = 0; end
 try USE_FSL = defs.build_model_l1.USE_FSL; catch USE_FSL = 0; end
+try statsdir = defs.build_model_l1.statsdir; catch statsdir = 'stats'; end
 
-if USE_FSL && ~USE_SPM
-  msg = sprintf('FSL not supported yet ...\n');
-  r = update_report(r,msg);
-  return
-elseif ~USE_FSL && ~USE_SPM
+if (~USE_FSL && ~USE_SPM) || (USE_FSL && USE_SPM)
   msg = sprintf(['\t\tyou must specify either SPM or FSL to carry out '...
       'the analyses\n']);
   r = update_report(r,msg);
@@ -124,6 +122,8 @@ if USE_SPM
 
   % figure out if we're going to run the job
   RUN_SPM = defs.fmri.jobctl.run_spm;
+elseif USE_FSL
+  start_dir = pwd;
 end % if USE_SPM
 
 % 
@@ -172,30 +172,56 @@ for isub=1:nsub_proc
       continue
     end
 
+    mfilt.include.all.subject_id = {subid};
+    mfilt.include.all.session = isess;
+    mfilt.include.all.model_id = model_id;
+    mdata = ensemble_filter(modelspec,mfilt);
+    model_fname = mdata.data{mocol.path}{1};
+
     if USE_SPM
-      mfilt.include.all.subject_id = {subid};
-      mfilt.include.all.session = isess;
-      mfilt.include.all.model_id = model_id;
-      mdata = ensemble_filter(modelspec,mfilt);
-      model_fname = mdata.data{mocol.path}{1};
-      
       spmopts = defs.fmri.spm.opts(expidx).spmopts;
       nstat = nstat+1;
       continfo = curr_model.continfo{1};
       jobs{njob}.stats{nstat}.con = add_con_job(model_fname, continfo);
 
-      outdata.data{mod_idx}.data{1} = [outdata.data{mod_idx}.data{1}; subid];
-      outdata.data{mod_idx}.data{2} = [outdata.data{mod_idx}.data{2}; isess];
-      outdata.data{mod_idx}.data{3} = [outdata.data{mod_idx}.data{3}; model_id];
-      outdata.data{mod_idx}.data{4} = [outdata.data{mod_idx}.data{4}; ...
-        model_fname];
+      outdata.data{mod_idx} = ensemble_add_data_struct_row(...
+          outdata.data{mod_idx},'subject_id',subid,'session',isess,...
+          'model_id',model_id,'path',model_fname);
+    elseif USE_FSL
+      if ~exist(model_fname,'file')
+        warning(['model file %s not found for subject %s, session %d, '...
+            'SKIPPING'],model_fname,subid,isess);
+        continue
+      end
+      
+      model_dir = fileparts(model_fname);
+      lstatsdir = fullfile(model_dir,statsdir);
+      if ~exist(lstatsdir)
+        warning(['stats dir %s not found for subject %s, session %d, '...
+            'SKIPPING'],lstatsdir,subid,isess);
+        continue
+      end
+      
+      cd(model_dir);
+      
+      fslstr = 'contrast_mgr ./stats design.con';
+      status = unix(fslstr);
+      if status
+        warning('error evaluating contrasts for subject %s, session %d',...
+            subid,isess);
+      end
+      
+      cd(start_dir);
+      
+      outdata.data{mod_idx} = ensemble_add_data_struct_row(...
+          outdata.data{mod_idx},'subject_id',subid,'session',isess,...
+          'model_id',model_id,'path',model_fname);
     end
-
   end % for isess
 end % for isub=
 
 % Submit the SPM job stack
-if RUN_SPM & ~isempty(jobs)
+if RUN_SPM && ~isempty(jobs)
   % Save the job file so the we have a record of what we did
   tstamp = datenum(now);
   job_stub = sprintf('jobs_%s.mat', datestr(tstamp,30));

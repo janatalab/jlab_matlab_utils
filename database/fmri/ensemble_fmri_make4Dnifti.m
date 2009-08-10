@@ -7,9 +7,12 @@ function outdata = ensemble_fmri_make4Dnifti(indata,defs)
 % will merge both analyze and nifti (3d and 4d) into a new 4D nifti
 % 
 % file naming conventions:
-%   Nsub_allruns_%dstr.nii.gz - multiple subjects
-%   subid_nsess.nii.gz        - one subject, multiple sessions
-%   subid_sessid_nruns.nii.gz - one subject, one session, multiple runs
+%   Nsub_allruns_(%s_)%dstr.nii.gz - multiple subjects, 
+%       ( optional name_stub,) date string
+%   subid_nsess_%s.nii.gz          - one subject, multiple sessions
+%       (, optional name_stub)
+%   subid_sessid_nruns_%s.nii.gz   - one subject, one session, 
+%       multiple runs(, optional name_stub)
 % 
 % output locations:
 %   a subject's epi_outdir - one subject, one session, multiple runs
@@ -24,6 +27,8 @@ function outdata = ensemble_fmri_make4Dnifti(indata,defs)
 %   defs.make4Dnifti.bet_params = string of parameters to send to bet ...
 %       default is '-m -f 0.4'
 %   defs.make4Dnifti.tmpdir = path to directory to place temporary files
+%   defs.make4Dnifti.name_stub = optional file name stub to be appended to
+%       all files that are generated
 % 
 % RETURNS
 %   4D nifti files in 'epi'
@@ -177,28 +182,38 @@ outdata.data{bet_idx}.data{5} = {};
 % get flags
 CONCAT = 'by_session';
 bet_params = '-m -f 0.4 -n';
+name_stub = '';
 if isfield(defs,'make4Dnifti')
+  % concat?
   if isfield(defs.make4Dnifti,'CONCAT') ...
           && ~isempty(defs.make4Dnifti.CONCAT) ...
           && ~isempty(strmatch(defs.make4Dnifti.CONCAT,...
           {'by_session','by_run'}))
     CONCAT = defs.make4Dnifti.CONCAT;
   end
+  % bet params?
   if isfield(defs.make4Dnifti,'bet_params')...
           && ischar(defs.make4Dnifti.bet_params) && ...
           ~isempty(defs.make4Dnifti.bet_params)
     bet_params = defs.make4Dnifti.bet_params;
   end
-end
-
-%%% where to store temporary files?
-if isfield(defs,'make4Dnifti') && isfield(defs.make4Dnifti,'tmpdir') ...
-        && ischar(defs.make4Dnifti.tmpdir) ...
-        && ~isempty(defs.make4Dnifti.tmpdir)
-  check_dir(defs.make4Dnifti.tmpdir);
-  tmpstub = fullfile(defs.make4Dnifti.tmpdir,'tmp_make4Dnifti');
-else
-  tmpstub = 'tmp_make4Dnifti';
+  % temp stub?
+  if isfield(defs.make4Dnifti,'tmpdir') ...
+          && ischar(defs.make4Dnifti.tmpdir) ...
+          && ~isempty(defs.make4Dnifti.tmpdir)
+    check_dir(defs.make4Dnifti.tmpdir);
+    tmpstub = fullfile(defs.make4Dnifti.tmpdir,'tmp_make4Dnifti');
+  else
+    tmpstub = 'tmp_make4Dnifti';
+  end
+  % file name stub?
+  if isfield(defs.make4Dnifti,'name_stub') && ...
+          ischar(defs.make4Dnifti.name_stub)
+    name_stub = defs.make4Dnifti.name_stub;
+    if isempty(strmatch(name_stub(1),'_'))
+      name_stub = ['_' name_stub];
+    end
+  end
 end
 
 %%%% temporary ... must code for this
@@ -278,7 +293,8 @@ for isub=1:nsub_proc
         % more than one file in flist, concatenate
         %%%%% WARNING: assumes all necessary within-run preprocessing
         %%%%% (realignment, coregistration, etc)
-        outfstub = sprintf('%s_%d_run%d',subid,sess.ensemble_id,lrun);
+        outfstub = sprintf('%s_%d_run%d%s',subid,sess.ensemble_id,...
+            lrun,name_stub);
 
         outfname = fullfile(outpath,outfstub);
         status = unix(sprintf('fslmerge -t %s %s',outfname,...
@@ -291,8 +307,8 @@ for isub=1:nsub_proc
       end
 
       % bet mask
-      maskfname = fullfile(outpath,sprintf('%s_%d_run%d',subid,...
-          sess.ensemble_id,lrun));
+      maskfname = fullfile(outpath,sprintf('%s_%d_run%d%s',subid,...
+          sess.ensemble_id,lrun,name_stub));
       fstr = sprintf('bet %s %s %s',outfname,maskfname,bet_params);
       status = unix(fstr);
       if status
@@ -308,7 +324,7 @@ for isub=1:nsub_proc
           'path',maskfname);
 
       % calculate mean
-      meanfname = fullfile(outpath,sprintf('mean_run%d',lrun));
+      meanfname = fullfile(outpath,sprintf('mean_run%d%s',lrun,name_stub));
       fstr = sprintf('fslmaths %s -Tmean %s',outfname,meanfname);
       status = unix(fstr);
       if status
@@ -317,7 +333,7 @@ for isub=1:nsub_proc
       end
       
       % calculate std
-      stdfname = fullfile(outpath,sprintf('std_run%d',lrun));
+      stdfname = fullfile(outpath,sprintf('std_run%d%s',lrun,name_stub));
       fstr = sprintf('fslmaths %s -Tstd %s',outfname,stdfname);
       status = unix(fstr);
       if status
@@ -326,7 +342,7 @@ for isub=1:nsub_proc
       end
       
       % calculate z-score
-      zfname = fullfile(outpath,sprintf('zscore_run%d',lrun));
+      zfname = fullfile(outpath,sprintf('zscore_run%d%s',lrun,name_stub));
       fstr = sprintf('fslmaths %s -sub %s %s',outfname,meanfname,tmpstub);
       status = unix(fstr);
       if status
@@ -360,7 +376,7 @@ for isub=1:nsub_proc
       sodpath = soddata.data{epicol.path}{1};
 
       % concatenate masks
-      smfname = fullfile(sodpath,sprintf('mask_concat_sess%d',isess));
+      smfname = fullfile(sodpath,sprintf('mask_concat_sess%d%s',isess,name_stub));
       rmasks = cell2str(run_masks,' ');
       fstr = sprintf('fslmerge -t %s %s',smfname,rmasks);
       status = unix(fstr);
@@ -381,7 +397,7 @@ for isub=1:nsub_proc
           isess,'ensemble_id',sess.ensemble_id,'run',0,'path',smfname);
 
       % concatenate zscored images
-      szfname = fullfile(sodpath,sprintf('zscore_concat_sess%d',isess));
+      szfname = fullfile(sodpath,sprintf('zscore_concat_sess%d%s',isess,name_stub));
       rzscored = cell2str(run_files,' ');
       fstr = sprintf('fslmerge -t %s %s',szfname,rzscored);
       status = unix(fstr);

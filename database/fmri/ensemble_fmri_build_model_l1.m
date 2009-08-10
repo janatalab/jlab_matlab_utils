@@ -126,26 +126,6 @@ if (iscell(indata) && ~isempty(indata) && isfield(indata{1},'task') && ...
   return
 end
 
-% outdata
-% sinfo
-outdata.vars = [outdata.vars 'sinfo'];
-sinfo_idx = length(outdata.vars);
-outdata.data{sinfo_idx} = ensemble_init_data_struct();
-outdata.data{sinfo_idx}.type = 'sinfo';
-outdata.data{sinfo_idx}.data = sinfo;
-
-% modelspec
-outdata.vars = [outdata.vars 'modelspec'];
-mod_idx = length(outdata.vars);
-outdata.data{mod_idx} = ensemble_init_data_struct();
-outdata.data{mod_idx}.type = 'modelspec';
-outdata.data{mod_idx}.vars = {'subject_id','session','model_id','path'};
-mcols = set_var_col_const(outdata.data{mod_idx}.vars);
-outdata.data{mod_idx}.data{mcols.subject_id} = {};
-outdata.data{mod_idx}.data{mcols.session} = [];
-outdata.data{mod_idx}.data{mcols.model_id} = [];
-outdata.data{mod_idx}.data{mcols.path} = {};
-
 % get model
 try curr_model = defs.model;
     model_id = curr_model.model_id;
@@ -162,9 +142,10 @@ try PLOT_DESMAT_COV = defs.build_model_l1.PLOT_DESMAT_COV; catch PLOT_DESMAT_COV
 try USE_SPM = defs.build_model_l1.USE_SPM; catch USE_SPM = 0; end
 try USE_FSL = defs.build_model_l1.USE_FSL; catch USE_FSL = 0; end
 try SLICE_BASED = curr_model.slice_based; catch SLICE_BASED = 0; end
-try ADD_MEAN_TO_RESID = curr_model.add_mean_to_resid; catch ADD_MEAN_TO_RESID = 1; end
+
 % 
 % get other vars
+try modelperm_dir = params.build_model_l1.modelperm_dir; catch modelperm_dir = ''; end
 try intensity_cutoff = params.build_model_l1.intensity_cutoff; catch intensity_cutoff = 10; end
 
 % check flags/vars
@@ -186,19 +167,19 @@ elseif SLICE_BASED
     return
 end
 
-if isfield(current_model,'permute') && ...
+if isfield(curr_model,'permute') && ...
         isfield(curr_model.permute,'permute_type') && ...
         ~isempty(curr_model.permute.permute_type) && ...
         isfield(curr_model.permute,'niter')
-  nperm = curr_model.permute.niter
+  nperm = curr_model.permute.niter;
 else
   nperm = 1;
 end
 
-if niter > 1 && USE_FSL
+if nperm > 1 && USE_FSL
   msg = sprintf('permutation testing not yet supported in FSL, turning off');
   r = update_report(r,msg);
-  niter = 1;
+  nperm = 1;
 end
 
 if isfield(curr_model,'combine_runs') && isnumeric(curr_model.combine_runs)...
@@ -235,6 +216,41 @@ end % if USE_SPM
 
 exp_inroot = defs.paths.inroot;
 exp_outroot = defs.paths.outroot;
+
+% % % outdata
+
+% sinfo
+outdata.vars = [outdata.vars 'sinfo'];
+sinfo_idx = length(outdata.vars);
+outdata.data{sinfo_idx} = ensemble_init_data_struct();
+outdata.data{sinfo_idx}.type = 'sinfo';
+outdata.data{sinfo_idx}.data = sinfo;
+
+% modelspec
+outdata.vars = [outdata.vars 'modelspec'];
+mod_idx = length(outdata.vars);
+outdata.data{mod_idx} = ensemble_init_data_struct();
+outdata.data{mod_idx}.type = 'modelspec';
+outdata.data{mod_idx}.vars = {'subject_id','session','model_id','run','path'};
+mcols = set_var_col_const(outdata.data{mod_idx}.vars);
+outdata.data{mod_idx}.data{mcols.subject_id} = {};
+outdata.data{mod_idx}.data{mcols.session} = [];
+outdata.data{mod_idx}.data{mcols.model_id} = [];
+outdata.data{mod_idx}.data{mcols.run} = [];
+outdata.data{mod_idx}.data{mcols.path} = {};
+
+% residuals
+outdata.vars = [outdata.vars 'resid'];
+res_idx = length(outdata.vars);
+outdata.data{res_idx} = ensemble_init_data_struct();
+outdata.data{res_idx}.type = 'modelspec';
+outdata.data{res_idx}.vars = {'subject_id','session','model_id','run','path'};
+mcols = set_var_col_const(outdata.data{res_idx}.vars);
+outdata.data{res_idx}.data{mcols.subject_id} = {};
+outdata.data{res_idx}.data{mcols.session} = [];
+outdata.data{res_idx}.data{mcols.model_id} = [];
+outdata.data{res_idx}.data{mcols.run} = [];
+outdata.data{res_idx}.data{mcols.path} = {};
 
 % 
 % BEGIN SUBJECT LOOP
@@ -342,7 +358,20 @@ for isub=1:nsub_proc
         continue
       end
       PL = set_pres_col_const(pres_info.vars);
-            
+
+      % Specify base model directory and make sure it exists
+      model_outdir = fullfile(lanal_outdir, sprintf('model_%02d', model_id));
+      check_dir(model_outdir);
+      
+      if ~isempty(modelperm_dir)
+        model_outdir = fullfile(model_outdir,modelperm_dir);
+        check_dir(model_outdir);
+      end
+
+      % Delete the contents of this directory
+      unix_str = sprintf('rm -r %s', fullfile(model_outdir,'*'));
+      status = unix(unix_str);
+
       if USE_SPM
         spmopts = defs.fmri.spm.opts(expidx).spmopts;
         build_model_idx_offset = nstat+1;
@@ -356,12 +385,8 @@ for isub=1:nsub_proc
           % Modify values accordingly
           fmri_spec.timing.RT = protocol.epi.tr;
 	
-          % Specify base model directory and make sure it exists
-          model_outdir = fullfile(lanal_outdir, sprintf('model_%02d', model_id));
-          check_dir(model_outdir);
-	
           % Directory to output SPM.mat file to
-          if niter > 1
+          if nperm > 1
             curr_dir = fullfile(model_outdir,sprintf('perm%04d', iperm));
           else
             curr_dir = model_outdir;
@@ -396,16 +421,8 @@ for isub=1:nsub_proc
           nstat = nstat+1;
 
           jobs{njob}.stats{nstat}.fmri_spec = fmri_spec;
-        end % for iperm        
-      elseif USE_FSL
-        % Specify base model directory and make sure it exists
-        model_outdir = fullfile(lanal_outdir, sprintf('model_%02d', model_id));
-        check_dir(model_outdir);
-        
-        % Delete the contents of this directory
-        unix_str = sprintf('rm %s', fullfile(model_outdir,'*'));
-        status = unix(unix_str);
-      end
+        end % for iperm
+      end % if USE_SPM
 
       %
       % START OF RUN LOOP
@@ -417,6 +434,7 @@ for isub=1:nsub_proc
         epiFilt = struct();
         epiFilt.include.all.subject_id = {subid};
         epiFilt.include.all.session = [isess];
+        epiFilt.exclude.all.run = 0;
         sessdata = ensemble_filter(epidata,epiFilt);
         
         [runm,urun] = make_mask_mtx(sessdata.data{epicol.run});
@@ -507,14 +525,24 @@ if USE_FSL
     
   %%%% FIXME: if multiple files in flist, concatenate
   epifname = flist{1};
+  [fp,fn,fx] = fileparts(epifname);
 
-  fsl_str = sprintf('fslval %s dim1', epifname);
-  [status, nx] = unix(fsl_str);
-  nx = str2num(nx);
-
-  fsl_str = sprintf('fslval %s dim2', epifname);
-  [status, ny] = unix(fsl_str);
-  ny = str2num(ny);
+  fprintf(1,'brain extraction: ');
+  betfname = fullfile(fp,sprintf('%s_bet%s',fn,fx));
+  betstr = sprintf('bet %s %s -F',epifname,betfname);
+  status = unix(betstr);
+  nobetfname = epifname;
+  epifname = betfname;
+  if status, error('error creating brain-extracted image'); end
+  fprintf(1,'success!\n');
+  
+%   fsl_str = sprintf('fslval %s dim1', epifname);
+%   [status, nx] = unix(fsl_str);
+%   nx = str2num(nx);
+% 
+%   fsl_str = sprintf('fslval %s dim2', epifname);
+%   [status, ny] = unix(fsl_str);
+%   ny = str2num(ny);
 
   fsl_str = sprintf('fslval %s dim3', epifname);
   [status, nz] = unix(fsl_str);
@@ -532,10 +560,9 @@ if USE_FSL
   thresh = mean_intensity*intensity_cutoff/100;
 
   % Calculate the mean of the EPI volume
-  [fpath, fstub, fext] = fileparts(epifname);
-  meanfname = fullfile(fpath, sprintf('%s_mean.nii.gz', strtok(fstub,'.')));
+  [fp,fn,fx] = fileparts(epifname);
+  meanfname = fullfile(fp, sprintf('%s_mean%s',fn,fx));
   fsl_str = sprintf('fslmaths %s -Tmean %s', epifname, meanfname);
-  fprintf(logfid,'%s\n', fsl_str);
   status = unix(fsl_str);
   if status
     error('Failed to calculate mean of input EPI data file')
@@ -552,25 +579,44 @@ if USE_FSL
   pinfo.nvol = nvol;
   pinfo.TR = protocol.epi.tr;
   pinfo.protocol = protocol;
+  pinfo.irun = irun;
+  pinfo.motionparam_fname = fullfile(fileparts(epifname),...
+      sprintf('rp_%s',sprintf(epifstubfmt,subid,irun,1,'txt')));
+  
   fsf.ev = fmri_fsl_generate_evs(pinfo,curr_model,sess);
+  nev = length(fsf.ev);
 
+  fsf.evs_orig = nev;
+  fsf.evs_real = nev;
+  
+  [fsf.ev.ortho] = deal(zeros(1,nev));
+
+  ev_names = {fsf.ev.name};
+  contlist  = curr_model.contlist;
+  Fcontlist = curr_model.Fcontlist;
+
+  fsf = setup_fsl_con(fsf,ev_names,contlist,Fcontlist);
+  
   % Write the fsf file
   if combine_runs
     fsf_structs{irun} = fsf;
   else
+    run_outdir = fullfile(model_outdir,sprintf('run%d',irun));
+    check_dir(run_outdir);
     fsf.tr = protocol.epi.tr;
-    fsf.fsldir = model_outdir;
-    fsf.outputdir = model_outdir;
+    fsf.fsldir = run_outdir;
+    fsf.outputdir = run_outdir;
     fsf.feat_files{1} = epifname;
+    
     % Retain a copy of the fsf structure so that we can use it during
     % subsequent statistical evaluation
-    fsf_fname = fullfile(model_outdir, 'fsf.mat');
+    fsf_fname = fullfile(run_outdir, 'fsf.mat');
     save(fsf_fname, 'fsf');
 
     write_fsf(fsf);
 
     % Switch to the directory that we'll be evaluating the model in
-    cd(model_outdir);
+    cd(run_outdir);
 
     % Check model integrity
     fsl_str = 'feat_model design';
@@ -581,8 +627,43 @@ if USE_FSL
       r = update_report(r,msg);
       continue
     end
-  end
-  
+    % Remove the old stats directory
+    if exist('stats','dir')
+      unix_str = 'rm -rf stats';
+      unix(unix_str);
+    end
+    
+    outdata.data{mod_idx} = ensemble_add_data_struct_row(outdata.data{mod_idx},...
+        'subject_id',subid,'session',isess,'model_id',model_id,'run',irun,...
+        'path',fullfile(run_outdir,'design.fsf'));
+
+    if ESTIMATE_MODEL
+      % Run the model
+      fsl_str = sprintf('film_gls -rn ./stats -noest %s design.mat %1.4f',...
+          epifname,thresh);
+      status = unix(fsl_str);
+      if status
+        msg = 'FEAT run failed or was aborted';
+        r = update_report(r,msg);
+        continue
+      end
+    
+      % Add the mean back into the residuals
+      resid_fname =  fullfile(run_outdir,'stats','res4d.nii.gz');
+      fsl_str = sprintf('fslmaths %s -add %s %s',...
+          resid_fname,meanfname,resid_fname);
+      status = unix(fsl_str);
+      if status
+        error('Failed to add mean back into the residuals')
+      end
+
+      outdata.data{res_idx} = ensemble_add_data_struct_row(outdata.data{res_idx},...
+          'subject_id',subid,'session',isess,'model_id',model_id,'run',irun,...
+          'path',resid_fname);
+    end
+    
+  end % if combine_runs
+      
 elseif USE_SPM
 	  
   % Add the list of input files
@@ -832,21 +913,156 @@ end % if USE_FSL / elseif USE_SPM
       
       	  jobs{njob}.stats{stat_idx}.fmri_spec.sess = cs;
         end % for iperm
+        
       elseif USE_FSL
-        fsf = fsft;
-        fsf.tr = protocol.epi.tr;
+          
+        % iterate over run-level fsf structs, extract and merge data
+        epi_fnames = {};
+        ev_mtx = [];
+        rmfields = {'outputdir','feat_files','fsldir'}
+        fsf_nvols = 0;
+        for ifeat=1:nruns
+          lfsf = fsf_structs{ifeat};
+          
+          % get epi filename
+          epi_fnames = [epi_fnames lfsf.feat_files{:}];
+          
+          % add nvols
+          fsf_nvols = fsf_nvols + lfsf.npts;
+
+          % merge EV files
+          levmtx = [];
+          ev = lfsf.ev;
+          nev = length(ev);
+          if ifeat > 1
+            if nev ~= size(ev_mtx,2)
+              error('nev not consistent across runs');
+            end
+            
+            % remove run-specific parameters
+            fsf2 = lfsf;
+            for irm=1:length(rmfields)
+              fsf2 = rmfield(fsf2,rmfields{irm});
+            end
+            fsf2.ev = rmfield(fsf2.ev,'fname');
+            
+            % compare parameters between fsf structs
+            if ~compare_structs(fsf1,fsf2),
+              error('fsf definitions (sans filenames) differ');
+            end
+          else
+            % save first fsf struct for later parameter comparison
+            fsf1 = lfsf;
+            
+            % remove run-specific parameters
+            for irm=1:length(rmfields)
+              fsf1 = rmfield(fsf1,rmfields{irm});
+            end
+            fsf1.ev = rmfield(fsf1.ev,'fname');
+          end
+          
+          for iev=1:nev
+            evdata = load(ev(iev).fname);
+            if size(evdata,2) > size(evdata,1), evdata = evdata'; end
+            levmtx = [levmtx evdata];
+          end
+          
+          ev_mtx = [ev_mtx; levmtx];
+        end
+        
+        % merge EPIs
+        epifname = fullfile(epi_outdir,sprintf('%s_sess%d_concat_all',...
+            isess,subid));
+        fslstr = sprintf('fslmerge -t %s %s',epifname,...
+            cell2str(epi_fnames,' '));
+        status = unix(fslstr);
+        if status
+          error('error merging epi run data');
+        end
+
+        % get nvols from merged EPI
+        fsl_str = sprintf('fslval %s dim4', epifname);
+        [status, nz] = unix(fsl_str);
+        nvols = str2num(nz); %#ok<ST2NM>
+        if nvols ~= fsf_nvols
+          error('number of volumes is incorrect');
+        end
+        
+        % populate fsf
+        fsf = fsf1;
+        fsf.feat_files{1} = epifname;
+        fsf.npts = nvols;
         fsf.fsldir = model_outdir;
         fsf.outputdir = model_outdir;
-        fsf.feat_files{1} = epifname;
-        
-        % take EV info from the first run
-        fsf.ev = fsf_structs{1}.ev;
-        for ii=1:nruns
-          lfsf = fsf_structs{ii};
-          if ~isstruct(lfsf), continue, end
-          fsf.npts = fsf.npts + lfsf.npts;
+        fsf.tr = protocol.epi.tr;
+
+        % save EV files
+        nev = size(ev_mtx,2);
+        evoutdir = fullfile(model_outdir,'evs'); check_dir(evoutdir);
+        evstub = sprintf('%s_sess%d_ev%%d.txt',subid,isess);
+        for iev = 1:nev
+          outfname = fullfile(evoutdir,sprintf(evstub,iev));	
+          regdata = ev_mtx(:,iev);
+          save(outfname,'regdata','-ascii')
           
+          fsf.ev(iev).fname = outfname;
         end
+
+        % Retain a copy of the fsf structure so that we can use it during
+        % subsequent statistical evaluation
+        fsf_fname = fullfile(model_outdir, 'fsf.mat');
+        save(fsf_fname, 'fsf');
+
+        write_fsf(fsf);
+
+        % Switch to the directory that we'll be evaluating the model in
+        cd(model_outdir);
+
+        % Check model integrity
+        fsl_str = 'feat_model design';
+
+        status = unix(fsl_str);
+        if status
+          msg = 'checking of model failed, SKIPPING';
+          r = update_report(r,msg);
+          continue
+        end
+        
+        % Remove the old stats directory
+        if exist('stats','dir')
+          unix_str = 'rm -rf stats';
+          unix(unix_str);
+        end
+
+        outdata.data{mod_idx} = ensemble_add_data_struct_row(outdata.data{mod_idx},...
+            'subject_id',subid,'session',isess,'model_id',model_id,'run',irun,...
+            'path',fullfile(model_outdir,'design.fsf'));
+
+        if ESTIMATE_MODEL
+          % Run the model
+          fsl_str = sprintf('film_gls -rn ./stats -noest %s design.mat %1.4f',...
+              epifname,thresh);
+          status = unix(fsl_str);
+          if status
+            msg = 'FEAT run failed or was aborted';
+            r = update_report(r,msg);
+            continue
+          end
+
+          % Add the mean back into the residuals
+          resid_fname =  fullfile(model_outdir,'stats','res4d.nii.gz');
+          fsl_str = sprintf('fslmaths %s -add %s %s',...
+              resid_fname,meanfname,resid_fname);
+          status = unix(fsl_str);
+          if status
+            error('Failed to add mean back into the residuals')
+          end
+
+          outdata.data{res_idx} = ensemble_add_data_struct_row(outdata.data{res_idx},...
+              'subject_id',subid,'session',isess,'model_id',model_id,'run',irun,...
+              'path',resid_fname);
+        end
+        
       end % if USE_SPM && ((isfield(curr_model,'srcdata
     end % if combine_runs
     
@@ -869,10 +1085,18 @@ end % if USE_FSL / elseif USE_SPM
       end
     end
 
-    outdata.data{mod_idx} = ensemble_add_data_struct_row(outdata.data{mod_idx},...
-        'subject_id',subid,'session',isess,'model_id',model_id,...
-        'path',fullfile(lanal_outdir,sprintf('model_%02d',model_id),'SPM.mat'));
+    if USE_SPM
+      outmodpath = fullfile(lanal_outdir,sprintf('model_%02d',model_id),'SPM.mat');
+    elseif USE_FSL
+      outmodpath = fullfile(lanal_outdir,sprintf('model_%02d',model_id),'design.fsf');
+    end
 
+    if combine_runs
+      outdata.data{mod_idx} = ensemble_add_data_struct_row(outdata.data{mod_idx},...
+          'subject_id',subid,'session',isess,'model_id',model_id,...
+          'path',outmodpath);
+    end
+    
 end % if BUILD_MODEL
     
     if (ESTIMATE_MODEL || PLOT_DESMAT_COV) && USE_SPM
@@ -921,49 +1145,52 @@ end % if BUILD_MODEL
       end % for iper=
     end % if ESTIMATE_MODEL & USE_SPM
 
-    if ESTIMATE_MODEL && USE_FSL
-       
-      if ~BUILD_MODEL
-      %%%%%% FIXME: check all dirs and vars exist
-        mfilt.include.all.subject_id = {subid};
-        mfilt.include.all.session = isess;
-        mfilt.include.all.model_id = model_id;
-        mdata = ensemble_filter(modelspec,mfilt);
-        epifname = mdata.data{mocol.path};
-        meanfname = '';
-        model_outdir = fileparts(model_fname);
-        stats_dir = '';
-        thresh = -1;
-      end
-
-      % Remove the old stats directory
-      if exist(stats_dir)
-        unix_str = 'rm -rf stats';
-        unix(unix_str);
-      end
-
-      % Run the model
-      fsl_str = sprintf('film_gls -rn %s -noest %s design.mat %1.4f',...
-          './stats',epifname,thresh);
-      status = unix(fsl_str);
-      if status
-        msg = 'FEAT run failed or was aborted';
-        r = update_report(r,msg);
-        continue
-      end
-
-      if ADD_MEAN_TO_RESID
-        % Add the mean back into the residuals
-        resid_fname = fullfile(stats_dir, 'res4d.nii.gz');
-        fsl_str = sprintf('fslmaths %s -add %s %s',...
-            resid_fname,meanfname,resid_fname);
-        fprintf(logfid,'%s\n', fsl_str);
-        status = unix(fsl_str);
-        if status
-          error('Failed to add mean back into the residuals')
-        end
-      end
-    end % if ESTIMATE_MODEL && USE_FSL
+    if ESTIMATE_MODEL && ~BUILD_MODEL && USE_FSL && ~combine_runs
+        error('this option is not yet supported')
+    end
+    
+% % %     if ESTIMATE_MODEL && USE_FSL && combine_runs
+% % % 
+% % %       %%%%%% FIXME: check all dirs and vars exist
+% % %       mfilt.include.all.subject_id = {subid};
+% % %       mfilt.include.all.session = isess;
+% % %       mfilt.include.all.model_id = model_id;
+% % %       mdata = ensemble_filter(modelspec,mfilt);
+% % %       epifname = mdata.data{mocol.path};
+% % %       [fp,fn,fx] = fileparts(epifname);
+% % %       meanfname = fullfile(fp, sprintf('%s_mean%s',fn,fx));
+% % %       if ~exist(meanfname,'file'), meanfname = ''; end
+% % %       model_outdir = fileparts(model_fname);
+% % %       thresh = -1;
+% % % 
+% % %       % Remove the old stats directory
+% % %       if exist('stats','dir')
+% % %         unix_str = 'rm -rf stats';
+% % %         unix(unix_str);
+% % %       end
+% % %       
+% % %       % Run the model
+% % %       fsl_str = sprintf('film_gls -rn ./stats -noest %s design.mat %1.4f',...
+% % %           epifname,thresh);
+% % %       status = unix(fsl_str);
+% % %       if status
+% % %         msg = 'FEAT run failed or was aborted';
+% % %         r = update_report(r,msg);
+% % %         continue
+% % %       end
+% % % 
+% % %       if ADD_MEAN_TO_RESID && exist(meanfname,'file')
+% % %         % Add the mean back into the residuals
+% % %         resid_fname = fullfile(stats_dir, 'res4d.nii.gz');
+% % %         fsl_str = sprintf('fslmaths %s -add %s %s',...
+% % %             resid_fname,meanfname,resid_fname);
+% % %         fprintf(logfid,'%s\n', fsl_str);
+% % %         status = unix(fsl_str);
+% % %         if status
+% % %           error('Failed to add mean back into the residuals')
+% % %         end
+% % %       end
+% % %     end % if ESTIMATE_MODEL && USE_FSL && combine_runs
     
     if PLOT_DESMAT_COV
       msg = sprintf('Loading model info in: %s\n', model_fname);
@@ -986,7 +1213,7 @@ end % if BUILD_MODEL
 end % for isub=
 
 % Submit the SPM job stack
-if RUN_SPM & ~isempty(jobs)
+if USE_SPM && RUN_SPM && ~isempty(jobs)
   % Save the job file so the we have a record of what we did
   tstamp = datenum(now);
   job_stub = sprintf('jobs_%s.mat', datestr(tstamp,30));
