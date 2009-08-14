@@ -41,7 +41,7 @@ if (iscell(indata) && ~isempty(indata) && isfield(indata{1},'task') && ...
         ~isempty(strmatch('return_outdir',indata{1}.task))) || ...
         (isstruct(indata) && isfield(indata,'task') && ...
         ~isempty(strmatch('return_outdir',indata.task)))
-  if exist('pathdata','var') && length(pathdata.data{1}) > 0
+  if exist('pathdata','var') && ~isempty(pathdata.data{1})
     if length(nsub_proc) == 1
       pfilt = struct();
       pfilt.include.all.subject_id = proc_subs;
@@ -75,6 +75,35 @@ if (iscell(indata) && ~isempty(indata) && isfield(indata{1},'task') && ...
   return
 end
 
+% get model
+try curr_model = defs.model;
+    model_id = curr_model.model_id;
+catch
+    msg = sprintf('Couldn''t load model from defs.model, aborting\n');
+    r = update_report(r,msg);
+    return
+end
+
+% get flags
+try USE_SPM = defs.build_model_l1.USE_SPM; catch USE_SPM = 0; end
+try USE_FSL = defs.build_model_l1.USE_FSL; catch USE_FSL = 0; end
+try statsdir = defs.build_model_l1.statsdir; catch statsdir = 'stats'; end
+
+if (~USE_FSL && ~USE_SPM) || (USE_FSL && USE_SPM)
+  error('you must specify either SPM or FSL to carry out the analyses\n');
+end
+
+% Set stuff up for specifying an SPM job.  Specify jobs on a subject level
+if USE_SPM
+  njob = 0;  % counter for number of jobs we are specifying
+  jobs = {}; 
+
+  % figure out if we're going to run the job
+  RUN_SPM = defs.fmri.jobctl.run_spm;
+elseif USE_FSL
+  start_dir = pwd;
+end % if USE_SPM
+
 % outdata
 % sinfo
 outdata.vars = [outdata.vars 'sinfo'];
@@ -93,38 +122,6 @@ outdata.data{mod_idx}.data{modcol.subject_id} = {};
 outdata.data{mod_idx}.data{modcol.session} = [];
 outdata.data{mod_idx}.data{modcol.model_id} = [];
 outdata.data{mod_idx}.data{modcol.path} = {};
-
-% get model
-try curr_model = defs.model;
-    model_id = curr_model.model_id;
-catch
-    msg = sprintf('Couldn''t load model from defs.model, aborting\n');
-    r = update_report(r,msg);
-    return
-end
-
-% get flags
-try USE_SPM = defs.build_model_l1.USE_SPM; catch USE_SPM = 0; end
-try USE_FSL = defs.build_model_l1.USE_FSL; catch USE_FSL = 0; end
-try statsdir = defs.build_model_l1.statsdir; catch statsdir = 'stats'; end
-
-if (~USE_FSL && ~USE_SPM) || (USE_FSL && USE_SPM)
-  msg = sprintf(['\t\tyou must specify either SPM or FSL to carry out '...
-      'the analyses\n']);
-  r = update_report(r,msg);
-  return
-end
-
-% Set stuff up for specifying an SPM job.  Specify jobs on a subject level
-if USE_SPM
-  njob = 0;  % counter for number of jobs we are specifying
-  jobs = {}; 
-
-  % figure out if we're going to run the job
-  RUN_SPM = defs.fmri.jobctl.run_spm;
-elseif USE_FSL
-  start_dir = pwd;
-end % if USE_SPM
 
 % 
 % BEGIN SUBJECT LOOP
@@ -176,52 +173,55 @@ for isub=1:nsub_proc
     mfilt.include.all.session = isess;
     mfilt.include.all.model_id = model_id;
     mdata = ensemble_filter(modelspec,mfilt);
-    model_fname = mdata.data{mocol.path}{1};
+    
+    for imod=1:length(mdata.data{mocol.path})
+      model_fname = mdata.data{mocol.path}{1};
 
-    if USE_SPM
-      spmopts = defs.fmri.spm.opts(expidx).spmopts;
-      nstat = nstat+1;
-      continfo = curr_model.continfo{1};
-      jobs{njob}.stats{nstat}.con = add_con_job(model_fname, continfo);
+      if USE_SPM
+        spmopts = defs.fmri.spm.opts(expidx).spmopts;
+        nstat = nstat+1;
+        continfo = curr_model.continfo{1};
+        jobs{njob}.stats{nstat}.con = add_con_job(model_fname, continfo);
 
-      outdata.data{mod_idx} = ensemble_add_data_struct_row(...
-          outdata.data{mod_idx},'subject_id',subid,'session',isess,...
-          'model_id',model_id,'path',model_fname);
-    elseif USE_FSL
-      if ~exist(model_fname,'file')
-        warning(['model file %s not found for subject %s, session %d, '...
-            'SKIPPING'],model_fname,subid,isess);
-        continue
-      end
+        outdata.data{mod_idx} = ensemble_add_data_struct_row(...
+            outdata.data{mod_idx},'subject_id',subid,'session',isess,...
+            'model_id',model_id,'path',model_fname);
+      elseif USE_FSL
+        if ~exist(model_fname,'file')
+          warning(['model file %s not found for subject %s, session %d, '...
+              'SKIPPING'],model_fname,subid,isess);
+          continue
+        end
       
-      model_dir = fileparts(model_fname);
-      lstatsdir = fullfile(model_dir,statsdir);
-      if ~exist(lstatsdir)
-        warning(['stats dir %s not found for subject %s, session %d, '...
-            'SKIPPING'],lstatsdir,subid,isess);
-        continue
-      end
+        model_dir = fileparts(model_fname);
+        lstatsdir = fullfile(model_dir,statsdir);
+        if ~exist(lstatsdir,'dir')
+          warning(['stats dir %s not found for subject %s, session %d, '...
+              'SKIPPING'],lstatsdir,subid,isess);
+          continue
+        end
       
-      cd(model_dir);
+        cd(model_dir);
+       
+        fslstr = 'contrast_mgr ./stats design.con';
+        status = unix(fslstr);
+        if status
+          warning('error evaluating contrasts for subject %s, session %d',...
+              subid,isess);
+        end
       
-      fslstr = 'contrast_mgr ./stats design.con';
-      status = unix(fslstr);
-      if status
-        warning('error evaluating contrasts for subject %s, session %d',...
-            subid,isess);
-      end
+        cd(start_dir);
       
-      cd(start_dir);
-      
-      outdata.data{mod_idx} = ensemble_add_data_struct_row(...
-          outdata.data{mod_idx},'subject_id',subid,'session',isess,...
-          'model_id',model_id,'path',model_fname);
-    end
+        outdata.data{mod_idx} = ensemble_add_data_struct_row(...
+            outdata.data{mod_idx},'subject_id',subid,'session',isess,...
+            'model_id',model_id,'path',model_fname);
+      end % if USE_SPM
+    end % for imod=1:length(
   end % for isess
 end % for isub=
 
 % Submit the SPM job stack
-if RUN_SPM && ~isempty(jobs)
+if USE_SPM && RUN_SPM && exist('jobs','var') && ~isempty(jobs)
   % Save the job file so the we have a record of what we did
   tstamp = datenum(now);
   job_stub = sprintf('jobs_%s.mat', datestr(tstamp,30));
