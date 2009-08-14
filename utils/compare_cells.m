@@ -71,22 +71,10 @@ if (nargin > 2)
     end
   end
 end
- 
-try
-  checkValues;
-catch
-  checkValues = true;
-end
-try
-  checkSubstruct;
-catch
-  checkSubstruct=false;
-end
-try
-  checkTypes;
-catch
-  checkTypes=true;
-end
+
+if ~exist('checkValues','var'),    checkValues = true; end
+if ~exist('checkSubstruct','var'), checkSubstruct = true; end
+if ~exist('checkTypes','var'),     checkTypes = true; end
 
 % 
 % check to see if inputs are cells
