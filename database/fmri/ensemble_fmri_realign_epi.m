@@ -21,7 +21,7 @@ outdata.type = 'realign_epi';
 
 r = init_results_struct;
 
-r.type = 'fmri_anal';  % Identify the type of this reporting instance
+r.type = 'fmri_realign';  % Identify the type of this reporting instance
 r.report_on_fly = 1;
 
 % Parse out the input data
@@ -38,7 +38,7 @@ for idata = 1:length(indata)
         nsub_proc = length(proc_subs);
       case {'paths'}
         pathdata = indata{idata};
-        pcol = set_var_col_const(pathdata.vars);
+        pacol = set_var_col_const(pathdata.vars);
     end
   end
 end
@@ -62,19 +62,19 @@ if (iscell(indata) && ~isempty(indata) && isfield(indata{1},'task') && ...
         spathdata = ensemble_filter(lpathdata,sfilt);
         if length(spathdata.data{1}) == 1
           % one epi outdir, save outdata = epi_outdir
-          outdata = spathdata.data{pcol.path}{1};
+          outdata = spathdata.data{pacol.path}{1};
         else
           sfilt = pfilt;
           sfilt.include.all.path_type = {'sess_outdir'};
           spathdata = ensemble_filter(lpathdata,sfilt);
           if length(spathdata.data{1}) == 1;
-            outdata = spathdata.data{pcol.path}{1};
+            outdata = spathdata.data{pacol.path}{1};
           else
             sfilt = pfilt;
             sfilt.include.all.path_type = {'sub_outdir'};
             spathdata = ensemble_filter(lpathdata,sfilt);
             if length(spathdata.data{1}) == 1;
-              outdata = spathdata.data{pcol.path}{1};            
+              outdata = spathdata.data{pacol.path}{1};            
             end
           end
         end
@@ -86,15 +86,30 @@ if (iscell(indata) && ~isempty(indata) && isfield(indata{1},'task') && ...
 end
 
 % outdata
-outdata.vars = epidata.vars;
-ocol = set_var_col_const(outdata.vars);
-for iv=1:length(outdata.vars)
+outdata = ensemble_init_data_struct();
+outdata.name = 'realign';
+outdata.type = 'realign';
+
+% epidata
+outdata.vars = [outdata.vars 'epi'];
+epi_idx = length(outdata.vars);
+outdata.data{epi_idx} = ensemble_init_data_struct();
+outdata.data{epi_idx}.type='epi';
+outdata.data{epi_idx}.vars = epidata.vars;
+for iv=1:length(outdata.data{epi_idx}.vars)
   if isnumeric(epidata.data{iv})
-    outdata.data{iv} = [];
+    outdata.data{epi_idx}.data{iv} = [];
   else
-    outdata.data{iv} = {};
+    outdata.data{epi_idx}.data{iv} = {};
   end
 end
+
+% sinfo
+outdata.vars = [outdata.vars 'sinfo'];
+sinfo_idx = length(outdata.vars);
+outdata.data{sinfo_idx} = ensemble_init_data_struct();
+outdata.data{sinfo_idx}.type = 'sinfo';
+outdata.data{sinfo_idx}.data = sinfo;
 
 % get flags
 try RESLICE_EPI = defs.realign.RESLICE_EPI; catch RESLICE_EPI = 0; end
@@ -116,28 +131,46 @@ if USE_SPM
   njob = 0;  % counter for number of jobs we are specifying
 end
 
+if USE_FSL
+  fsl_mc_stub = defs.fmri.fsl.fsl_mc_stub;
+end
+
+exp_inroot = defs.paths.inroot;
+exp_outroot = defs.paths.outroot;
+
 %
 % START SUBJECT LOOP
 %
 
-% generate subject masks
-[sm,us] = make_mask_mtx(epidata.data{ocol.subject_id});
+for is=1:nsub_proc
 
-for is=1:length(us)
   % get subject
-  subid = us{is};
-  smask = sm(:,1);
-  
-  % get sinfo
-  lsinfoidx = strmatch(subid,{sinfo.id});
-  lsinfo = sinfo(lsinfoidx);
-  
-  % mask out other data
-  subdata = epidata;
-  for iv=1:length(outdata.vars)
-    subdata.data{iv} = subdata.data{iv}(smask);
-  end
+  subid = proc_subs{is};
+  lsinfo = sinfo(is);
+  sess = lsinfo.sessinfo;
+  nsess = length(sess);
 
+  % get paths
+  spfilt.include.all.subject_id = {subid};
+  spfilt.exclude.all.run = 0;
+  spaths = ensemble_filter(pathdata,spfilt);
+  
+  didx = strmatch('sub_indir',spaths.data{pacol.path_type});
+  if didx
+    sub_indir = spaths.data{pacol.path}(didx);
+  else
+    sub_indir = fullfile(exp_inroot,subid);
+    check_dir(sub_indir,1);
+  end
+  
+  didx = strmatch('sub_outdir',spaths.data{pacol.path_type});
+  if didx
+    sub_outdir = spaths.data{pacol.path}(didx);
+  else
+    sub_outdir = fullfile(exp_outroot,subid);
+    check_dir(sub_outdir,1);
+  end
+  
   % set up SPM job spec
   if USE_SPM
     njob = njob+1;
@@ -150,20 +183,30 @@ for is=1:length(us)
     jobs{njob}.spatial{nspat}.realign = {};
     nrealign = 0;
   end
-  
-  [sessm,usess] = make_mask_mtx(subdata.data{ocol.session});
-  for isess=1:length(usess)
-    session = usess(isess);
-    sesmask = sessm(:,isess);
-    sessdata = subdata;
-    for iv=1:length(outdata.vars)
-      sessdata.data{iv} = sessdata.data{iv}(sesmask);
+
+  for isess=1:nsess
+
+    if ~sess(isess).use_session
+      msg = sprintf('\t\t\tSkipping session %d\n', isess);
+      r = update_report(r,msg);
+      continue
+    else
+      msg = sprintf('\n\nprocessing session %d\n\n',isess);
+      r = update_report(r,msg);
     end
+
+    % set filt criteria
+    filt = spfilt;
+    filt.include.all.session = isess;
     
-    [runm,urun] = make_mask_mtx(sessdata.data{ocol.run});
+    sessdata = ensemble_filter(epidata,filt);
+    
+    fmri_sess_paths;
+
+    [runm,urun] = make_mask_mtx(sessdata.data{epicol.run});
     nruns = length(urun);
 
-    sessinfo = lsinfo.sessinfo(session);
+    sessinfo = sess(isess);
     
     % Figure out which version of the experiment applies
     exp_id = sessinfo.exp_id;
@@ -200,11 +243,11 @@ for is=1:length(us)
       rm  = runm(:,irun);
       
       rundata = sessdata;
-      for iv=1:length(outdata.vars)
+      for iv=1:length(rundata.vars)
         rundata.data{iv} = rundata.data{iv}(rm);
       end
 
-      flist = rundata.data{ocol.path};
+      flist = rundata.data{epicol.path};
   
       if USE_SPM
         jobs{njob}.spatial{1}.realign{realign_est_idx}.estimate.data{irun} = ...
@@ -214,19 +257,46 @@ for is=1:length(us)
 	      jobs{njob}.spatial{realign_idx}.realign{realign_wrt_idx...
             }.write.data(end+1:end+nf) = cellstr(flist);
         end
+        
+        % add flist contents to outdata
+        for ifl=1:length(flist)
+            outdata.data{epi_idx} = ensemble_add_data_struct_row(...
+                outdata.data{epi_idx},'subject_id',subid,...
+                'session',isess,'ensemble_id',sessinfo.ensemble_id,...
+                'run',irun,'path',flist(ifl,:));
+        end
       end
 
       % Do motion correction with FSL. Need to use a single 4D file. FSL
       % aligns things to the middle volume by default
-      % GET run_outdir, fsl_mc_stub, subid
-      if USE_FSL && USE_4D_NIFTI
-        infname = flist;
-	    outfname = fullfile(run_outdir,sprintf('%s_run%d_%s.nii', ...
-	      subid, irun, fsl_mc_stub));
-	  
+      if USE_FSL
+        if length(flist) > 1
+          error('more than one EPI per run!? must use 4d nifti');
+        end
+        infname = flist{1};
+        
+        if ~exist(infname,'file') && ~exist([infname '.nii.gz'],'file')
+          error('can not find nifti file %s',infname);
+        end
+        
+        fslstr = sprintf('fslval %s dim4',infname);
+        [status,nvols] = unix(fslstr);
+        nvols = str2num(nvols);
+        if nvols < 2
+          error('one or less volumes in epi file %s',infname);
+        end
+        
+        pidx = strfind(infname,'.');
+        if isempty(pidx)
+          outfname = sprintf('%s%s',infname,fsl_mc_stub);
+        else
+          outfname = sprintf('%s%s%s',infname(1:pidx(1)-1),fsl_mc_stub,...
+              infname(pidx(1)+1:end));
+        end
+
         % Format the FSL command string
-        fsl_str = sprintf('mcflirt -in %s -out %s -plots -rmsrel -rmsabs -report', ...
-	      infname, outfname);
+        fsl_str = sprintf(['mcflirt -in %s -out %s -plots -rmsrel '...
+            '-rmsabs -report'],infname,outfname);
 	    msg = sprintf('%s\n', fsl_str);
 	    status = unix(fsl_str);  % execute the command
 	    if status
@@ -234,27 +304,20 @@ for is=1:length(us)
 	      r = update_report(r,msg);
 	      continue
         end
+        
+        % add flist contents to outdata
+        outdata.data{epi_idx} = ensemble_add_data_struct_row(...
+            outdata.data{epi_idx},'subject_id',subid,...
+            'session',isess,'ensemble_id',sessinfo.ensemble_id,...
+            'run',irun,'path',outfname);
       end % if USE_FSL &
 
-      % add flist contents to outdata
-      for ifl=1:length(flist)
-          outdata.data{ocol.subject_id} = ...
-            [outdata.data{ocol.subject_id}; subid];
-          outdata.data{ocol.session} = ...
-            [outdata.data{ocol.session}; isess];
-          outdata.data{ocol.ensemble_id} = ...
-            [outdata.data{ocol.ensemble_id}; sessinfo.ensemble_id];
-          outdata.data{ocol.run} = ...
-            [outdata.data{ocol.run}; irun];
-          outdata.data{ocol.path} = ...
-            [outdata.data{ocol.path}; flist(ifl,:)];
-      end
     end % for irun    
   end % for isess
 end % for is
 
 % Submit the SPM job stack
-if RUN_SPM && ~isempty(jobs)
+if USE_SPM && RUN_SPM && ~isempty(jobs)
   % Save the job file so the we have a record of what we did
   tstamp = datenum(now);
   job_stub = sprintf('jobs_%s.mat', datestr(tstamp,30));
