@@ -6,6 +6,12 @@ function outstr = mysql_is_correct(varargin)
 %
 % 'trial_id'
 % 'session_id'
+%
+% By default, or if 'return_true', is set to 1, the string 'TRUE' will be
+% returned if the response is correct.  If return_true=0 then 'FALSE' will be
+% returned if the response is correct.  This behavior is implemented so that
+% this function can service condition_matlab evaluation for contingent display
+% of forms in Ensemble.
 
 % 08/31/2009 Petr Janata
 
@@ -17,6 +23,7 @@ outstr = '';
 trial_id = [];
 session_id = [];
 debug_fname = '';
+return_true = true;
 
 narg = length(varargin);
 for iarg = 1:2:narg
@@ -27,6 +34,8 @@ for iarg = 1:2:narg
       session_id = varargin{iarg+1};
     case {'debug_file'}
       debug_fname = varargin{iarg+1};
+    case {'return_true'}
+      return_true = varargin{iarg+1};
     otherwise
       fprintf('%s: Unknown input argument: %s\n', mfilename, varargin{iarg});
   end
@@ -110,6 +119,15 @@ else
   end
 end
   
+% Flip the direction of the response string if necessary
+if ~return_true
+  if strcmp(outstr,'TRUE')
+    outstr = 'FALSE'; 
+  else
+    outstr = 'TRUE';
+  end
+end
+
 if tmp_conn_id
   mysql(conn_id, 'close')
 end
