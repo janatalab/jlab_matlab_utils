@@ -51,10 +51,17 @@ if isempty(session_id)
 end
 
 % Check for connection to database
-try mysql_conn_id(1);
+try 
+  mysql_conn_id(1);
   conn_id = mysql_conn_id;
+  if debug
+    fprintf(fid, 'Using conn_id: %d\n', conn_id);
+  end
   tmp_conn_id = 0;
 catch   
+  if debug, 
+    fprintf(fid, 'No global conn_id available, making database connection\n');
+  end
   mysql_make_conn;
   conn_id = 0;
   tmp_conn_id = 1;
