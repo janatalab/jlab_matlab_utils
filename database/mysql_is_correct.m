@@ -14,6 +14,7 @@ global mysql_conn_id
 % Parse input arguments
 trial_id = [];
 session_id = [];
+debug_fname = '';
 
 narg = length(varargin);
 for iarg = 1:2:narg
@@ -22,16 +23,31 @@ for iarg = 1:2:narg
       trial_id = varargin{iarg+1};
     case {'session','session_id'}
       session_id = varargin{iarg+1};
+    case {'debug_file'}
+      debug_fname = varargin{iarg+1};
     otherwise
       fprintf('%s: Unknown input argument: %s\n', mfilename, varargin{iarg});
   end
 end
 
+% Check to see if we're debugging
+if ~isempty(debug_fname)
+  debug = true;
+  fid = fopen(debug_fname,'wt');
+  if fid < 3
+    debug = false;
+  end
+end
+
 if isempty(trial_id)
-  error('%s: Trial ID not specified', mfilename);
+  error_str = sprintf('%s: Trial ID not specified', mfilename);
+  if debug, fprintf(fid,error_str); end
+  error(error_str);
 end
 if isempty(session_id)
-  error('%s: Session ID not specified', mfilename);
+  error_str = sprintf('%s: Session ID not specified', mfilename);
+  if debug, fprintf(fid, error_str); end
+  error(error_str);
 end
 
 % Check for connection to database
@@ -45,10 +61,12 @@ catch
 end
 
 % We need to get the response table name, based on the session ID
+if debug, fprintf(fid,'Figuring out response table ... '); end
 mysql_str = sprintf(['SELECT response_table FROM experiment WHERE ' ...
       'experiment_id = (SELECT experiment_id FROM session WHERE session_id = %d);'], session_id);
 response_table = mysql(conn_id, mysql_str);
 response_table = response_table{1};
+if debug, fprintf(fid,'using %s\n', response_table); end
 
 % Get the trial information from the trial table
 mysql_str = sprintf(['SELECT correct_response_enum, correct_response_text FROM trial ', ...
@@ -84,6 +102,8 @@ end
 if tmp_conn_id
   mysql(conn_id, 'close')
 end
+
+if debug, fclose(fid); end
 
 return
 

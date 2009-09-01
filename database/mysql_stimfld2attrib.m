@@ -27,7 +27,7 @@ for iarg = 1:2:narg
     case 'stimtbl_vals'
       fldvals = varargin{iarg+1};
     otherwise
-      fprintf('get_qtxt: Unknown input argument: %s\n', varargin{iarg});
+      fprintf('%s: Unknown input argument: %s\n', mfilename, varargin{iarg});
   end
 end
 
