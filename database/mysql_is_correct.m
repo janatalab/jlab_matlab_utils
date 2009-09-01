@@ -33,22 +33,23 @@ for iarg = 1:2:narg
 end
 
 % Check to see if we're debugging
+VERBOSE = false;
 if ~isempty(debug_fname)
-  debug = true;
+  VERBOSE = true;
   fid = fopen(debug_fname,'wt');
   if fid < 3
-    debug = false;
+    VERBOSE = false;
   end
 end
 
 if isempty(trial_id)
   error_str = sprintf('%s: Trial ID not specified', mfilename);
-  if debug, fprintf(fid,error_str); end
+  if VERBOSE, fprintf(fid,error_str); end
   error(error_str);
 end
 if isempty(session_id)
   error_str = sprintf('%s: Session ID not specified', mfilename);
-  if debug, fprintf(fid, error_str); end
+  if VERBOSE, fprintf(fid, error_str); end
   error(error_str);
 end
 
@@ -56,12 +57,12 @@ end
 try 
   mysql_conn_id(1);
   conn_id = mysql_conn_id;
-  if debug
+  if VERBOSE
     fprintf(fid, 'Using conn_id: %d\n', conn_id);
   end
   tmp_conn_id = 0;
 catch   
-  if debug, 
+  if VERBOSE, 
     fprintf(fid, 'No global conn_id available, making database connection\n');
   end
   mysql_make_conn;
@@ -70,13 +71,13 @@ catch
 end
 
 % We need to get the response table name, based on the session ID
-if debug, fprintf(fid,'Figuring out response table ... '); end
+if VERBOSE, fprintf(fid,'Figuring out response table ... '); end
 mysql_str = sprintf(['SELECT response_table FROM experiment WHERE ' ...
   'experiment_id = (SELECT experiment_id FROM session WHERE session_id = %d);'], session_id);
-if debug, fprintf(fid,mysql_str); end
+if VERBOSE, fprintf(fid,mysql_str); end
 response_table = mysql(conn_id, mysql_str);
 response_table = response_table{1};
-if debug, fprintf(fid,'using %s\n', response_table); end
+if VERBOSE, fprintf(fid,'using %s\n', response_table); end
 
 % Get the trial information from the trial table
 mysql_str = sprintf(['SELECT correct_response_enum, correct_response_text FROM trial ', ...
@@ -113,7 +114,7 @@ if tmp_conn_id
   mysql(conn_id, 'close')
 end
 
-if debug, fclose(fid); end
+if VERBOSE, fclose(fid); end
 
 return
 
