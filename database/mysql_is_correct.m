@@ -11,6 +11,8 @@ function outstr = mysql_is_correct(varargin)
 
 global mysql_conn_id
 
+outstr = '';
+
 % Parse input arguments
 trial_id = [];
 session_id = [];
@@ -70,7 +72,8 @@ end
 % We need to get the response table name, based on the session ID
 if debug, fprintf(fid,'Figuring out response table ... '); end
 mysql_str = sprintf(['SELECT response_table FROM experiment WHERE ' ...
-      'experiment_id = (SELECT experiment_id FROM session WHERE session_id = %d);'], session_id);
+  'experiment_id = (SELECT experiment_id FROM session WHERE session_id = %d);'], session_id);
+if debug, fprintf(fid,mysql_str); end
 response_table = mysql(conn_id, mysql_str);
 response_table = response_table{1};
 if debug, fprintf(fid,'using %s\n', response_table); end
