@@ -18,9 +18,9 @@ session_id = [];
 narg = length(varargin);
 for iarg = 1:2:narg
   switch varargin{iarg}
-    case 'trial_id'
+    case {'trial','trial_id'}
       trial_id = varargin{iarg+1};
-    case 'session_id'
+    case {'session','session_id'}
       session_id = varargin{iarg+1};
     otherwise
       fprintf('%s: Unknown input argument: %s\n', mfilename, varargin{iarg});
