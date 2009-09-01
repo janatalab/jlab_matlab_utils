@@ -7,6 +7,8 @@ function result = mysql_insert_trial_mtx(trial_mtx,params)
 
 % 07/18/09 Petr Janata
 
+result = [];
+
 % Check for connection to database
 try 
   conn_id = params.conn_id;
@@ -17,8 +19,14 @@ catch
 end
 
 if mysql_check_conn(conn_id)
-  try host = params.host; catch host = []; end
-  try database = params.database; catch database = []; end
+  host = '';
+  database = '';
+  if isfield(params,'host')
+    host = params.host;
+  end
+  if isfield(params,'database')
+    database = params.database;
+  end
   mysql_make_conn(host,database,conn_id);
 end
 
@@ -37,7 +45,7 @@ qid_str(end) = '';
 dfid_str = sprintf('%d,', unique(trial_mtx(:,4)));
 dfid_str(end) = '';
 
-mysql_str = sprintf(['SELECT trial_id, stimulus_id1, stimulus_id2 question_id data_format_id '  ...
+mysql_str = sprintf(['SELECT trial_id, stimulus_id1, stimulus_id2, question_id, data_format_id '  ...
       'FROM trial WHERE ' ...
       'stimulus_id1 IN (%s) AND ' ...
       'stimulus_id2 IN (%s) AND ' ...
@@ -52,7 +60,7 @@ mysql_str = sprintf(['SELECT trial_id, stimulus_id1, stimulus_id2 question_id da
 insert_mtx = [];
 if isempty(trial_ids)
   insert_mtx = trial_mtx;
-elseif length(trial_ids) < num_trial_types
+elseif length(trial_ids) < size(trial_mtx,1)
   % Remove existing trials
   for itr = 1:length(trial_ids)
     existing_idxs = ...

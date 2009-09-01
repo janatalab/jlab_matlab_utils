@@ -40,21 +40,22 @@ end
 num_attrib = length(attrib_tag);
 
 for iattrib = 1:num_attrib
-
+  curr_tag = attrib_tag{iattrib};
+        
   % Check to see if the attribute tag already exists
-  mysql_str = sprintf('SELECT attribute_id FROM attribute WHERE name="%s";', attrib_tag{iattrib});
+  mysql_str = sprintf('SELECT attribute_id FROM attribute WHERE name="%s";', curr_tag);
   [curr_id] = mysql(conn_id, mysql_str);
 
   if isempty(curr_id) && create
     % Create the attribute if necessary
     mysql_str = sprintf(['INSERT INTO attribute (name,class) ' ...
-	  'VALUES ("%s","stim_set");'], attrib_tag);
+	  'VALUES ("%s","stim_set");'], curr_tag);
     mysql(conn_id,mysql_str);
 
     % Get the attribute ID
-    mysql_str = sprintf('SELECT attribute_id FROM attribute WHERE name="%s";', attrib_tag);
+    mysql_str = sprintf('SELECT attribute_id FROM attribute WHERE name="%s";', curr_tag);
     [attrib_id(iattrib)] = mysql(conn_id, mysql_str);
-    fprintf('Created attribute (%s), ID=%d\n', attrib_tag, attrib_id(iattrib));
+    fprintf('Created attribute (%s), ID=%d\n', curr_tag, attrib_id(iattrib));
   elseif isempty(curr_id) && ~create
     if num_attrib == 1
       attrib_id = [];
@@ -63,7 +64,7 @@ for iattrib = 1:num_attrib
     end
   else
     attrib_id(iattrib) = curr_id;
-    fprintf('Found attribute (%s), ID=%d\n', attrib_tag, attrib_id(iattrib));
+    fprintf('Found attribute (%s), ID=%d\n', curr_tag, attrib_id(iattrib));
   end
 end
 

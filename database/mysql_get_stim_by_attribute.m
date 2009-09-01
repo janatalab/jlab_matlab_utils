@@ -24,31 +24,42 @@ function [data, vars] = mysql_get_stim_by_attribute(varargin)
 
 data = {};
 vars = {};
+inputargs = varargin;
 
 % valid search tables
 tables = {'stimulus','attribute','stimulus_x_attribute'};
 
+% Check to see if params is one of the input argumentes
+str_idxs = find(cellfun(@isstr,inputargs));
+params_idx = strmatch('params',inputargs(str_idxs));
+
+if ~isempty(params_idx)
+  params = inputargs{str_idxs(params_idx)+1};
+  rm_idxs = str_idxs(params_idx):str_idxs(params_idx)+1;
+  inputargs(rm_idxs) = [];
+end
+
 % Parse the input arguments
-narg = length(varargin);
+narg = length(inputargs);
 for iarg = 1:2:narg
-  switch varargin{iarg}
+  switch inputargs{iarg}
     case 'params'
-      params = varargin{iarg+1};
+      params = inputargs{iarg+1};
 
     case 'conn_id'
-      params.conn_id = varargin{iarg+1};
+      params.conn_id = inputargs{iarg+1};
       
     case 'host'
-      params.host = varargin{iarg+1};
+      params.host = inputargs{iarg+1};
     
     case 'database'
-      params.database = varargin{iarg+1};
+      params.database = inputargs{iarg+1};
       
     case {'name','attrib_name'}
-      params.attrib_names = check_cell(varargin{iarg+1});
+      params.attrib_names = check_cell(inputargs{iarg+1});
     
     case {'extract_flds','extract_vars'}
-      params.extract_vars = check_cell(varargin{iarg+1});
+      params.extract_vars = check_cell(inputargs{iarg+1});
       
   end % switch 
 end % for iarg

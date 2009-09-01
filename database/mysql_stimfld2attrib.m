@@ -40,9 +40,9 @@ catch
   tmp_conn_id = 1;
 end
 
-create_attrib = true;
 params.conn_id = conn_id;
-attrib_id = mysql_check_attribute(attrib_tag, create_attrib, params);
+params.create = true;
+attrib_id = mysql_check_attribute(attrib_tag, params);
 
 %
 % Get the list of stimulus IDs that correspond to the current stimulus set
