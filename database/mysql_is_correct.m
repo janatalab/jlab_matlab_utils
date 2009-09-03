@@ -99,14 +99,18 @@ else
   use_enum = false;
 end
 
-% Get the response to this session and trial from the response table
-mysql_str = sprintf(['SELECT response_enum, response_text FROM %s ' ...
+% Get the response to this session and trial from the response table. Make sure
+% we get the most recent trial in the event that multiple iterations of this
+% trial were presented in this session
+mysql_str = sprintf(['SELECT response_enum, response_text, response_order FROM %s ' ...
       'WHERE session_id = %d AND trial_id = %d;'], response_table, session_id, trial_id);
-[response_enum, response_text] = mysql(conn_id, mysql_str);
-response_text = response_text{1};
+[response_enum, response_text, response_order] = mysql(conn_id, mysql_str);
+
+[dummy, resp_idx] = max(response_order);
+response_text = response_text{resp_idx};
 
 if use_enum
-  if response_enum == correct_response_enum
+  if response_enum(resp_idx) == correct_response_enum
     outstr = 'TRUE';
   else
     outstr = 'FALSE';
