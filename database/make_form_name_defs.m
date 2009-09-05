@@ -15,11 +15,16 @@ function [form_id_const, form_name_id_const_map, form_name_list] = make_form_nam
 % 10/15/07 PJ - Turned into a function, fixed handling of multiple databases
 %          and added returning of the variables
 % 12/11/08 PJ - Turned off writing of form_name_defs.m file by default
+% 8/17/09 Stefan Tomic - added flag to only close db connection if
+%                        the ID wasn't passed into the function
+%                        (otherwise, this is a conn that we may want to use later)
+
+close_conn = 0;
 
 if nargin && isfield(params,'ensemble')
   try HOST = params.ensemble.host; catch HOST = ''; end
   try DB = params.ensemble.database; catch DB = ''; end
-  try CONN_ID = params.ensemble.conn_id; catch CONN_ID = 0; end
+  try CONN_ID = params.ensemble.conn_id; catch CONN_ID = 0; close_conn = 1; end
   try DATABASE_SCRIPT_PATH = params.paths.project_root; 
   catch DATABASE_SCRIPT_PATH = '.'; 
   end
@@ -32,6 +37,7 @@ else
   CONN_ID = 0;
   DATABASE_SCRIPT_PATH = '/afs/cmb.ucdavis.edu/share/matlab/janata/database/';
   write2file = 0;
+  close_conn = 1;
 end
 
 mysql_make_conn(HOST,DB,CONN_ID);
@@ -117,4 +123,6 @@ form_name_list = new_form_name_list;
 
 
 % Close the mysql connection
-mysql('close');
+if(close_conn)
+  mysql('close');
+end
