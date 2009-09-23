@@ -32,6 +32,9 @@ function outdata = ensemble_fmri_make4Dnifti(indata,defs)
 % 
 % RETURNS
 %   4D nifti files in 'epi'
+%   mean image of 4D nifti files in 'mean_epi'
+%   std image of 4D nifti files in 'std_epi'
+%   zscored 4D nifti files in 'zscore_epi'
 %   bet masks for all 4D nifti files, in 'betmasks'
 % 
 % NOTE: this function will z-score and brain-extract all images that it
@@ -166,6 +169,30 @@ outdata.data{epi_idx}.data{2} = [];
 outdata.data{epi_idx}.data{3} = [];
 outdata.data{epi_idx}.data{4} = [];
 outdata.data{epi_idx}.data{5} = {};
+
+% mean epi output data struct
+outdata.vars = [outdata.vars 'mean_epi'];
+mepi_idx = length(outdata.vars);
+outdata.data{mepi_idx} = ensemble_init_data_struct();
+outdata.data{mepi_idx}.type = 'mean_epi';
+outdata.data{mepi_idx}.vars = epidata.vars;
+outdata.data{mepi_idx}.data = outdata.data{epi_idx}.data;
+
+% std epi output data struct
+outdata.vars = [outdata.vars 'std_epi'];
+sepi_idx = length(outdata.vars);
+outdata.data{sepi_idx} = ensemble_init_data_struct();
+outdata.data{sepi_idx}.type = 'std_epi';
+outdata.data{sepi_idx}.vars = epidata.vars;
+outdata.data{sepi_idx}.data = outdata.data{epi_idx}.data;
+
+% zscore epi output data struct
+outdata.vars = [outdata.vars 'zscore_epi'];
+zepi_idx = length(outdata.vars);
+outdata.data{zepi_idx} = ensemble_init_data_struct();
+outdata.data{zepi_idx}.type = 'zscore_epi';
+outdata.data{zepi_idx}.vars = epidata.vars;
+outdata.data{zepi_idx}.data = outdata.data{epi_idx}.data;
 
 % mask output data struct
 outdata.vars = [outdata.vars 'betmasks'];
@@ -306,6 +333,10 @@ for isub=1:nsub_proc
         outfname = flist{1};
       end
 
+      outdata.data{epi_idx} = ensemble_add_data_struct_row(...
+          outdata.data{epi_idx},'subject_id',subid,'session',...
+          isess,'ensemble_id',sess.ensemble_id,'run',lrun,'path',outfname);
+
       % bet mask
       maskfname = fullfile(outpath,sprintf('%s_%d_run%d%s',subid,...
           sess.ensemble_id,lrun,name_stub));
@@ -332,6 +363,10 @@ for isub=1:nsub_proc
             subid,isess,lrun);
       end
       
+      outdata.data{mepi_idx} = ensemble_add_data_struct_row(...
+          outdata.data{mepi_idx},'subject_id',subid,'session',...
+          isess,'ensemble_id',sess.ensemble_id,'run',lrun,'path',meanfname);
+
       % calculate std
       stdfname = fullfile(outpath,sprintf('std_run%d%s',lrun,name_stub));
       fstr = sprintf('fslmaths %s -Tstd %s',outfname,stdfname);
@@ -341,6 +376,10 @@ for isub=1:nsub_proc
             subid,isess,lrun);
       end
       
+      outdata.data{sepi_idx} = ensemble_add_data_struct_row(...
+          outdata.data{sepi_idx},'subject_id',subid,'session',...
+          isess,'ensemble_id',sess.ensemble_id,'run',lrun,'path',stdfname);
+
       % calculate z-score
       zfname = fullfile(outpath,sprintf('zscore_run%d%s',lrun,name_stub));
       fstr = sprintf('fslmaths %s -sub %s %s',outfname,meanfname,tmpstub);
@@ -362,8 +401,8 @@ for isub=1:nsub_proc
 
       run_files{irun} = zfname;
 
-      outdata.data{epi_idx} = ensemble_add_data_struct_row(...
-          outdata.data{epi_idx},'subject_id',subid,'session',...
+      outdata.data{zepi_idx} = ensemble_add_data_struct_row(...
+          outdata.data{zepi_idx},'subject_id',subid,'session',...
           isess,'ensemble_id',sess.ensemble_id,'run',lrun,'path',zfname);
 
     end % for irun
@@ -415,8 +454,8 @@ for isub=1:nsub_proc
       
       sess_files{isess} = szfname;
       
-      outdata.data{epi_idx} = ensemble_add_data_struct_row(...
-          outdata.data{epi_idx},'subject_id',subid,'session',...
+      outdata.data{zepi_idx} = ensemble_add_data_struct_row(...
+          outdata.data{zepi_idx},'subject_id',subid,'session',...
           isess,'ensemble_id',sess.ensemble_id,'run',0,'path',szfname);
     end
     

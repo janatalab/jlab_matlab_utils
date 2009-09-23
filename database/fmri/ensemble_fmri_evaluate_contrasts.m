@@ -116,7 +116,9 @@ outdata.data{sinfo_idx}.data = sinfo;
 outdata.vars = [outdata.vars 'modelspec'];
 mod_idx = length(outdata.vars);
 outdata.data{mod_idx} = ensemble_init_data_struct();
-outdata.data{mod_idx}.vars = {'subject_id','session','model_id','path'};
+outdata.data{mod_idx}.name = 'modelspec';
+outdata.data{mod_idx}.type = 'modelspec';
+outdata.data{mod_idx}.vars = {'subject_id','session','model_id','run','path'};
 modcol = set_var_col_const(outdata.data{mod_idx}.vars);
 outdata.data{mod_idx}.data{modcol.subject_id} = {};
 outdata.data{mod_idx}.data{modcol.session} = [];
@@ -175,17 +177,13 @@ for isub=1:nsub_proc
     mdata = ensemble_filter(modelspec,mfilt);
     
     for imod=1:length(mdata.data{mocol.path})
-      model_fname = mdata.data{mocol.path}{1};
+      model_fname = mdata.data{mocol.path}{imod};
 
       if USE_SPM
         spmopts = defs.fmri.spm.opts(expidx).spmopts;
         nstat = nstat+1;
         continfo = curr_model.continfo{1};
         jobs{njob}.stats{nstat}.con = add_con_job(model_fname, continfo);
-
-        outdata.data{mod_idx} = ensemble_add_data_struct_row(...
-            outdata.data{mod_idx},'subject_id',subid,'session',isess,...
-            'model_id',model_id,'path',model_fname);
       elseif USE_FSL
         if ~exist(model_fname,'file')
           warning(['model file %s not found for subject %s, session %d, '...
@@ -212,10 +210,11 @@ for isub=1:nsub_proc
       
         cd(start_dir);
       
-        outdata.data{mod_idx} = ensemble_add_data_struct_row(...
-            outdata.data{mod_idx},'subject_id',subid,'session',isess,...
-            'model_id',model_id,'path',model_fname);
       end % if USE_SPM
+      
+      outdata.data{mod_idx} = ensemble_add_data_struct_row(...
+          outdata.data{mod_idx},'subject_id',subid,'session',isess,...
+          'model_id',model_id,'path',model_fname);
     end % for imod=1:length(
   end % for isess
 end % for isub=

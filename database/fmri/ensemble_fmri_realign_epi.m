@@ -291,7 +291,7 @@ for is=1:nsub_proc
           outfname = sprintf('%s%s',infname,fsl_mc_stub);
         else
           outfname = sprintf('%s%s%s',infname(1:pidx(1)-1),fsl_mc_stub,...
-              infname(pidx(1)+1:end));
+              infname(pidx(1):end));
         end
 
         % Format the FSL command string
