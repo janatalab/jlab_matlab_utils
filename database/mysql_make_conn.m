@@ -40,7 +40,7 @@ switch host
     case {'ensemble_main','ensemble_tarp'}
      mysql_researcher_login; %populates user and passwd variables. This script
 			     %should sit in a location that is not publically visible.
-    case 'ensemble_dev'
+    case {'ensemble_dev','ensemble_test'}
      mysql_researcher_dev_login;
    end
 
