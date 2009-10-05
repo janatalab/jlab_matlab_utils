@@ -114,9 +114,14 @@ else
     % Get subject info
     sub_str = sprintf('''%s'',', expinfo(iexp).subs.ids{:});
     sub_str(end) = [];
-    mysql_str = sprintf(['SELECT name_first, name_last, dob FROM subject WHERE' ...
-	  ' subject_id IN (%s)'], sub_str);
+    enc_key = ensemble_get_encryption_key;
+    mysql_str = sprintf(['SELECT aes_decrypt(`name_first`,''%s''), aes_decrypt(`name_last`,''%s''),' ...
+		    'aes_decrypt(`dob`,''%s'') FROM subject WHERE subject_id IN (%s)'], ...
+			enc_key,enc_key,enc_key,sub_str);
     [first_names, last_names, birthdays] = mysql(conn_id, mysql_str);
+    %since encrypted birthdays are stored as encrypted strings, we need to
+    %convert these to datenums
+    birthdays = datenum(birthdays);
     
     % Determine the number of sessions for each subject in the experiment
     for isub = 1:nsubs

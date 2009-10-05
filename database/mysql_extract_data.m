@@ -75,6 +75,12 @@ for iarg = 1:2:narg
     case 'conn_id'
       conn_id = varargin{iarg+1};
       
+    case 'encrypted_fields'
+      encrypted_fields = varargin{iarg+1};
+    
+    case 'enc_key'
+      enc_key = varargin{iarg+1};
+    
     otherwise % assume a criterion field/value pair
       fld.crit_flds{end+1} =  varargin{iarg};
       crit_vals{end+1} = check_cell(varargin{iarg+1});
@@ -119,8 +125,24 @@ end % for ivar
 
 % Prepare elements of the query
 extract_vars_str = cell2str(fld.extract_flds,',');
-extract_vars_str = sprintf('`%s`,',fld.extract_flds{:});
-extract_vars_str(end) = [];
+if(exist('encrypted_fields','var'))
+ 
+  nflds = length(fld.extract_flds);
+  for ifld = 1:nflds
+    fldname = fld.extract_flds{ifld};
+    if(ismember(fldname,encrypted_fields))
+      sel_query{ifld} = sprintf('aes_decrypt(`%s`,''%s'')',fldname,enc_key);
+    else
+      sel_query{ifld} = sprintf('`%s`',fldname);
+    end
+  end
+  extract_vars_str = cell2str(sel_query,',');
+
+else
+  extract_vars_str = sprintf('`%s`,',fld.extract_flds{:});
+  extract_vars_str(end) = [];
+end
+
 
 % Make the criterion string
 ncrit = length(fld.crit_flds);

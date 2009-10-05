@@ -12,6 +12,8 @@ function subinfo = mysql_get_subinfo(varargin)
 % 01/26/07 Petr Janata
 % 06/01/07 Stefan Tomic - fixed handling of temporary conn_id
 
+ensemble_globals;
+  
 % Initialize some variables
 subinfo = ensemble_init_data_struct;
 
@@ -40,7 +42,10 @@ end
 subinfo.type = 'subject_info';
 
 % Call mysql_extract_data
-[subinfo.data, subinfo.vars] = mysql_extract_data('table','subject','subject_id',subids,'conn_id',conn_id);
+enc_fields = encrypted_fields.subject;
+enc_key = ensemble_get_encryption_key;
+
+[subinfo.data, subinfo.vars] = mysql_extract_data('table','subject','subject_id',subids,'encrypted_fields',enc_fields,'enc_key',enc_key,'conn_id',conn_id);
 
 % Close the database connection if it was temporary
 if (exist('tmp_conn_id','var'))

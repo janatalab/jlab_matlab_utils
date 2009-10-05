@@ -15,7 +15,9 @@ function stimulusDataStruct = ensemble_get_stiminfo(indata,params)
 % 8/13/07 ST - minor fix to make vars a row cell array instead of
 %              column cell array
 % 10/07/08 PJ - enabled passing in of stimids to make this function more useful
-
+% 09/30/09 ST - Added code to deal with missing attribute data (simply set
+%               attributeMeta to empty struct)
+  
 % Handle database and connection defaults
 
 try database = params.ensemble.database; catch database = 'ensemble_main'; end
@@ -60,7 +62,12 @@ end
 
 %separate the stimulus and attribute meta info
 attributeMeta = [stimMeta.attribute];
-attributeMeta = orderfields(attributeMeta,{'stimulus_id','attribute_id','name','class','attribute_value_double','attribute_value_text'});
+if(~isempty(attributeMeta))
+  attributeMeta = orderfields(attributeMeta,{'stimulus_id','attribute_id','name','class','attribute_value_double','attribute_value_text'});
+else
+  %if there is no attribute metadata, just setting this to an empty struct
+  attributeMeta = struct('stimulus_id',[],'attribute_id',[],'name',[],'class',[],'attribute_value_double',[],'attribute_value_text',[]);
+end
 stimMeta = rmfield(stimMeta,'attribute');
 
 att2DCells = squeeze(struct2cell(attributeMeta))';

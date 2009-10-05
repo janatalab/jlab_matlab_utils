@@ -8,15 +8,17 @@ function outData = check_completion_v2(params)
 % params.terminal_form             - The form ID to check against for
 %                                    completion of experiment
 % params.terminal_question         - The question ID to check against for completion
-% params.filt                      - Filter params to filter out unwanted subjects
 % params.ensemble.experiment_title - The title of the experiment
 
 % OPTIONAL PARAMS
+% params.filt                      - Filter params to filter out unwanted subjects
 % params.ensemble.conn_id          - Connection ID to use for database 
 %                                    if no live connection, a new connection is established
 % params.ensemble.host             - hostname of database
 % params.ensemble.database         - database name
-%
+% params.report_after              - any sessions before this date will be
+%                                    ignored in the report (if not specified,
+%                                    all sessions will display)
 %
 % OUTPUTS
 %
@@ -25,6 +27,9 @@ function outData = check_completion_v2(params)
 % Author(s)
 % 2/21/2009 Fred Barrett - Original Author
 % 4/7/2009 Stefan Tomic - adapted script into a more general purpose function for all experiments
+
+ensemble_globals;
+enc_key = ensemble_get_encryption_key;
 
 try
   conn_id = params.ensemble.conn_id;
@@ -45,7 +50,13 @@ catch
   database = '';
 end
 
-if(~mysql(conn_id,'status'))
+try
+  params.filt;
+catch
+  params.filt = {};
+end
+
+if(mysql(conn_id,'status') ~= 0)
   mysql_make_conn(host,database,conn_id);
 end
 
@@ -57,8 +68,12 @@ question_id = params.terminal_question;
 PRINT_TO_FILE=0;
 
 % % % REPORT AFTER THIS DATE
-% report_after = datenum('01-Dec-2008 12:00:00');
-report_after = datenum(params.report_after);
+try
+  report_after = datenum(params.report_after);
+catch
+  %if report_after wasn't specied, report all sessions
+  report_after = 0;
+end
 
 % open logfile
 if exist('PRINT_TO_FILE','var') && PRINT_TO_FILE
@@ -179,13 +194,8 @@ return
 subid_str = sprintf('''%s'',', subids{:});
 subid_str(end) = [];
 
-% SELECT s.subject_id, s.name_last, s.name_first, count(DISTINCT(r.stimulus_id))
-% FROM subject s, response_gpref r
-% WHERE s.subject_id = r.subject_id
-% AND s.subject_id IN (%)
-% GROUP BY r.subject_id
-
-mysql_str = sprintf(['SELECT s.subject_id, s.name_last, s.name_first, '...
+mysql_str = sprintf(['SELECT s.subject_id, aes_decrypt(`s`.`name_last`,''' enc_key '''), ' ...
+		    'aes_decrypt(`s`.`name_first`,''' enc_key '''), ' ...
     'count(DISTINCT(r.stimulus_id)) FROM subject s, %s r '...
     'WHERE s.subject_id = r.subject_id AND s.subject_id IN (%s) '...
     'GROUP BY r.subject_id'], tbl_name, subid_str);
@@ -208,18 +218,14 @@ fprintf(fid,'\n\nTOTAL COMPLETED:%d\n\n',isess);
 
 % % % %  those that may have not completed the final form
 
-% select s.name_last, s.name_first, r.subject_id,count(distinct(r.stimulus_id)) 
-% from response_gpref r, subject s
-% where s.subject_id = r.subject_id
-% and s.subject_id not like '01ttf%'
-% group by r.subject_id
-
 excl_str = cell2str(params.filt.exclude.any.subject_id,''',''');
 
-mysql_str = ['select s.name_last,s.name_first,r.subject_id,r.session_id,' ...
-    'count(distinct(r.stimulus_id)) from ' tbl_name ' r, subject s '...
-    'where s.subject_id = r.subject_id and r.subject_id not like (''' ...
-    excl_str ''') group by r.subject_id'];
+mysql_str = ['select aes_decrypt(`s`.`name_last`,''' enc_key '''), ' ...
+	     'aes_decrypt(`s`.`name_first`,''' enc_key '''),' ... 
+	     'r.subject_id,r.session_id,' ...
+	     'count(distinct(r.stimulus_id)) from ' tbl_name ' r, subject s '...
+	     'where s.subject_id = r.subject_id and r.subject_id not like (''' ...
+	     excl_str ''') group by r.subject_id'];
 
 [chklast,chkfirst,chksubid,chksess,chkstim] = mysql(conn_id,mysql_str);
 
