@@ -1,16 +1,21 @@
-function [scaled] = scale_wvf(wvf,dB,nbits)
-% [scaled] = scale_wvf(wvf,dB,nbits);
+function [scaled] = scale_wvf(wvf,dB,nbits,is_wav)
+% [scaled] = scale_wvf(wvf,dB,nbits,is_wav);
 % 
 % Scales a waveform to a desired decibel level given a resolution of nbits.
 % Default is 16 bits.
 % Removes DC component
+% If is_wav is set to true, the result is scaled on the range of -1 to 1 to be
+% compatible with .WAV format [default=false]
+%
+% If wvf contains multiple columns, each column is scaled independently.
 
 % 01/05/05 PJ
 % 06/21/06 PJ Fixed a problem in that the scaling factor was being calculated
 %             based on the desired peak value and the rms of the waveform.
 
-IS_WAV = 0;  % are we dealing with a situation where everything is scaled on a
-             % range of -1 to 1
+% are we dealing with a situation where everything is scaled on a
+% range of -1 to 1
+try is_wav(1); catch is_wav = 0; end
 
 try nbits(1); catch nbits = 16; end
 
@@ -36,7 +41,7 @@ scale_factor = final_amp*sin(pi/4)./wvf_rms;
 % Apply the scaling factor
 scaled = wvf .* repmat(scale_factor,size(wvf,1),1);
 
-if IS_WAV
+if is_wav
   scaled = scaled ./ (2^(nbits-1));
 end
 

@@ -32,6 +32,7 @@ function result = ensemble_load_expinfo(indata,params)
 % 08/06/08 JG - Added getDefaultParams feature
 %
 % 2009.05.18 FB - added some additional header documentation
+% 2009.10.18 PJ - added check to make sure response table was found
 
 if( isstr( indata ) && strcmp( indata, 'getDefaultParams' ) )
 	result.ensemble.experiment_title = 'use local settings';
@@ -57,9 +58,16 @@ expname = params.ensemble.experiment_title;
 % Get the experiment information
 fprintf('Getting experiment information for: %s\n', expname);
 exp_meta = mysql_extract_metadata('table','experiment', ...
-				  'experiment_title',expname, ...
-				  'conn_id', conn_id);
+  'experiment_title',expname, ...
+  'conn_id', conn_id);
 
+if isempty(exp_meta.response_table)
+  warning(['Failed to locate response_table for experiment (%s)\n' ...
+    'Check to make sure that you are connecting to the database ' ...
+    'you think you are connecting to!\n'], expname);
+  return
+end
+        
 % Pull desired parts of the response table into a response structure
 fprintf('Extracting the response table: %s\n', exp_meta.response_table);
 if ~isfield(params.ensemble, 'extract_vars') || isempty(params.ensemble.extract_vars)

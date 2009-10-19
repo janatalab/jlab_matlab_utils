@@ -76,8 +76,14 @@ end
 
 
 % Check for connection to database
-try database; catch database = []; end
-try host; catch host = []; end
+try database(1); 
+catch
+  database = []; 
+end
+try host(1); 
+catch
+  host = []; 
+end
 try conn_id(1);
 catch   
   conn_id = 1;

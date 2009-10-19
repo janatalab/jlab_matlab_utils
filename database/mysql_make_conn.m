@@ -1,23 +1,51 @@
-function conn_id = mysql_make_conn(host, db, conn_id)
+function conn_id = mysql_make_conn(host_or_struct, db, conn_id)
 % Opens a connection to a mysql server with a specific connection ID (conn_id)
-% conn_id = mysql_make_conn(host, db, conn_id);
+% conn_id = mysql_make_conn(host_or_struct, db, conn_id);
 %
 % Opens a connection to a mysql server with a specific connection ID (conn_id)
 % that can be used in subsequent calls to the database.  If no connection ID is
 % given, a default ID of zero is used. If a connection with the specified
 % conn_id is already open, it is left open.
+%
+% The first input argument can be a structure that contains the host,
+% database, and conn_id parameters.
+%
 
 % 01/04/07 PJ Modified to return conn_id
 % 12/19/07 PJ added checking for open connection
+% 10/18/09 PJ added option of passing in the first argument as a struct
+% that contains all of the information
 
 DEFAULT_HOST = 'atonal.ucdavis.edu';
 DEFAULT_DATABASE = 'ensemble_main';
 
 try 
-  host(1);
+  host_or_struct(1);
 catch
   fprintf('Using default host: %s\n', DEFAULT_HOST);
   host = DEFAULT_HOST;
+end
+
+if isstruct(host_or_struct)
+  try 
+    host = host_or_struct.host;
+  catch
+    host = DEFAULT_HOST; 
+  end
+  
+  try
+    db = host_or_struct.database;
+  catch
+    db = DEFAULT_DATABASE;
+  end
+  
+  try
+    conn_id = host_or_struct.conn_id;
+  catch
+    conn_id = 0;
+  end
+else
+  host = host_or_struct;
 end
 
 try 
