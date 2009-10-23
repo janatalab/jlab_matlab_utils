@@ -22,6 +22,7 @@ function outdata = ensemble_fmri_init(indata,defs)
 %       if this, and defs.init.VOL_CHECK are set, then you must include
 %       defs.paths.figpath
 %   defs.init.USE_SPM
+%   defs.init.USE_FSL
 %   defs.init.CLOBBER
 % 
 % 2008/08/11 FB - adapted from proc_nostalgia_fmri_fmri
@@ -71,8 +72,15 @@ catch REPLACE_BAD_VOLS = 0; end
 try ROTATE_EPI = defs.init.ROTATE_EPI;
 catch ROTATE_EPI = 0; end
 try USE_SPM = defs.init.USE_SPM; catch USE_SPM = 0; end
+try USE_FSL = defs.init.USE_FSL; catch USE_FSL = 0; end
 try CLOBBER = defs.init.CLOBBER; catch CLOBBER = 1; end
 try WRITE2FILE = defs.init.WRITE2FILE; catch WRITE2FILE = 0; end
+
+if (~USE_FSL && ~USE_SPM) || (USE_FSL && USE_SPM)
+  error(['\t\tyou must specify either SPM or FSL to carry out '...
+      'the analyses\n']);
+  return
+end
 
 try CHECK_HEADERS = defs.init.CHECK_HEADERS;
 catch

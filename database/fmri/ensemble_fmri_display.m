@@ -1,7 +1,27 @@
 function [outdata] = ensemble_fmri_display(indata,defs)
-% 
-% Adapted from prime_base_display
+
+% display fmri images generated within ensemble_fmri
 %
+%   outdata = ensemble_fmri_display(indata,defs)
+% 
+% REQUIRES
+%   indata
+%       hires
+%       meanhires
+%       paths
+%       sinfo
+%   defs
+%       conj_idx
+%       conjunctions
+%       display
+%       fmri
+%       model
+%       paths
+%       plots
+%       plotdirstubs (optional)
+% 
+% RETURNS
+% 
 % FIXME: get paths from previous steps
 % 
 % 02/25/06 Petr Janata
@@ -24,6 +44,11 @@ r.report_on_fly = 1;
 for idata = 1:length(indata)
   if isfield(indata{idata},'type')
     switch indata{idata}.type
+      case 'sinfo'
+        sinfo = indata{idata};
+        sinfo = sinfo.data;
+        proc_subs = {sinfo(:).id};
+        nsub_proc = length(proc_subs);
       case 'meanhires'
         meanhires = indata{idata};
         mhicol = set_var_col_const(meanhires.vars);
@@ -35,12 +60,6 @@ for idata = 1:length(indata)
         pacol = set_var_col_const(pathdata.vars);
     end
   end
-end
-
-if isfield(defs,'sinfo') && isstruct(defs.sinfo)
-  sinfo=defs.sinfo;
-  proc_subs = {sinfo(:).id};
-  nsub_proc = length(sinfo(:));
 end
 
 if isfield(defs,'plots')
@@ -69,7 +88,7 @@ if (iscell(indata) && ~isempty(indata) && isfield(indata{1},'task') && ...
         ~isempty(strmatch('return_outdir',indata{1}.task))) || ...
         (isstruct(indata) && isfield(indata,'task') && ...
         ~isempty(strmatch('return_outdir',indata.task)))
-  if exist('pathdata','var') && length(pathdata.data{1}) > 0
+  if exist('pathdata','var') && ~isempty(pathdata.data{1})
     if length(nsub_proc) == 1
       pfilt = struct();
       pfilt.include.all.subject_id = proc_subs;

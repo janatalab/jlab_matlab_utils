@@ -116,7 +116,7 @@ try RESLICE_EPI = defs.realign.RESLICE_EPI; catch RESLICE_EPI = 0; end
 try USE_SPM = defs.realign.USE_SPM; catch USE_SPM = 0; end
 try USE_FSL = defs.realign.USE_FSL; catch USE_FSL = 0; end
 
-if ~USE_FSL && ~USE_SPM
+if (~USE_FSL && ~USE_SPM) || (USE_FSL && USE_SPM)
   error(['\t\tyou must specify either SPM or FSL to carry out '...
       'the analyses\n']);
   return
