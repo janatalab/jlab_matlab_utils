@@ -54,7 +54,7 @@ for idata = 1:length(indata)
         case 'sinfo'
           sinfo = indata{idata}.data;
           proc_subs = {sinfo(:).id};
-        case {'epi','realign_epi'}
+        case {'epi','realign_epi','resid'}
           epidata = indata{idata};
           epicol = set_var_col_const(epidata.vars);
         case 'paths'
@@ -527,14 +527,18 @@ if USE_FSL
   epifname = flist{1};
   [fp,fn,fx] = fileparts(epifname);
 
-  fprintf(1,'brain extraction: ');
-  betfname = fullfile(fp,sprintf('%s_bet%s',fn,fx));
-  betstr = sprintf('bet %s %s -F',epifname,betfname);
-  status = unix(betstr);
-  nobetfname = epifname;
-  epifname = betfname;
-  if status, error('error creating brain-extracted image'); end
-  fprintf(1,'success!\n');
+  if isempty(regexp(fn,'\_bet','once'))
+      fprintf(1,'brain extraction: ');
+      betfname = fullfile(fp,sprintf('%s_bet%s',fn,fx));
+      betstr = sprintf('bet %s %s -F',epifname,betfname);
+      status = unix(betstr);
+      nobetfname = epifname;
+      epifname = betfname;
+      if status, error('error creating brain-extracted image'); end
+      fprintf(1,'success!\n');
+  else
+      fprintf(1,'brain extraction already applied, continuing\n');
+  end
   
 %   fsl_str = sprintf('fslval %s dim1', epifname);
 %   [status, nx] = unix(fsl_str);
@@ -577,11 +581,15 @@ if USE_FSL
   pinfo.evstub = sprintf('%s_run%d_ev%%d.txt',subid,irun);
   pinfo.nslice_per_vol = nslices;
   pinfo.nvol = nvol;
+  pinfo.dt = defs.fmri.spm.defaults.stats.fmri.fmri_spec.timing.fmri_t;
   pinfo.TR = protocol.epi.tr;
   pinfo.protocol = protocol;
   pinfo.irun = irun;
-  pinfo.motionparam_fname = fullfile(fileparts(epifname),...
-      sprintf('rp_%s',sprintf(epifstubfmt,subid,irun,1,'txt')));
+  %%%%%%% HACK - FIXME: motionparam_fname should really either be a
+  %%%%%%% filestub from params or better yet in its own output dataset from
+  %%%%%%% ens_fmri_realign_epi
+  pinfo.motionparam_fname = fullfile(fp,...
+      sprintf('%s_%d_run%dmc.par',subid,sess.ensemble_id,irun));
   
   fsf.ev = fmri_fsl_generate_evs(pinfo,curr_model,sess);
   nev = length(fsf.ev);
@@ -597,16 +605,17 @@ if USE_FSL
 
   fsf = setup_fsl_con(fsf,ev_names,contlist,Fcontlist);
   
+  fsf.tr = protocol.epi.tr;
+  fsf.feat_files{1} = epifname;
+
   % Write the fsf file
   if combine_runs
     fsf_structs{irun} = fsf;
   else
     run_outdir = fullfile(model_outdir,sprintf('run%d',irun));
     check_dir(run_outdir);
-    fsf.tr = protocol.epi.tr;
     fsf.fsldir = run_outdir;
     fsf.outputdir = run_outdir;
-    fsf.feat_files{1} = epifname;
     
     % Retain a copy of the fsf structure so that we can use it during
     % subsequent statistical evaluation
@@ -915,70 +924,89 @@ end % if USE_FSL / elseif USE_SPM
         end % for iperm
         
       elseif USE_FSL
-          
-        % iterate over run-level fsf structs, extract and merge data
-        epi_fnames = {};
-        ev_mtx = [];
-        rmfields = {'outputdir','feat_files','fsldir'}
-        fsf_nvols = 0;
-        for ifeat=1:nruns
-          lfsf = fsf_structs{ifeat};
-          
-          % get epi filename
-          epi_fnames = [epi_fnames lfsf.feat_files{:}];
-          
-          % add nvols
-          fsf_nvols = fsf_nvols + lfsf.npts;
 
-          % merge EV files
-          levmtx = [];
-          ev = lfsf.ev;
-          nev = length(ev);
-          if ifeat > 1
-            if nev ~= size(ev_mtx,2)
-              error('nev not consistent across runs');
-            end
-            
-            % remove run-specific parameters
-            fsf2 = lfsf;
-            for irm=1:length(rmfields)
-              fsf2 = rmfield(fsf2,rmfields{irm});
-            end
-            fsf2.ev = rmfield(fsf2.ev,'fname');
-            
-            % compare parameters between fsf structs
-            if ~compare_structs(fsf1,fsf2),
-              error('fsf definitions (sans filenames) differ');
-            end
-          else
-            % save first fsf struct for later parameter comparison
-            fsf1 = lfsf;
-            
-            % remove run-specific parameters
-            for irm=1:length(rmfields)
-              fsf1 = rmfield(fsf1,rmfields{irm});
-            end
-            fsf1.ev = rmfield(fsf1.ev,'fname');
-          end
-          
-          for iev=1:nev
-            evdata = load(ev(iev).fname);
-            if size(evdata,2) > size(evdata,1), evdata = evdata'; end
-            levmtx = [levmtx evdata];
-          end
-          
-          ev_mtx = [ev_mtx; levmtx];
+        % use first run's fsf struct as template
+        % concatenate EVs across runs (concatenate EVs of same name)
+        % since linear EVs for each run have unique run-specific names, you
+        % needn't handle these specially, but you must model run-mean for
+        % each run separately.
+
+        fsf = fsf_structs{1};
+        fsf.outputdir = fileparts(fsf.outputdir); %% FIXME
+        fsf.fsldir = fileparts(fsf.fsldir); %% FIXME
+
+        evnames = {fsf.ev.name};
+        nev = length(fsf.ev);
+        desmat = zeros(fsf.npts,nev);
+        
+        % get EVs for the first run
+        for iev=1:nev
+          evfname = fsf.ev(iev).fname;
+          desmat(:,iev) = cell2mat(loadtxt(evfname));
         end
         
-        % merge EPIs
+        for irun = 2:length(fsf_structs)
+          lfsf = fsf_structs{irun};
+          fsf.feat_files = [fsf.feat_files lfsf.feat_files];
+
+          % row mask for current run
+          rowmask = fsf.npts+1:fsf.npts+lfsf.npts;
+
+          % add rows to the design matrix
+          desmat(rowmask,:) = 0;
+          
+          % get number of EVs for the current run
+          nlev = length(lfsf.ev);
+          for iev=1:nlev
+            lev = lfsf.ev(iev);
+            % find the current EV in the existing EV names
+            evidx = strmatch(lev.name,evnames);
+            if isempty(evidx)
+              % new regressor, add a column
+              nev = nev+1;
+              desmat(:,nev) = 0;
+
+              % add name to evnames
+              evnames = [evnames lev.name];
+              
+              % add new regressor values for this run
+              desmat(rowmask,end) = cell2mat(loadtxt(lev.fname));
+            elseif length(evidx) > 1
+              error('more than one match found in evnames for EV %s',...
+                  lev.name);
+            else
+              % current regressor, add to the column
+              desmat(rowmask,evidx) = cell2mat(loadtxt(lev.fname));
+            end % if isempty(evidx
+          end % for iev=1:
+
+          fsf.npts = fsf.npts + lfsf.npts;
+        end % for irun=2:
+
+        % keep track of number of EVs in fsf struct
+        fsf.evs_orig = nev;
+        fsf.evs_real = nev;
+
+        % save new EVs out to file
+        ev_outdir = fullfile(fsldir,'evs');
+        evstub = sprintf('%s_combined_ev%%d.txt',subid);
+        
+        for iev=1:nev
+          fsf.ev(iev).fname = fullfile(ev_outdir,sprintf(evstub,iev));
+          regdata = desmat(:,iev);
+          save(fsf.ev(iev).fname,'regdata','-ascii');
+        end
+        
+        % merge EPIs?
         epifname = fullfile(epi_outdir,sprintf('%s_sess%d_concat_all',...
             isess,subid));
         fslstr = sprintf('fslmerge -t %s %s',epifname,...
-            cell2str(epi_fnames,' '));
+            cell2str(fsf.feat_files,' '));
         status = unix(fslstr);
         if status
           error('error merging epi run data');
         end
+        fsf.feat_files = {epifname};
 
         % get nvols from merged EPI
         fsl_str = sprintf('fslval %s dim4', epifname);
