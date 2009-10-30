@@ -14,7 +14,8 @@ function conn_id = mysql_make_conn(host_or_struct, db, conn_id)
 % 01/04/07 PJ Modified to return conn_id
 % 12/19/07 PJ added checking for open connection
 % 10/18/09 PJ added option of passing in the first argument as a struct
-% that contains all of the information
+%             that contains all of the information
+% 10/30/09 PJ minor fix to handle empty first argument
 
 DEFAULT_HOST = 'atonal.ucdavis.edu';
 DEFAULT_DATABASE = 'ensemble_main';
@@ -44,6 +45,8 @@ if isstruct(host_or_struct)
   catch
     conn_id = 0;
   end
+elseif isempty(host_or_struct)
+  host = DEFAULT_HOST;
 else
   host = host_or_struct;
 end

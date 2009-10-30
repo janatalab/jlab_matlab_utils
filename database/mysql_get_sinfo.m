@@ -15,6 +15,8 @@ function sinfo = mysql_get_sinfo(subid,conn_id)
 % 03/05/06 Petr Janata - determines participation dates for the subject
 % 04/15/06 PJ - optimized search for subject ID in response tables
 % 06/21/06 PJ - searches session table instead of response tables.
+% 10/30/09 PJ - minor fix to convert date string to datenum, following
+%               subject table encryption modification
 
 sinfo = [];
 
@@ -45,6 +47,9 @@ mysql_str = sprintf(['select date_entered, aes_decrypt(`dob`,''%s''), gender, ae
 		    enc_key,...
 		    subid);
 [date_entered sinfo.datenum, sinfo.gender, sinfo.name_last, sinfo.name_first] = mysql(conn_id, mysql_str);
+
+% Convert date string to datenum
+sinfo.datenum = datenum(sinfo.datenum);
 
 %
 % Determine which experiments this subject has been in.  Do this on the basis

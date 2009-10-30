@@ -129,7 +129,11 @@ nitems = length(itemids);
 %
 % Set stuff up for writing to a file, if that's what we're going to do.
 %
-fid = ensemble_init_fid(params.(repstr).tables);
+try 
+  fid = ensemble_init_fid(params.(repstr).tables);
+catch
+  fid = 1;
+end
 
 %
 % Loop over all of the unique question/subquestion combinations or compqids
