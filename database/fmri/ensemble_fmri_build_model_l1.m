@@ -944,7 +944,8 @@ end % if USE_FSL / elseif USE_SPM
           evfname = fsf.ev(iev).fname;
           desmat(:,iev) = cell2mat(loadtxt(evfname));
         end
-        
+
+	% get EVs for additional runs        
         for irun = 2:length(fsf_structs)
           lfsf = fsf_structs{irun};
           fsf.feat_files = [fsf.feat_files lfsf.feat_files];
@@ -959,6 +960,7 @@ end % if USE_FSL / elseif USE_SPM
           nlev = length(lfsf.ev);
           for iev=1:nlev
             lev = lfsf.ev(iev);
+
             % find the current EV in the existing EV names
             evidx = strmatch(lev.name,evnames);
             if isempty(evidx)
@@ -971,6 +973,9 @@ end % if USE_FSL / elseif USE_SPM
               
               % add new regressor values for this run
               desmat(rowmask,end) = cell2mat(loadtxt(lev.fname));
+
+	      % add ev struct to fsf
+	      fsf.ev(nev) = lev;
             elseif length(evidx) > 1
               error('more than one match found in evnames for EV %s',...
                   lev.name);
@@ -978,6 +983,19 @@ end % if USE_FSL / elseif USE_SPM
               % current regressor, add to the column
               desmat(rowmask,evidx) = cell2mat(loadtxt(lev.fname));
             end % if isempty(evidx
+
+	    % add run mean regressor
+	    rmrname = sprintf('mean_run%d',irun);
+	    if isempty(strmatch(rmrname,evnames))
+	      nev = nev+1;
+	      desmat(:,nev) = 0;
+	      desmat(rowmask,end) = 1;
+	      evnames = [evnames rmrname];
+
+	      fsf.ev(nev).name = rmrname;
+	      fsf.ev(nev).shape = 2;
+	      %fsf.ev(nev) %% FIXME
+	    end % if isempty(strmatch(sprintf('mean_run%d
           end % for iev=1:
 
           fsf.npts = fsf.npts + lfsf.npts;
@@ -989,8 +1007,7 @@ end % if USE_FSL / elseif USE_SPM
 
         % save new EVs out to file
         ev_outdir = fullfile(fsldir,'evs');
-        evstub = sprintf('%s_combined_ev%%d.txt',subid);
-        
+        evstub = sprintf('%s_sess%d_ev%%d.txt',subid,isess);
         for iev=1:nev
           fsf.ev(iev).fname = fullfile(ev_outdir,sprintf(evstub,iev));
           regdata = desmat(:,iev);
@@ -998,6 +1015,7 @@ end % if USE_FSL / elseif USE_SPM
         end
         
         % merge EPIs?
+	epi_outdir = fileparts(fileparts(fsf.feat_files{1}));
         epifname = fullfile(epi_outdir,sprintf('%s_sess%d_concat_all',...
             isess,subid));
         fslstr = sprintf('fslmerge -t %s %s',epifname,...
@@ -1008,43 +1026,17 @@ end % if USE_FSL / elseif USE_SPM
         end
         fsf.feat_files = {epifname};
 
-        % get nvols from merged EPI
-        fsl_str = sprintf('fslval %s dim4', epifname);
-        [status, nz] = unix(fsl_str);
-        nvols = str2num(nz); %#ok<ST2NM>
-        if nvols ~= fsf_nvols
-          error('number of volumes is incorrect');
-        end
-        
-        % populate fsf
-        fsf = fsf1;
-        fsf.feat_files{1} = epifname;
-        fsf.npts = nvols;
-        fsf.fsldir = model_outdir;
-        fsf.outputdir = model_outdir;
-        fsf.tr = protocol.epi.tr;
-
-        % save EV files
-        nev = size(ev_mtx,2);
-        evoutdir = fullfile(model_outdir,'evs'); check_dir(evoutdir);
-        evstub = sprintf('%s_sess%d_ev%%d.txt',subid,isess);
-        for iev = 1:nev
-          outfname = fullfile(evoutdir,sprintf(evstub,iev));	
-          regdata = ev_mtx(:,iev);
-          save(outfname,'regdata','-ascii')
-          
-          fsf.ev(iev).fname = outfname;
-        end
+	% REMOVE MEAN?
 
         % Retain a copy of the fsf structure so that we can use it during
         % subsequent statistical evaluation
-        fsf_fname = fullfile(model_outdir, 'fsf.mat');
+        fsf_fname = fullfile(fsf.fsldir, 'fsf.mat');
         save(fsf_fname, 'fsf');
 
         write_fsf(fsf);
 
         % Switch to the directory that we'll be evaluating the model in
-        cd(model_outdir);
+        cd(fsf.fsldir);
 
         % Check model integrity
         fsl_str = 'feat_model design';
@@ -1064,7 +1056,7 @@ end % if USE_FSL / elseif USE_SPM
 
         outdata.data{mod_idx} = ensemble_add_data_struct_row(outdata.data{mod_idx},...
             'subject_id',subid,'session',isess,'model_id',model_id,'run',irun,...
-            'path',fullfile(model_outdir,'design.fsf'));
+            'path',fullfile(fsf.fsldir,'design.fsf'));
 
         if ESTIMATE_MODEL
           % Run the model
@@ -1078,7 +1070,7 @@ end % if USE_FSL / elseif USE_SPM
           end
 
           % Add the mean back into the residuals
-          resid_fname =  fullfile(model_outdir,'stats','res4d.nii.gz');
+          resid_fname =  fullfile(fsf.fsldir,'stats','res4d.nii.gz');
           fsl_str = sprintf('fslmaths %s -add %s %s',...
               resid_fname,meanfname,resid_fname);
           status = unix(fsl_str);
@@ -1090,7 +1082,26 @@ end % if USE_FSL / elseif USE_SPM
               'subject_id',subid,'session',isess,'model_id',model_id,'run',irun,...
               'path',resid_fname);
         end
-        
+
+	if PLOT_DESMAT_COV
+	  msg = sprintf('Loading model info in: %s\n', fsf.fsldir);
+      	  r = update_report(r,msg);
+      
+	  opts.printfig = 1;
+      	  opts.title = sprintf('%s, session %d, model %02d', subid, isess, model_id);
+      	  opts.figstub = fullfile(defs.paths.figpath, sprintf('descorr_model_%02d', model_id));
+      	  if ~started_desmat_cov_file
+            opts.append_str = '';
+            started_desmat_cov_file = 1;
+	  else
+            opts.append_str = '-append';
+          end
+      	  figure(1), clf
+      	  opts.figh = gcf;
+
+      	  post_process_corrmat_fsl(fsf.fsldir,opts);
+	end
+
       end % if USE_SPM && ((isfield(curr_model,'srcdata
     end % if combine_runs
     
@@ -1220,7 +1231,7 @@ end % if BUILD_MODEL
 % % %       end
 % % %     end % if ESTIMATE_MODEL && USE_FSL && combine_runs
     
-    if PLOT_DESMAT_COV
+    if PLOT_DESMAT_COV && USE_SPM
       msg = sprintf('Loading model info in: %s\n', model_fname);
       r = update_report(r,msg);
       
@@ -1236,7 +1247,7 @@ end % if BUILD_MODEL
       figure(1), clf
       opts.figh = gcf;
       post_process_corrmat(model_fname, opts);
-    end % if PLOT_DESMAT_COV
+    end % if PLOT_DESMAT_COV && USE_SPM
   end % for isess
 end % for isub=
 
