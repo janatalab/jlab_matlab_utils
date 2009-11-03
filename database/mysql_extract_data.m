@@ -16,6 +16,11 @@ function [data,vars] = mysql_extract_data(varargin)
 % 'conn_id' - the connection ID to the MySQL database to use. If this is left
 %             empty, a temporary ID is created.
 %
+% 'encrypted_fields' - a cell array of field names that were encrypted in the
+%                      table using aes_encryption. They will be decrypted using
+%                      the supplied encryption key 'enc_key'
+% 'enc_key' - a string used to decrypt the data, using aes_decrypt
+%
 % All other tag/value pairs specify fields to be used for searching and the
 % values to search for. With the exception of the following variables, the tag
 % must match the field name in the table exactly.
@@ -28,7 +33,9 @@ function [data,vars] = mysql_extract_data(varargin)
 % 01/10/07 S.T. Added clause for handling empty search criteria
 %               (i.e. no extract_flds or values are given)
 % 03/12/08 PJ field names now enclosed in quotes. MySQL 5 compatibility
-
+% 10/05/09 Stefan Tomic - added support for reading in encrypted fields,
+%                         identified by 'encrypted_fields' cell array. The key
+%                         is passed in as 'enc_key'
 
 % Initialize some variables
 fld.crit_flds = {};
