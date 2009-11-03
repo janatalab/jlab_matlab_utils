@@ -214,6 +214,25 @@ elseif USE_FSL
   end
 end % if USE_SPM
 
+if isfield(defs,'build_model_l1')
+  if isfield(defs.build_model_l1,'USE_SPM_MOTPARAMS') && ...
+          defs.build_model_l1.USE_SPM_MOTPARAMS
+    USE_SPM_MOTPARAMS = 1;
+    USE_FSL_MOTPARAMS = 0;
+  elseif isfield(defs.build_model_l1,'USE_FSL_MOTPARAMS') && ...
+          defs.build_model_l1.USE_FSL_MOTPARAMS
+    USE_SPM_MOTPARAMS = 0;
+    USE_FSL_MOTPARAMS = 1;
+  else
+    if USE_SPM
+      USE_SPM_MOTPARAMS = 1;
+      USE_FSL_MOTPARAMS = 0;
+    elseif USE_FSL
+      USE_SPM_MOTPARAMS = 0;
+      USE_FSL_MOTPARAMS = 1;
+    end
+  end
+end
 exp_inroot = defs.paths.inroot;
 exp_outroot = defs.paths.outroot;
 
@@ -527,7 +546,14 @@ if USE_FSL
   epifname = flist{1};
   [fp,fn,fx] = fileparts(epifname);
 
-  if isempty(regexp(fn,'\_bet','once'))
+  if ~isempty(regexp(fn,'\_bet','once'))
+      fprintf(1,'brain extraction already applied, continuing\n');
+  elseif exist(fullfile(fp,sprintf('%s_bet%s',fn,fx)),'file')
+      fprintf(1,'brain extraction already applied, taking from disk\n');
+      betfname = fullfile(fp,sprintf('%s_bet%s',fn,fx));
+      nobetfname = epifname;
+      epifname = betfname;
+  else
       fprintf(1,'brain extraction: ');
       betfname = fullfile(fp,sprintf('%s_bet%s',fn,fx));
       betstr = sprintf('bet %s %s -F',epifname,betfname);
@@ -536,8 +562,6 @@ if USE_FSL
       epifname = betfname;
       if status, error('error creating brain-extracted image'); end
       fprintf(1,'success!\n');
-  else
-      fprintf(1,'brain extraction already applied, continuing\n');
   end
   
 %   fsl_str = sprintf('fslval %s dim1', epifname);
@@ -588,8 +612,13 @@ if USE_FSL
   %%%%%%% HACK - FIXME: motionparam_fname should really either be a
   %%%%%%% filestub from params or better yet in its own output dataset from
   %%%%%%% ens_fmri_realign_epi
-  pinfo.motionparam_fname = fullfile(fp,...
-      sprintf('%s_%d_run%dmc.par',subid,sess.ensemble_id,irun));
+  if USE_FSL_MOTPARAMS
+    pinfo.motionparam_fname = fullfile(fp,...
+        sprintf('%s_%d_run%dmc.par',subid,sess.ensemble_id,irun));
+  elseif USE_SPM_MOTPARAMS
+    pinfo.motionparam_fname = fullfile(fp,...
+        sprintf('rp_%s',sprintf(epifstubfmt,subid,irun,1,'txt')));
+  end
   
   fsf.ev = fmri_fsl_generate_evs(pinfo,curr_model,sess);
   nev = length(fsf.ev);
@@ -598,12 +627,6 @@ if USE_FSL
   fsf.evs_real = nev;
   
   [fsf.ev.ortho] = deal(zeros(1,nev));
-
-  ev_names = {fsf.ev.name};
-  contlist  = curr_model.contlist;
-  Fcontlist = curr_model.Fcontlist;
-
-  fsf = setup_fsl_con(fsf,ev_names,contlist,Fcontlist);
   
   fsf.tr = protocol.epi.tr;
   fsf.feat_files{1} = epifname;
@@ -612,6 +635,12 @@ if USE_FSL
   if combine_runs
     fsf_structs{irun} = fsf;
   else
+    ev_names = {fsf.ev.name};
+    contlist  = curr_model.contlist;
+    Fcontlist = curr_model.Fcontlist;
+
+    fsf = setup_fsl_con(fsf,ev_names,contlist,Fcontlist);
+
     run_outdir = fullfile(model_outdir,sprintf('run%d',irun));
     check_dir(run_outdir);
     fsf.fsldir = run_outdir;
@@ -684,7 +713,13 @@ elseif USE_SPM
   pinfo.irun=irun;
   pinfo.resp_mapping = sess.resp_mapping;
   ppath = fileparts(flist{1});
-  pinfo.motionparam_fname = fullfile(ppath,sprintf('rp_%s',sprintf(epifstubfmt,subid,irun,1,'txt')));
+  if USE_SPM_MOTPARAMS
+    pinfo.motionparam_fname = fullfile(ppath,...
+        sprintf('rp_%s',sprintf(epifstubfmt,subid,irun,1,'txt')));
+  elseif USE_FSL_MOTPARAMS
+    pinfo.motionparam_fname = fullfile(ppath,...
+        sprintf('%s_%d_run%dmc.par',subid,sess.ensemble_id,irun));
+  end
   pinfo.presfname = sess.pres.logfiles{irun,1};
 
   % if there is physio data for this subject/run, and if there is a physio
@@ -932,8 +967,8 @@ end % if USE_FSL / elseif USE_SPM
         % each run separately.
 
         fsf = fsf_structs{1};
-        fsf.outputdir = fileparts(fsf.outputdir); %% FIXME
-        fsf.fsldir = fileparts(fsf.fsldir); %% FIXME
+        fsf.outputdir = model_outdir;
+        fsf.fsldir = model_outdir;
 
         evnames = {fsf.ev.name};
         nev = length(fsf.ev);
@@ -945,7 +980,7 @@ end % if USE_FSL / elseif USE_SPM
           desmat(:,iev) = cell2mat(loadtxt(evfname));
         end
 
-	% get EVs for additional runs        
+        % get EVs for additional runs        
         for irun = 2:length(fsf_structs)
           lfsf = fsf_structs{irun};
           fsf.feat_files = [fsf.feat_files lfsf.feat_files];
@@ -962,7 +997,7 @@ end % if USE_FSL / elseif USE_SPM
             lev = lfsf.ev(iev);
 
             % find the current EV in the existing EV names
-            evidx = strmatch(lev.name,evnames);
+            evidx = strmatch(lev.name,evnames,'exact');
             if isempty(evidx)
               % new regressor, add a column
               nev = nev+1;
@@ -974,8 +1009,8 @@ end % if USE_FSL / elseif USE_SPM
               % add new regressor values for this run
               desmat(rowmask,end) = cell2mat(loadtxt(lev.fname));
 
-	      % add ev struct to fsf
-	      fsf.ev(nev) = lev;
+    	      % add ev struct to fsf
+              fsf.ev(nev) = lev;
             elseif length(evidx) > 1
               error('more than one match found in evnames for EV %s',...
                   lev.name);
@@ -983,41 +1018,50 @@ end % if USE_FSL / elseif USE_SPM
               % current regressor, add to the column
               desmat(rowmask,evidx) = cell2mat(loadtxt(lev.fname));
             end % if isempty(evidx
-
-	    % add run mean regressor
-	    rmrname = sprintf('mean_run%d',irun);
-	    if isempty(strmatch(rmrname,evnames))
-	      nev = nev+1;
-	      desmat(:,nev) = 0;
-	      desmat(rowmask,end) = 1;
-	      evnames = [evnames rmrname];
-
-	      fsf.ev(nev).name = rmrname;
-	      fsf.ev(nev).shape = 2;
-	      %fsf.ev(nev) %% FIXME
-	    end % if isempty(strmatch(sprintf('mean_run%d
           end % for iev=1:
 
+          % add run mean regressor
+          rmrname = sprintf('mean_run%d',irun);
+          if isempty(strmatch(rmrname,evnames))
+            nev = nev+1;
+            desmat(:,nev) = 0;
+            desmat(rowmask,end) = 1;
+            evnames = [evnames rmrname];
+
+            fsf.ev(nev) = create_ev;
+            fsf.ev(nev).name = rmrname;
+            fsf.ev(nev).shape = 2;
+            %fsf.ev(nev) %% FIXME
+          end % if isempty(strmatch(sprintf('mean_run%d
           fsf.npts = fsf.npts + lfsf.npts;
         end % for irun=2:
 
         % keep track of number of EVs in fsf struct
         fsf.evs_orig = nev;
         fsf.evs_real = nev;
-
+        
         % save new EVs out to file
-        ev_outdir = fullfile(fsldir,'evs');
+        ev_outdir = fullfile(fsf.fsldir,'evs');
         evstub = sprintf('%s_sess%d_ev%%d.txt',subid,isess);
         for iev=1:nev
           fsf.ev(iev).fname = fullfile(ev_outdir,sprintf(evstub,iev));
           regdata = desmat(:,iev);
           save(fsf.ev(iev).fname,'regdata','-ascii');
+          %% HACK!!! FIXME
+          % fix orthogonalization vectors for this ev
+          fsf.ev(iev).ortho(length(fsf.ev(iev).ortho)+1:nev) = 0;
         end
         
+        % set up contrasts
+        contlist  = curr_model.contlist;
+        Fcontlist = curr_model.Fcontlist;
+
+        fsf = setup_fsl_con(fsf,evnames,contlist,Fcontlist);
+
         % merge EPIs?
-	epi_outdir = fileparts(fileparts(fsf.feat_files{1}));
+    	epi_outdir = fileparts(fileparts(fsf.feat_files{1}));
         epifname = fullfile(epi_outdir,sprintf('%s_sess%d_concat_all',...
-            isess,subid));
+            subid,isess));
         fslstr = sprintf('fslmerge -t %s %s',epifname,...
             cell2str(fsf.feat_files,' '));
         status = unix(fslstr);
@@ -1026,7 +1070,7 @@ end % if USE_FSL / elseif USE_SPM
         end
         fsf.feat_files = {epifname};
 
-	% REMOVE MEAN?
+        % REMOVE MEAN?
 
         % Retain a copy of the fsf structure so that we can use it during
         % subsequent statistical evaluation
@@ -1256,6 +1300,7 @@ if USE_SPM && RUN_SPM && ~isempty(jobs)
   % Save the job file so the we have a record of what we did
   tstamp = datenum(now);
   job_stub = sprintf('jobs_%s.mat', datestr(tstamp,30));
+  check_dir(defs.paths.jobpath);
   job_fname = fullfile(defs.paths.jobpath, job_stub);
   msg = sprintf('Saving job info to: %s\n', job_fname);
   r = update_report(r,msg);

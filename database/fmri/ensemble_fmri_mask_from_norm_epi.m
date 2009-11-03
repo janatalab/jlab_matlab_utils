@@ -59,10 +59,10 @@ if (iscell(indata) && ~isempty(indata) && isfield(indata{1},'task') && ...
         ~isempty(strmatch('return_outdir',indata{1}.task))) || ...
         (isstruct(indata) && isfield(indata,'task') && ...
         ~isempty(strmatch('return_outdir',indata.task)))
-  if exist('pathdata','var') && length(pathdata.data{1}) > 0
+  if exist('pathdata','var') && ~isempty(pathdata.data{1})
     if length(nsub_proc) == 1
       pfilt = struct();
-      pfilt.include.all.subject_id = proc_subs;
+      pfilt.include.all.subject_id = {proc_subs{1}};
       lpathdata = ensemble_filter(pathdata,pfilt);
       if ~isempty(lpathdata.data{1})
         sfilt = pfilt;

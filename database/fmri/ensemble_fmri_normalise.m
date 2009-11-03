@@ -376,6 +376,7 @@ if RUN_SPM && ~isempty(jobs)
   % Save the job file so the we have a record of what we did
   tstamp = datenum(now);
   job_stub = sprintf('jobs_%s.mat', datestr(tstamp,30));
+  check_dir(defs.paths.jobpath);
   job_fname = fullfile(defs.paths.jobpath, job_stub);
   msg = sprintf('Saving job info to: %s\n', job_fname);
   r = update_report(r,msg);

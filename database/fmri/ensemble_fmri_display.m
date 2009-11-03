@@ -80,7 +80,7 @@ if isfield(defs,'model') && isfield(defs.model,'model_id')
 end
 
 % check for required vars, quit if they can't be found
-check_vars = {'sinfo','plots',{'hires','meanhires'}};
+check_vars = {'plots'};
 check_required_vars;
 
 % return outdir if that task is requested
@@ -157,7 +157,19 @@ try USE_SPM = defs.display.USE_SPM; catch USE_SPM = 0; end
 try USE_FSL = defs.display.USE_FSL; catch USE_FSL = 0; end
 try ORTHO_PMOD_MODEL = defs.display.ORTHO_PMOD_MODEL;
   catch ORTHO_PMODMODEL = 0; end
-  
+
+if PLOT_SINGLE_SUB
+  % require subject info if plotting single subject
+  check_vars = {'sinfo'};
+  check_required_vars;
+  if USE_INDIVIDUAL_HIRES
+    if ~exist('hires','var')
+      warning('no individual hires data found, using canonical!');
+      USE_INDIVIDUAL_HIRES = 0;
+    end
+  end
+end
+
 if USE_FSL && ~USE_SPM
   error('FSL not supported yet ...\n');
 elseif (~USE_FSL && ~USE_SPM) || (USE_FSL && USE_SPM)
@@ -294,14 +306,13 @@ for iplot = 1:nplots
         SO.img(nimg).cmap = gray;
 
         if USE_INDIVIDUAL_HIRES
-          if IS_HIRES_SPATNORM
-            normprefix = 'w';
-          else
-            normprefix = '';
-          end
-          hires_fname = fullfile(anatdir,sprintf('%s%s_hires.img', normprefix,subid));
+          % get individual hires
+          hfilt.include.all.subject_id = {subid};
+          hdata = ensemble_filter(hires,hfilt);
+          hires_fname = hdata.data{hicol.path}{1};
         else
-          hires_fname = fullfile(spm_root,'canonical/avg152T1.nii');
+          hires_fname = fullfile(defs.fmri.spm.paths.canonical_dir,...
+              'avg152T1.nii');
         end
 	
         SO.img(nimg).vol = spm_vol(hires_fname);

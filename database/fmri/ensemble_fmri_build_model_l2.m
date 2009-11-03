@@ -117,7 +117,7 @@ exp_outroot = defs.paths.outroot;
 
 % Deal with setting things up that operate across subjects, such as Level 2
 % analyses
-if BUILD_LEVEL2_MODEL | ESTIMATE_LEVEL2_MODEL
+if BUILD_LEVEL2_MODEL || ESTIMATE_LEVEL2_MODEL
   level2 = curr_model.level2;
   nlevel2 = length(level2);
 
@@ -242,13 +242,15 @@ for isub=1:nsub_proc
       r = update_report(r,msg);
     end
         
-    if BUILD_LEVEL2_MODEL & USE_SPM
+    if BUILD_LEVEL2_MODEL && USE_SPM
       % get model spec
       modfilt.include.all.subject_id = {subid};
       modfilt.include.all.session = isess;
       lmod = ensemble_filter(modelspec,modfilt);
       
-      if isempty(lmod.data{mocol.path}{1})
+      if isempty(lmod.data{mocol.path}) || ...
+              isempty(lmod.data{mocol.path}{1}) || ...
+              ~exist(lmod.data{mocol.path}{1},'file')
         msg = sprintf(['\nno model found for subject %s, session %d, '...
             'skipping!\n'],subid,isess);
         r = update_report(r,msg);
@@ -261,6 +263,12 @@ for isub=1:nsub_proc
       % Get the xCon info from the SPM.mat file
       tmp = load(mpath);
       xCon = tmp.SPM.xCon;
+      if isempty(xCon)
+        msg = sprintf(['\nno contrasts found for subject %s, session %d, '...
+            'skipping!\n'],subid,isess);
+        r = update_report(r,msg);
+        continue
+      end
       
       for il = 1:nlevel2
         cidx = level2_idxs(il);
@@ -307,10 +315,11 @@ for isub=1:nsub_proc
 end % for isub=
 
 % Submit the SPM job stack
-if RUN_SPM & ~isempty(jobs)
+if RUN_SPM && ~isempty(jobs)
   % Save the job file so the we have a record of what we did
   tstamp = datenum(now);
   job_stub = sprintf('jobs_%s.mat', datestr(tstamp,30));
+  check_dir(defs.paths.jobpath);
   job_fname = fullfile(defs.paths.jobpath, job_stub);
   msg = sprintf('Saving job info to: %s\n', job_fname);
   r = update_report(r,msg);
