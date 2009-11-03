@@ -16,7 +16,7 @@ function conn_id = mysql_make_conn(host_or_struct, db, conn_id)
 % 10/18/09 PJ added option of passing in the first argument as a struct
 %             that contains all of the information
 % 10/30/09 PJ minor fix to handle empty first argument
-
+% 11/3/09  ST minor fix (use host_or_struct in first try instead of host)
 DEFAULT_HOST = 'atonal.ucdavis.edu';
 DEFAULT_DATABASE = 'ensemble_main';
 
@@ -24,7 +24,7 @@ try
   host_or_struct(1);
 catch
   fprintf('Using default host: %s\n', DEFAULT_HOST);
-  host = DEFAULT_HOST;
+  host_or_struct = DEFAULT_HOST;
 end
 
 if isstruct(host_or_struct)
