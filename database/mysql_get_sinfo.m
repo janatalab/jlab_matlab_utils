@@ -15,6 +15,7 @@ function sinfo = mysql_get_sinfo(subid,conn_id)
 % 03/05/06 Petr Janata - determines participation dates for the subject
 % 04/15/06 PJ - optimized search for subject ID in response tables
 % 06/21/06 PJ - searches session table instead of response tables.
+% 10/05/09 Stefan Tomic - reads in subject name and DOB as encrypted data
 % 10/30/09 PJ - minor fix to convert date string to datenum, following
 %               subject table encryption modification
 
