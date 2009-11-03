@@ -60,6 +60,7 @@ ev.stop=[];
 % Parameters for custom EVs
 %
 ev.fname='';
+ev.name='';
 
 % The orthogonalization vector has to obviously be set once the EVs are all known
 % Orthogonalise EV 1 wrt EV 0

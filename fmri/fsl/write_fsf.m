@@ -648,6 +648,7 @@ for icon = 1:ncon
   fprintf(fid,'%s', fsf_str);
 
   for iev = 1:nev
+    if length(con.con_vect) < iev, continue, end
     fsf_str = sprintf([...
 	  '\n# Real contrast_%s vector %d element %d' ...
 	  '\nset fmri(con_%s%d.%d) %d\n'], mode, icon, iev, mode, icon, iev, con.con_vect(iev));
