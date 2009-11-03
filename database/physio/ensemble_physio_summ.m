@@ -172,6 +172,11 @@ function outdata = ensemble_physio_summ(indata,defs)
 %               peak, all but the highest peak will be discarded.
 %   		.peak_height_thresh (default 0.02) - peak heights below
 %               this value will be rejected
+%       .keep_baseline (default: 1) - keep the baseline period in the
+%           final signal that is returned (1), or remove it (0)? either
+%           way, the baseline period (if greater than 0) mean is removed
+%           from the signal of interest for each epoch, and peaks during
+%           the baseline period are removed after peak finding
 %   defs.physio_summ.pulse - settings for pulse ox. data summary
 %   	.find_peaks.thresh (default 0.5) - proportion of total signal
 %           range below which peaks will not be considered. for example,
@@ -401,7 +406,8 @@ try scr.pk.peak_height_window = ps.scr.find_peaks.peak_height_window;
   catch scr.pk.peak_height_window = 0.6; end % in seconds
 try scr.pk.peak_height_thresh = ps.scr.find_peaks.peak_height_thresh;
   catch scr.pk.peak_height_thresh = 0.02; end
-
+try keep_baseline = ps.scr.keep_baseline; catch keep_baseline = 1; end
+  
 % verify integral beginning and ending points
 if scr.int_begin > scr.int_end
   error(['must provide valid integral beginning and ending points, in '...
@@ -743,16 +749,22 @@ if EXTRACT_DATA
                 mbase = mean(epochs(1:(baseline*EEG.srate),iep));
                 pksig = epochs(:,iep) - mbase;
                 
+                if ~keep_baseline && baseline
+                  pksig(1:baseline*EEG.srate) = [];
+                end
+                
                 % get peaks
                 [pidxs,heights,bidxs] = find_peaks(pksig,scr.pk);
 
-                % remove peaks whose troughs occur before 1 sec after
-                % stimulus onset
-                rmbase = bidxs < (baseline+1)*EEG.srate;
-                pidxs(rmbase) = [];
-                heights(rmbase) = [];
-                bidxs(rmbase) = [];
-
+                if keep_baseline && baseline
+                  % remove peaks whose troughs occur before 1 sec after
+                  % stimulus onset
+                  rmbase = bidxs < (baseline+1)*EEG.srate;
+                  pidxs(rmbase) = [];
+                  heights(rmbase) = [];
+                  bidxs(rmbase) = [];
+                end
+                
                 % graph??
                 if GRAPH_EPOCHS
                   m = mod(iep-1,ep_per_fig);
@@ -791,7 +803,7 @@ if EXTRACT_DATA
               % iterate over epochs
               for iep=1:ns
                 % find peaks
-                pksig = EEG.data(cidx,baseline_end+1:end,iep);
+                pksig = EEG.data(cidx,baseline_end:end,iep);
                 pidxs = find_peaks(pksig,pulse.pk);
 
                 % save signal out to cardiac_epochs
