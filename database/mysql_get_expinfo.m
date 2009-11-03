@@ -17,7 +17,8 @@ function [expinfo] = mysql_get_expinfo(expmt, host, database, conn_id)
 % 10/28/06 PJ - Made connecting to arbitrary desired database a bit more
 %               robust. Now returns information for list of experiments in
 %               expmt.
-
+% 10/05/09 Stefan Tomic - reads in subject name and DOB as encrypted data
+  
 expinfo = [];
 
 % Do some parameter checking
