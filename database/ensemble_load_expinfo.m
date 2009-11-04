@@ -186,6 +186,11 @@ if ~all(isnan(respinfo.data{respcols.stimulus_id}))
     result.data = [result.data stimulusDataStruct.data];
 end 
 
+%get subject summary stats
+subSummaryStats = ensemble_summary_subject_stats({subInfo sessInfo});
+result.vars{end+1} = 'subject_summary_stats';
+result.data{end+1} = subSummaryStats;
+
 if(exist('tmp_conn_id','var'))
   mysql(conn_id,'close');
 end
