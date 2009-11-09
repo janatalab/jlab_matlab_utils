@@ -564,14 +564,6 @@ if USE_FSL
       fprintf(1,'success!\n');
   end
   
-%   fsl_str = sprintf('fslval %s dim1', epifname);
-%   [status, nx] = unix(fsl_str);
-%   nx = str2num(nx);
-% 
-%   fsl_str = sprintf('fslval %s dim2', epifname);
-%   [status, ny] = unix(fsl_str);
-%   ny = str2num(ny);
-
   fsl_str = sprintf('fslval %s dim3', epifname);
   [status, nz] = unix(fsl_str);
   nslices = str2num(nz);
@@ -603,12 +595,15 @@ if USE_FSL
   % generate EVs
   pinfo.evoutdir = fullfile(model_outdir,'evs'); check_dir(pinfo.evoutdir);
   pinfo.evstub = sprintf('%s_run%d_ev%%d.txt',subid,irun);
-  pinfo.nslice_per_vol = nslices;
-  pinfo.nvol = nvol;
-  pinfo.dt = defs.fmri.spm.defaults.stats.fmri.fmri_spec.timing.fmri_t;
-  pinfo.TR = protocol.epi.tr;
+  pinfo.scanner.nslice_per_vol = nslices;
+  pinfo.scanner.actual_nvol = nvol;
+  pinfo.scanner.nvol = nvol;
+  pinfo.scanner.dt = defs.fmri.spm.defaults.stats.fmri.fmri_spec.timing.fmri_t;
+  pinfo.scanner.TR = protocol.epi.tr;
+  pinfo.scanner.orig_nslices = protocol.epi.nslices;
   pinfo.protocol = protocol;
   pinfo.irun = irun;
+  pinf.USE_FSL = 1;
   %%%%%%% HACK - FIXME: motionparam_fname should really either be a
   %%%%%%% filestub from params or better yet in its own output dataset from
   %%%%%%% ens_fmri_realign_epi
@@ -620,7 +615,8 @@ if USE_FSL
         sprintf('rp_%s',sprintf(epifstubfmt,subid,irun,1,'txt')));
   end
   
-  fsf.ev = fmri_fsl_generate_evs(pinfo,curr_model,sess);
+  % fsf.ev = fmri_fsl_generate_evs(pinfo,curr_model,sess);
+  fsf.evn = fmri_generate_regress(pinfo,curr_model,sess);
   nev = length(fsf.ev);
 
   fsf.evs_orig = nev;
@@ -710,8 +706,11 @@ elseif USE_SPM
   pinfo.scanner.dt = defs.fmri.spm.defaults.stats.fmri.fmri_spec.timing.fmri_t;
   pinfo.scanner.actual_nvol = actual_nvol;
   pinfo.scanner.TR = protocol.epi.tr;
+  pinfo.scanner.orig_nslices = protocol.epi.nslices;
   pinfo.irun=irun;
   pinfo.resp_mapping = sess.resp_mapping;
+  pinfo.USE_SPM = 1;
+  
   ppath = fileparts(flist{1});
   if USE_SPM_MOTPARAMS
     pinfo.motionparam_fname = fullfile(ppath,...
@@ -746,19 +745,16 @@ elseif USE_SPM
     stat_idx = build_model_idx_offset+iperm-1;
 
     % Generate arrays specifying the conditions, onsets, durations
-    spmsess.cond = fmri_spm_generate_conds(pinfo,curr_model,sess);
-
-    condinfo_fname = fullfile(lanal_outdir, sprintf('model%02d_run%d_condinfo.mat', model_id,irun));
-
-    % Save the arrays to a file and specify this file as the one that
-    % the model should load. We would do this if we weren't adding any
-    % parametric modulation
-    %save(condinfo_fname,'names','onsets','durations');
+    lsess = fmri_generate_regress(pinfo,curr_model,sess);
+    spmsess.cond = lsess.cond;
+    spmsess.regress = lsess.regress;
+    
+    % spmsess.cond = fmri_spm_generate_conds(pinfo,curr_model,sess);
 
     spmsess.multi = {''}; % {condinfo_fname}
 
     % Specify additional regressors
-    spmsess.regress = fmri_spm_generate_regress(pinfo,curr_model,sess);
+    % spmsess.regress = fmri_spm_generate_regress(pinfo,curr_model,sess);
     spmsess.multi_reg = {''};
     spmsess.hpf = curr_model.hpf;  % inf=no high-pass filtering
 
@@ -773,6 +769,8 @@ elseif USE_SPM
         if sum(run_mask) < length(spmsess.cond(icond).onset)
           spmsess.cond(icond).onset = ...
               spmsess.cond(icond).onset(run_mask);
+          spmsess.cond(icond).duration = ...
+              spmsess.cond(icond).duration(run_mask);
           if isfield(spmsess.cond(icond),'pmod') && ...
                   ~isempty(spmsess.cond(icond).pmod)
             % remove parametric modulators for condition onsets that occur
@@ -818,6 +816,8 @@ elseif USE_SPM
           if sum(run_mask) < length(spmsess.cond(new_cond_idx).onset)
             spmsess.cond(new_cond_idx).onset = ...
                 spmsess.cond(new_cond_idx).onset(run_mask);
+            spmsess.cond(new_cond_idx).duration = ...
+                spmsess.cond(new_cond_idx).duration(run_mask);
             if isfield(spmsess.cond(new_cond_idx),'pmod') && ...
                     ~isempty(spmsess.cond(new_cond_idx).pmod)
               % remove parametric modulators for condition onsets that occur
@@ -834,6 +834,9 @@ elseif USE_SPM
 		    cs.cond(curr_cond_idx).onset = ...
 		        [cs.cond(curr_cond_idx).onset; ...
 			  spmsess.cond(new_cond_idx).onset+offset];
+            cs.cond(curr_cond_idx).duration = ...
+                [cs.cond(curr_cond_idx).duration; ...
+              spmsess.cond(new_cond_idx).duration];
             nnewmod = length(spmsess.cond(new_cond_idx).pmod);
             noldmod = length(cs.cond(curr_cond_idx).pmod);
             if nnewmod && noldmod
