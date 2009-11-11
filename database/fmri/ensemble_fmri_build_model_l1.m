@@ -959,6 +959,15 @@ end % if USE_FSL / elseif USE_SPM
           end
       
       	  jobs{njob}.stats{stat_idx}.fmri_spec.sess = cs;
+
+          % save residual file name
+          resid_fname =  fullfile(jobs{njob}.stats{stat_idx}.fmri_spec.dir{1},...
+              'ResMS.hdr');
+
+          outdata.data{res_idx} = ensemble_add_data_struct_row(outdata.data{res_idx},...
+              'subject_id',subid,'session',isess,'model_id',model_id,'run',irun,...
+              'path',resid_fname);
+          
         end % for iperm
         
       elseif USE_FSL
