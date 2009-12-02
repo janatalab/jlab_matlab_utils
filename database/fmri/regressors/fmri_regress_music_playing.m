@@ -29,4 +29,5 @@ durs = ones(size(onsets))*minfo.music_dur;
 amp  = ones(size(onsets));
 
 % Now build the regressor
-vals = fmri_convolve_regress(onsets,durs,amp,pinfo.TR,pinfo.dt,pinfo.actual_nvol);
+vals = fmri_convolve_regress(onsets,durs,amp,...
+    pinfo.scanner.TR,pinfo.scanner.dt,pinfo.scanner.actual_nvol);

@@ -45,7 +45,7 @@ if isfield(defs,'sinfo') && isstruct(defs.sinfo)
   proc_subs = {sinfo(:).id};
   nsub_proc = length(proc_subs);
 else
-  warning(1,'please provide a valid sinfo struct');
+  warning('please provide a valid sinfo struct');
   return
 end
 

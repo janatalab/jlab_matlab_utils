@@ -21,7 +21,7 @@ names = {regid};
 vals = [];
 
 % init vars
-ccm = minfo.cond_cue_map; % function handle for condition to cue mappings
+ccm = parse_fh(minfo.cond_cue_map); % function handle for condition to cue mappings
 cue = ccm(regid); % get cue for this regressor
 resp_params = extract_resp_params_v2(cue,pinfo,minfo,sess);
 pc = set_var_col_const(pinfo.vars);

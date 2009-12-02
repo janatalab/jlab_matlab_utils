@@ -17,8 +17,8 @@ function [out] = fmri_generate_regress(pinfo, minfo, sess)
 %   sess  - session information structure
 % 
 % RETURNS
-%   regressors - structure in either fsf.ev, spmsess.regress, or
-%       spmsess.cond format
+%   out - structure in either fsf.ev, spmsess.regress, or spmsess.cond
+%       format
 % 
 % 2009.11.05 FB - adapted from fmri_fsl_generate_evs,
 % fmri_spm_generate_regress, and fmri_spm_generate_conds
@@ -54,7 +54,7 @@ for icond=1:ncond
   [lons,ldurs] = cfun(pinfo,minfo,sess);
 
   if isempty(lons) || isempty(lons) || (length(lons) ~= length(ldurs))
-    warning('no regressors generated for regressor %s',regid);
+    warning('no regressors generated for regressor %s',cond);
     continue
   end
 
@@ -68,7 +68,7 @@ end
 pmodlist = minfo.pmodlist;
 nmod = size(pmodlist,1); % number of parametric modulation sets
 pmods = cell(length(cnames),1);
-ccm = minfo.cond_cue_map;
+ccm = parse_fh(minfo.cond_cue_map);
 pc = set_var_col_const(pinfo.vars);
 
 % iterate over parametric modulations

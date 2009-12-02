@@ -22,9 +22,9 @@ names = {sprintf('gsr_run%d',pinfo.irun)};
 vals = [];
 
 % init vars
-TR = pinfo.TR;
-nslice_per_vol = pinfo.nslice_per_vol;
-actual_nvol = pinfo.actual_nvol;
+TR = pinfo.scanner.TR;
+nslice_per_vol = pinfo.scanner.orig_nslices;
+actual_nvol = pinfo.scanner.actual_nvol;
 
 % get GSR signal
 gsr_epochs = pinfo.gsr_epochs;
