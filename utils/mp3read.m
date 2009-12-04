@@ -51,6 +51,8 @@ end
 %%%%%% Location of the binaries
 mpg123 = '/usr/local/bin/mpg123';
 mp3info = '/usr/local/bin/mp3info';
+mp3info = '~/bin/mp3info';
+mpg123 = '~/bin/mpg123';
 
 %%%%%% Constants
 NBITS=16;

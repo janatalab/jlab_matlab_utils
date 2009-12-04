@@ -16,6 +16,8 @@ function [structsAreEqual,firstViolation,violationReason] = compare_structs(stru
 %         type (class) of the fields for a positive match. This can only
 %         be set to false if 'values' is also false. Otherwise, types
 %         will automatically be checked.
+%    'ignore_fieldnames': a cell array of strings that, if encountered
+%         as a fieldname, will be skipped, and will not be compared.
 %
 % defaults if not specified are 'values',true and 'contained',false
 %
@@ -43,6 +45,7 @@ function [structsAreEqual,firstViolation,violationReason] = compare_structs(stru
 % 12/30/2008 - Fred Barrett, added support for multi-dimensional cell arrays as field values
 % 02/24/2009 - Fred Barrett, switched cell checking to compare_cells.m,
 %   also added handling of struct arrays
+% 11/11/2009 - Fred Barrett, added 'ignore_fieldnames' option
 % 
 
 numberTypes = {'int8','uint8','int16','uint16','int32','uint32','int64','uint64','double'};
@@ -50,7 +53,7 @@ firstViolation = {};
 violationReason = '';
 
 if (nargin > 2)
-  for iarg = 1:nargin-2
+  for iarg = 1:2:nargin-2
     switch(varargin{iarg})
      case 'values'
       checkValues = varargin{iarg+1};
@@ -58,25 +61,16 @@ if (nargin > 2)
       checkSubstruct = varargin{iarg+1};
      case 'types'
       checkTypes = varargin{iarg+1};
+     case 'ignore_fieldnames'
+      ignore_fieldnames = varargin{iarg+1};
     end
   end
 end
- 
-try
-  checkValues;
-catch
-  checkValues = true;
-end
-try
-  checkSubstruct;
-catch
-  checkSubstruct=false;
-end
-try
-  checkTypes;
-catch
-  checkTypes=true;
-end
+
+if ~exist('checkValues','var'), checkValues = true; end
+if ~exist('checkSubstruct','var'), checkSubstruct = true; end
+if ~exist('checkTypes','var'), checkTypes = true; end
+if ~exist('ignore_fieldnames','var'), ignore_fieldnames = {}; end
 
 struct1_fieldNames = fieldnames(struct1)';
 struct2_fieldNames = fieldnames(struct2)';
@@ -128,6 +122,11 @@ for iField = 1:struct1_nFields
     
   struct1_fieldName = struct1_fieldNames{iField};
   
+  if ~isempty(strmatch(struct1_fieldName,ignore_fieldnames,'exact'))
+    warning('fieldname %s encountered, but ignored',struct1_fieldName);
+    continue
+  end
+  
   % step through each element of the struct array, compare
   for sIdx = 1:nstruct_array
 
@@ -173,7 +172,8 @@ for iField = 1:struct1_nFields
       case 'struct'
         [fieldsAreEqual,subFieldViolation,violationReason] = ...
             compare_structs(struct1_val,struct2_val,'values',checkValues,...
-            'substruct',checkSubstruct,'types',checkTypes);
+            'substruct',checkSubstruct,'types',checkTypes,...
+            'ignore_fieldnames',ignore_fieldnames);
 
       case 'cell'
         [fieldsAreEqual,subFieldViolation,violationReason] = ...
@@ -185,6 +185,12 @@ for iField = 1:struct1_nFields
         else
          fieldsAreEqual = 0;
         end
+
+      case 'function_handle'
+        struct1_str = func2str(struct1_val);
+        struct2_str = func2str(struct1_val);
+        fieldsAreEqual = strcmp(struct1_str,struct2_str);
+            
       otherwise
         error(sprintf('Fieldtype %s not supported.',struct1_fieldType));
 
