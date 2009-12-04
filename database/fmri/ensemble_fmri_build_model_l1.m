@@ -28,10 +28,15 @@ function outdata = ensemble_fmri_build_model_l1(indata,defs)
 %           fmri_sess_paths, and will look for a typically-constructed
 %           presentation data .mat file at that location. If not found, and
 %           no pres_paths are given, the function will not run.
+%   defs.fmri
+%   defs.model
+%   defs.model.permute_params
 % 
 % OUTPUT
 %   sinfo
 %   modelspec
+%   resid
+%   permutespec
 % 
 % FIXME: no permutation testing handled in FSL right now ....
 % 
@@ -143,7 +148,7 @@ try USE_SPM = defs.build_model_l1.USE_SPM; catch USE_SPM = 0; end
 try USE_FSL = defs.build_model_l1.USE_FSL; catch USE_FSL = 0; end
 try SLICE_BASED = curr_model.slice_based; catch SLICE_BASED = 0; end
 
-% 
+%
 % get other vars
 try modelperm_dir = params.build_model_l1.modelperm_dir; catch modelperm_dir = ''; end
 try intensity_cutoff = params.build_model_l1.intensity_cutoff; catch intensity_cutoff = 10; end
@@ -167,21 +172,6 @@ elseif SLICE_BASED
     return
 end
 
-if isfield(curr_model,'permute') && ...
-        isfield(curr_model.permute,'permute_type') && ...
-        ~isempty(curr_model.permute.permute_type) && ...
-        isfield(curr_model.permute,'niter')
-  nperm = curr_model.permute.niter;
-else
-  nperm = 1;
-end
-
-if nperm > 1 && USE_FSL
-  msg = sprintf('permutation testing not yet supported in FSL, turning off');
-  r = update_report(r,msg);
-  nperm = 1;
-end
-
 if isfield(curr_model,'combine_runs') && isnumeric(curr_model.combine_runs)...
     && ~isempty(curr_model.combine_runs) && curr_model.combine_runs 
   combine_runs = 1;
@@ -194,6 +184,10 @@ if (~USE_FSL && ~USE_SPM) || (USE_FSL && USE_SPM)
       'the analyses\n']);
   r = update_report(r,msg);
   return
+end
+
+if ESTIMATE_MODEL && ~BUILD_MODEL && USE_FSL && ~combine_runs
+  error('this option is not yet supported')
 end
 
 if USE_SPM
@@ -261,15 +255,16 @@ outdata.data{mod_idx}.data{mcols.path} = {};
 % residuals
 outdata.vars = [outdata.vars 'resid'];
 res_idx = length(outdata.vars);
-outdata.data{res_idx} = ensemble_init_data_struct();
+outdata.data{res_idx} = outdata.data{mod_idx};
 outdata.data{res_idx}.type = 'resid';
-outdata.data{res_idx}.vars = {'subject_id','session','model_id','run','path'};
-mcols = set_var_col_const(outdata.data{res_idx}.vars);
-outdata.data{res_idx}.data{mcols.subject_id} = {};
-outdata.data{res_idx}.data{mcols.session} = [];
-outdata.data{res_idx}.data{mcols.model_id} = [];
-outdata.data{res_idx}.data{mcols.run} = [];
-outdata.data{res_idx}.data{mcols.path} = {};
+
+if isfield(curr_model,'permute_params') && isstruct(curr_model.permute_params)
+  % permutations
+  outdata.vars = [outdata.vars 'permutespec'];
+  perm_idx = length(outdata.vars);
+  outdata.data{perm_idx} = outdata.data{mod_idx};
+  outdata.data{perm_idx}.type = 'permutespec';
+end
 
 % 
 % BEGIN SUBJECT LOOP
@@ -382,11 +377,6 @@ for isub=1:nsub_proc
       model_outdir = fullfile(lanal_outdir, sprintf('model_%02d', model_id));
       check_dir(model_outdir);
       
-      if ~isempty(modelperm_dir)
-        model_outdir = fullfile(model_outdir,modelperm_dir);
-        check_dir(model_outdir);
-      end
-
       % Delete the contents of this directory
       unix_str = sprintf('rm -r %s', fullfile(model_outdir,'*'));
       status = unix(unix_str);
@@ -394,53 +384,41 @@ for isub=1:nsub_proc
       if USE_SPM
         spmopts = defs.fmri.spm.opts(expidx).spmopts;
         build_model_idx_offset = nstat+1;
-
-        for iperm = 1:nperm
- 	      fprintf('Initializing model permutation %d/%d\n', iperm, nperm);
 	
-          % Initialize an fmri_spec using defaults
-          fmri_spec = defs.fmri.spm.defaults.stats.fmri.fmri_spec;
+        % Initialize an fmri_spec using defaults
+        fmri_spec = defs.fmri.spm.defaults.stats.fmri.fmri_spec;
 
-          % Modify values accordingly
-          fmri_spec.timing.RT = protocol.epi.tr;
+        % Modify values accordingly
+        fmri_spec.timing.RT = protocol.epi.tr;
 	
-          % Directory to output SPM.mat file to
-          if nperm > 1
-            curr_dir = fullfile(model_outdir,sprintf('perm%04d', iperm));
-          else
-            curr_dir = model_outdir;
-          end
-          check_dir(curr_dir);
-       
-          % Delete the contents of this directory
-          unix_str = sprintf('rm %s', fullfile(curr_dir,'*'));
-          status = unix(unix_str);
-      
-          fmri_spec.dir = {curr_dir};
+        % Directory to output SPM.mat file to, Delete the contents of this directory
+        unix_str = sprintf('rm %s', fullfile(model_outdir,'*'));
+        status = unix(unix_str);
 
-          % Specify a mask file
-          try mask_fname = curr_model.mask; 
-            if isfield(curr_model,'maskmodel') && ~isempty(curr_model.maskmodel)
-              mask_fname = fullfile(anal_outdir,'spm', ...
-                  sprintf('model_%02d', curr_model.maskmodel), mask_fname);
-            end
-          catch mask_fname = [];
+        fmri_spec.dir = {model_outdir};
+
+        % Specify a mask file
+        try mask_fname = curr_model.mask; 
+          if isfield(curr_model,'maskmodel') && ~isempty(curr_model.maskmodel)
+            mask_fname = fullfile(anal_outdir,'spm', ...
+                sprintf('model_%02d', curr_model.maskmodel), mask_fname);
           end
+        catch mask_fname = [];
+        end
         
-          if isempty(mask_fname)
-            mask_fname = fullfile(anat_outdir, ...
-              sprintf('sw%s_%s_mask.nii', subid, sess.id));
-          end
-          if exist(mask_fname)
-            fprintf('Using mask: %s\n', mask_fname);
-            fmri_spec.mask = {mask_fname};
-          end
+        if isempty(mask_fname)
+          mask_fname = fullfile(anat_outdir,sprintf('sw%s_%s_mask.nii',...
+              subid,sess.id));
+        end
+        if exist(mask_fname)
+          fprintf('Using mask: %s\n', mask_fname);
+          fmri_spec.mask = {mask_fname};
+        end
           
-          % Initialize a stats structure for this session
-          nstat = nstat+1;
+        % Initialize a stats structure for this session
+        nstat = nstat+1;
 
-          jobs{njob}.stats{nstat}.fmri_spec = fmri_spec;
-        end % for iperm
+        jobs{njob}.stats{nstat}.fmri_spec = fmri_spec;
       end % if USE_SPM
 
       %
@@ -739,27 +717,22 @@ elseif USE_SPM
     end
   end
   
-  for iperm = 1:nperm
-    fprintf('Specifying design matrix for permutation %d/%d\n', iperm, nperm);
+  stat_idx = build_model_idx_offset;
 
-    stat_idx = build_model_idx_offset+iperm-1;
-
-    % Generate arrays specifying the conditions, onsets, durations
-    lsess = fmri_generate_regress(pinfo,curr_model,sess);
-    spmsess.cond = lsess.cond;
-    spmsess.regress = lsess.regress;
+  % Generate arrays specifying the conditions, onsets, durations
+  lsess = fmri_generate_regress(pinfo,curr_model,sess);
+  spmsess.cond = lsess.cond;
+  spmsess.regress = lsess.regress;
     
-    % spmsess.cond = fmri_spm_generate_conds(pinfo,curr_model,sess);
+  spmsess.multi = {''}; % {condinfo_fname}
 
-    spmsess.multi = {''}; % {condinfo_fname}
+  % Specify additional regressors
+  % spmsess.regress = fmri_spm_generate_regress(pinfo,curr_model,sess);
+  spmsess.multi_reg = {''};
+  spmsess.hpf = curr_model.hpf;  % inf=no high-pass filtering
 
-    % Specify additional regressors
-    % spmsess.regress = fmri_spm_generate_regress(pinfo,curr_model,sess);
-    spmsess.multi_reg = {''};
-    spmsess.hpf = curr_model.hpf;  % inf=no high-pass filtering
-
-    % Add the current specification to the stack
-    if irun == 1        
+  % Add the current specification to the stack
+  if irun == 1        
       % Calculate end of run time for this run
       end_of_run_time = actual_nvol*protocol.epi.tr;
 
@@ -783,9 +756,9 @@ elseif USE_SPM
         end % if sum(run_mask
       end % for icond
       jobs{njob}.stats{stat_idx}.fmri_spec.sess = spmsess;
-    elseif ~combine_runs
+  elseif ~combine_runs
       jobs{njob}.stats{stat_idx}.fmri_spec.sess(end+1) = spmsess;
-    else
+  else
       % Make a local copy of the current session stack
       cs = jobs{njob}.stats{stat_idx}.fmri_spec.sess;
       init_num_scans = length(cs.scans);
@@ -867,7 +840,7 @@ elseif USE_SPM
               % is at least One mod
               msg = sprintf(['new parametric modulations for previously '...
                   'unmodulated condition (%s), subject %s session %d '...
-                  'run %d perm %d'],allconds{icond},isess,irun,iperm);
+                  'run %d'],allconds{icond},isess,irun);
               r = update_report(r,msg);
               cs.cond(curr_cond_idx).pmod = spmsess.cond(new_cond_idx).pmod;
             end % if nnewmod && noldmod
@@ -921,8 +894,8 @@ elseif USE_SPM
 
       % Assign the modified structure back into the session structure
       jobs{njob}.stats{stat_idx}.fmri_spec.sess = cs;
-    end % if irun == 1
-  end % for iperm
+
+  end % if irun == 1
 
 end % if USE_FSL / elseif USE_SPM
 
@@ -933,42 +906,37 @@ end % if USE_FSL / elseif USE_SPM
     % regressors across runs
     if combine_runs
       if USE_SPM && ((isfield(curr_model,'srcdata') && ...
-            ~strcmp(curr_model.srcdata,'residuals')) || ...
-            ~isfield(curr_model,'srcdata'))
+              ~strcmp(curr_model.srcdata,'residuals')) || ...
+              ~isfield(curr_model,'srcdata'))
 
-        for iperm = 1:nperm
-          fprintf('Adding run constants for design matrix for permutation %d/%d\n', iperm, nperm);
+        stat_idx = build_model_idx_offset;
 
-          stat_idx = build_model_idx_offset+iperm-1;
+        cs = jobs{njob}.stats{stat_idx}.fmri_spec.sess;
+        cwrun = 0;
+        for irun = 2:length(nvols)
+          constant_reg = zeros(length(cs.scans),1);
+          constant_reg(sum(nvols(1:irun))-nvols(irun)+1:sum(nvols(1:irun))) = 1;
+          const_reg_idx = length(cs.regress)+1;
+          cs.regress(const_reg_idx).name = sprintf('run%d_constant', irun);
+          cs.regress(const_reg_idx).val = constant_reg;
+        end
 
-          cs = jobs{njob}.stats{stat_idx}.fmri_spec.sess;
-          cwrun = 0;
-          for irun = 2:length(nvols)
-            constant_reg = zeros(length(cs.scans),1);
-            constant_reg(sum(nvols(1:irun))-nvols(irun)+1:sum(nvols(1:irun))) = 1;
-            const_reg_idx = length(cs.regress)+1;
-            cs.regress(const_reg_idx).name = sprintf('run%d_constant', irun);
-            cs.regress(const_reg_idx).val = constant_reg;
+        % Fill out any short regressors with zeros
+        for ireg = 1:length(cs.regress)
+          if length(cs.regress(ireg).val) < sum(nvols)
+            cs.regress(ireg).val(sum(nvols)) = 0;
           end
-
-          % Fill out any short regressors with zeros
-          for ireg = 1:length(cs.regress)
-            if length(cs.regress(ireg).val) < sum(nvols)
-              cs.regress(ireg).val(sum(nvols)) = 0;
-            end
-          end
+        end
       
-      	  jobs{njob}.stats{stat_idx}.fmri_spec.sess = cs;
+       jobs{njob}.stats{stat_idx}.fmri_spec.sess = cs;
 
-          % save residual file name
-          resid_fname =  fullfile(jobs{njob}.stats{stat_idx}.fmri_spec.dir{1},...
-              'ResMS.hdr');
+        % save residual file name
+        resid_fname =  fullfile(jobs{njob}.stats{stat_idx}.fmri_spec.dir{1},...
+            'ResMS.hdr');
 
-          outdata.data{res_idx} = ensemble_add_data_struct_row(outdata.data{res_idx},...
-              'subject_id',subid,'session',isess,'model_id',model_id,'run',irun,...
-              'path',resid_fname);
-          
-        end % for iperm
+        outdata.data{res_idx} = ensemble_add_data_struct_row(outdata.data{res_idx},...
+            'subject_id',subid,'session',isess,'model_id',model_id,'run',irun,...
+            'path',resid_fname);
         
       elseif USE_FSL
 
@@ -1174,10 +1142,8 @@ end % if USE_FSL / elseif USE_SPM
         resid_flist = get_spm_flist(srcdir,srcstub);
       end
 
-      for iperm = 1:nperm
-        stat_idx = build_model_idx_offset+iperm-1;
-        jobs{njob}.stats{stat_idx}.fmri_spec.sess.scans = cellstr(resid_flist);
-      end
+      stat_idx = build_model_idx_offset;
+      jobs{njob}.stats{stat_idx}.fmri_spec.sess.scans = cellstr(resid_flist);
     end
 
     if USE_SPM
@@ -1209,84 +1175,24 @@ end % if BUILD_MODEL
     end
 
     if ESTIMATE_MODEL && USE_SPM
-      % If we are running a model that involves permutations, we have to set
-      % that up here.
-      if nperm > 1
-        % Determine how many permutation directories there are
-        permlist = dir(fullfile(model_dir,'perm*'));
-      end
-
-      for iperm = 1:nperm
-        if nperm > 1
-          model_fname = fullfile(model_dir,permlist(iperm).name,'SPM.mat');
-        end
-
-        nstat = nstat+1;
-        jobs{njob}.stats{nstat}.fmri_est.spmmat = {model_fname};
+      nstat = nstat+1;
+      jobs{njob}.stats{nstat}.fmri_est.spmmat = {model_fname};
       
-        est_method = curr_model.est_method;
-        switch est_method
-          case {'Classical'}
-            jobs{njob}.stats{nstat}.fmri_est.method.Classical = 1;
-          case {'Bayesian'}
-            jobs{njob}.stats{nstat}.fmri_est.method.Bayesian = curr_model.bayes;
-          case {'Bayesian2'}
-            jobs{njob}.stats{nstat}.fmri_est.method.Bayes2 = 1;
-          otherwise
-            msg = sprintf('ERROR: Unknown estimation method: %s\n', est_method);
-            r = update_report(r,msg);
-            continue
-        end % switch est_method
-      end % for iper=
+      est_method = curr_model.est_method;
+      switch est_method
+        case {'Classical'}
+          jobs{njob}.stats{nstat}.fmri_est.method.Classical = 1;
+        case {'Bayesian'}
+          jobs{njob}.stats{nstat}.fmri_est.method.Bayesian = curr_model.bayes;
+        case {'Bayesian2'}
+          jobs{njob}.stats{nstat}.fmri_est.method.Bayes2 = 1;
+        otherwise
+          msg = sprintf('ERROR: Unknown estimation method: %s\n', est_method);
+          r = update_report(r,msg);
+          continue
+      end % switch est_method
     end % if ESTIMATE_MODEL & USE_SPM
 
-    if ESTIMATE_MODEL && ~BUILD_MODEL && USE_FSL && ~combine_runs
-        error('this option is not yet supported')
-    end
-    
-% % %     if ESTIMATE_MODEL && USE_FSL && combine_runs
-% % % 
-% % %       %%%%%% FIXME: check all dirs and vars exist
-% % %       mfilt.include.all.subject_id = {subid};
-% % %       mfilt.include.all.session = isess;
-% % %       mfilt.include.all.model_id = model_id;
-% % %       mdata = ensemble_filter(modelspec,mfilt);
-% % %       epifname = mdata.data{mocol.path};
-% % %       [fp,fn,fx] = fileparts(epifname);
-% % %       meanfname = fullfile(fp, sprintf('%s_mean%s',fn,fx));
-% % %       if ~exist(meanfname,'file'), meanfname = ''; end
-% % %       model_outdir = fileparts(model_fname);
-% % %       thresh = -1;
-% % % 
-% % %       % Remove the old stats directory
-% % %       if exist('stats','dir')
-% % %         unix_str = 'rm -rf stats';
-% % %         unix(unix_str);
-% % %       end
-% % %       
-% % %       % Run the model
-% % %       fsl_str = sprintf('film_gls -rn ./stats -noest %s design.mat %1.4f',...
-% % %           epifname,thresh);
-% % %       status = unix(fsl_str);
-% % %       if status
-% % %         msg = 'FEAT run failed or was aborted';
-% % %         r = update_report(r,msg);
-% % %         continue
-% % %       end
-% % % 
-% % %       if ADD_MEAN_TO_RESID && exist(meanfname,'file')
-% % %         % Add the mean back into the residuals
-% % %         resid_fname = fullfile(stats_dir, 'res4d.nii.gz');
-% % %         fsl_str = sprintf('fslmaths %s -add %s %s',...
-% % %             resid_fname,meanfname,resid_fname);
-% % %         fprintf(logfid,'%s\n', fsl_str);
-% % %         status = unix(fsl_str);
-% % %         if status
-% % %           error('Failed to add mean back into the residuals')
-% % %         end
-% % %       end
-% % %     end % if ESTIMATE_MODEL && USE_FSL && combine_runs
-    
     if PLOT_DESMAT_COV && USE_SPM
       msg = sprintf('Loading model info in: %s\n', model_fname);
       r = update_report(r,msg);
@@ -1329,10 +1235,120 @@ if exist('jobs','var') && ~isempty(jobs)
   r.data.jobs = jobs;
 end
 
+% 
+% MODEL PERMUTATIONS
+% 
 
-%
-% Various sub-functions
-%
+if isfield(curr_model,'permute_params')
+    
+  % get permutation parameters
+  pp = curr_model.permute_params;
+  try maxiter=pp.maxiter; catch maxiter=150; end
+  est_method = curr_model.est_method;
+  switch est_method
+    case {'Classical'}
+      pjobs{1}.stats{1}.fmri_est.method.Classical = 1;
+    case {'Bayesian'}
+      pjobs{1}.stats{1}.fmri_est.method.Bayesian = curr_model.bayes;
+    case {'Bayesian2'}
+      pjobs{1}.stats{1}.fmri_est.method.Bayes2 = 1;
+    otherwise
+      msg = sprintf('ERROR: Unknown estimation method: %s\n', est_method);
+      r = update_report(r,msg);
+      return
+  end % switch est_method
+  stoprulefh = parse_fh(pp.stopping_rule_fun);
+  
+  % get SPM struct from previous job
+  spmfname = fullfile(model_outdir,'SPM.mat');
+  load(spmfname);
+  origSPM = SPM;
+
+  % calculate SPM
+  permjob.spmmat = {spmfname};
+  permjob.xCon = SPM.xCon;
+  permjob.conspec = pp.conspec;
+%   permjob.conspec.titlestr = pp.contrast.titlestr;
+%   permjob.conspec.mask = []; % contrasts for masking
+%   permjob.conspec.thresh = pp.contrast.thresh
+%   permjob.conspec.extent = 1;
+%   permjob.conspec.threshdesc = 'FWE';
+%   permjob.conspec.contrasts = ...
+%   strmatch('Tonreg_F',{SPM.xCon.name},'exact');
+  
+  [SPM,xSPM] = spm_getSPM(permjob);
+  nvox = size(xSPM.XYZ,2);  
+  pp.XYZ = xSPM.XYZ;
+  pp.vol_dim = SPM.xVol.DIM';
+  
+  % load residuals from original job
+  srcres_fname = fullfile(model_outdir,'ResMS.img');
+  if ~exist(srcres_fname,'file'), error('residuals not found!'), end
+  Vsrc = spm_vol(srcres_fname);  % map the filename
+  fprintf('Reading source data: %s\n', srcres_fname);
+  Ysrc = spm_read_vols(Vsrc); % read the data
+
+  % create empty permute residual struct
+  Vsrc = [];
+  Yperm = zeros([size(Ysrc) 0]);
+  
+  % iterate until stopping rule or max iter
+  done = false;
+  iter = 0;
+  permutations = []; % FIXME: save perms to make sure none are repeated ??
+  while (done)
+    iter = iter + 1;
+    curr_dir = fullfile(model_outdir,sprintf('perm%04d',iter));
+    check_dir(curr_dir);
+    
+    % permute, save data
+    SPM = fmri_permute_desmat(origSPM,pp);
+    outfname = fullfile(curr_dir,'SPM.mat');
+    save(outfname,'SPM');
+    
+    % estimate model
+    pjobs{1}.stats{1}.fmri_est.spmmat = {outfname};
+    warning off
+    msg = sprintf('Launching permutation %d ...\n',iter);
+    r = update_report(r,msg);
+    spm_jobman('run',pjobs);
+    warning on
+    
+    % load new residuals
+    permres_fname = fullfile(curr_dir,'ResMS.img');
+    Vperm(iter) = spm_vol(permres_fname);
+    Yperm(:,:,:,iter) = spm_read_vols(Vperm(iter));
+    
+    % estimate null distribution
+    [Ymu,Ysig,Yprob,YpermZ] = fmri_permute_eval_dist(Ysrc,Yperm,xSPM.XYZ);
+    
+    % evaluate stopping rule
+    pp.Ymu = Ymu;
+    pp.Ysig = Ysig;
+    pp.Yprob = Yprob;
+    pp.YpermZ = YpermZ;
+    [done,pp] = stoprulefh(pp);
+    
+    if iter == maxiter, done = true; end
+  end
+
+  % Write the probability volume to file
+  Vprob = Vsrc;
+  Vprob.fname = fullfile(srcpath,'PermProb.img');
+  Vprob.descrip = 'Probability that ResMS is lower than permuted models';
+  Vprob = rmfield(Vprob,'private');
+
+  Vprob = spm_create_vol(Vprob);
+  Vprob = spm_write_vol(Vprob,Yprob);  
+
+  %%%% FIXME: make permutation report, including model stats and status
+  
+
+end
+
+% % % % %
+% % % % % Various sub-functions
+% % % % %
 
 function [con] = add_con_job(model_fname, continfo)
   global r
