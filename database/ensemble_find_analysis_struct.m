@@ -58,24 +58,20 @@ for ifld = 1:ncrit_fld
   crit_val_is_struct = isstruct(crit_val);
 
   % Either way, we want to extract the corresponding values from the analysis structure
-  if isstr(crit_val) || crit_val_is_struct
+  if isstr(crit_val) | crit_val_is_struct
     analysis_vals = cell(1,na);
   else
     analysis_vals = zeros(1,na)*NaN;  % 05/01/07 - this might be a bug to size
                                       % it to na ?
   end
-  if isstr(crit_val) || crit_val_is_struct
+  if isstr(crit_val) | crit_val_is_struct
     analysis_vals(crit_fld_mask) = ...
 	cellfun(@getfield,an_st_array(crit_fld_mask), ...
-	repmat({crit_fld},1,sum(crit_fld_mask)), 'UniformOutput',false);
+	repmat({crit_fld},1,na), 'UniformOutput',false);
   else
     analysis_vals(crit_fld_mask) = ...
 	cellfun(@getfield,an_st_array(crit_fld_mask), ...
-	repmat({crit_fld},1,sum(crit_fld_maks)));
-  end
-  
-  if isstr(crit_val)
-    analysis_vals(~crit_fld_mask) = repmat({''},1,sum(~crit_fld_mask));
+	repmat({crit_fld},1,na));
   end
   
   % If the criterion value is not a structure, then match the analysis values

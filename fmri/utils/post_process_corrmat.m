@@ -16,7 +16,7 @@ if isfield(data,'SPM')
   Xnames = xX.name;
   Sess = data.SPM.Sess;
 else
-  xX = data.xX;
+  xX = data.xX
   Xnames = xX.Xnames;
   Sess = data.Sess;
 end
@@ -103,6 +103,5 @@ end
 
 
 if nargout > 1
-% 	X = xX.X;
-    X = xX;
+	X = xX.X;
 end
