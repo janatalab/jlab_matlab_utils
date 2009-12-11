@@ -1,16 +1,10 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
-
-/* We use case-insensitive string comparison functions strcasecmp(), strncasecmp().
-   These are a BSD addition and are also defined on Linux, but not on every OS,
-   in particular Windows. The two "inline" declarations below fix this problem. If
-   you get errors on other platforms, move the declarations outside the WIN32 block */
+#include <ctype.h>  //  for toupper() macro in streq()
 
 #ifdef WIN32
 #include <windows.h>
-inline int strcasecmp(const char *s1,const char *s2) { return strcmp(s1,s2); }
-inline int strncasecmp(const char *s1,const char *s2,size_t n) { return strncmp(s1,s2,n); }
 #endif
 
 #include <mysql.h>  //  Definitions for MySQL client API
@@ -23,13 +17,11 @@ const bool debug=false;  //  turn on information messages
  *
  * Matlab interface to MySQL server
  * Documentation on how to use is in "mysql.m"
- *  Robert Almgren, 2000-2004; latest review and revision August 2004
- *
- * Here is a list of the routines in this file:
+ *  Robert Almgren, 2000-2005; this version January 2005
+ *  Various modifications by Chris Rodgers during 2003-2004.
  *
  *  mexFunction()      Entry point from Matlab, presumably as "mysql"
  *   |
- *   +- getstring()    Extract string from Matlab array
  *   +- hostport()     Get host and port number from combined string
  *   |
  *   +- fix_types()    Some datatype fudges for MySQL C API
@@ -41,8 +33,35 @@ const bool debug=false;  //  turn on information messages
  *   |
  *   +- fancyprint()   Display query result in nice form
  *
+ * Some compile instructions available at
+ *          http://www.mmf.utoronto.ca/resrchres/mysql/
+ * Briefly, after configuring with "mex -setup", from Matlab do
+ *   Windows:  mex -I"C:\mysql\include" -DWIN32 mysql.cpp 
+ *                              "C:\mysql\lib\opt\libmySQL.lib"
+ *   Linux:    mex -I/usr/include/mysql -L/usr/lib/mysql
+ *                             -lmysqlclient mysql.cpp
+ *  where "C:\mysql", "/usr/lib/mysql", "/usr/include/mysql", etc
+ *  are where you installed the MySQL client libraries.
  **********************************************************************
  **********************************************************************/
+
+/**********************************************************************
+ *
+ *  streq( s, t [,n] )   Case-insensitive string comparison
+ *    provided locally because Windows does not have strcasecmp()
+ *  Max length is finite by default because this is intended only
+ *  to compare Matlab arguments, which should be quite short.
+ *
+ **********************************************************************/
+
+static bool streq( const char *s, const char *t, int n=256 )
+{
+	while (n>0)  //  n is number of characters remaining to compare
+		{ if ( !*s && !*t ) return true;    // simultaneous end of string
+		  if ( toupper(*s) != toupper(*t) ) return false;  // incl if 0
+		  n--; s++; t++; }
+	return true;      // checked n characters and found none unequal
+}
 
 /**********************************************************************
  *
@@ -106,8 +125,9 @@ static const char *typestr( enum_field_types t )
 		case FIELD_TYPE_BLOB:         return "blob";
 		case FIELD_TYPE_VAR_STRING:   return "var_string";
 		case FIELD_TYPE_STRING:       return "string";
-		  //case FIELD_TYPE_GEOMETRY:     return "geometry";   // not in manual 4.0
-
+#if MYSQL_VERSION_ID > 32358 // This version could perhaps go higher.
+		case FIELD_TYPE_GEOMETRY:     return "geometry";   // not in manual 4.0
+#endif
 		default:                      return "unknown";
 		}
 }
@@ -131,10 +151,13 @@ static const char *typestr( enum_field_types t )
  **********************************************************************/
 
 const char *contstr = "...";  //  representation of missing rows
-const int contstrlen = 3;     //  length of above string
 const int NROWMAX = 50;       //  max number of rows to print w/o clipping
 const int NHEAD = 10;         //  number of rows to print at top if we clip
 const int NTAIL = 10;         //  number of rows to print at end if we clip
+
+#ifndef WIN32
+static int max(int a,int b)  { return (a>=b) ? a : b; }
+#endif
 
 static void fancyprint( MYSQL_RES *res )
 {
@@ -152,13 +175,12 @@ static void fancyprint( MYSQL_RES *res )
 	//    and over the rows, using MySQL's max_length
 	int *len = (int *) mxMalloc( nfield * sizeof(int) );
 	{ for ( int j=0 ; j<nfield ; j++ )
-		{ len[j] = strlen(f[j].name);
-		  if ( f[j].max_length > len[j] ) len[j] = f[j].max_length; }}
+		len[j] = max(strlen(f[j].name),f[j].max_length); }
 
 	//  Compare to the continuation string length if we will clip
 	if (clip)
-		{ for ( int j=0 ; j<nfield ; j++ )
-			{ if ( contstrlen > len[j] )  len[j] = contstrlen; }}
+		{ int contstrlen = strlen(contstr);
+		  for ( int j=0 ; j<nfield ; j++ )  len[j] = max(len[j],contstrlen); }
 
 	//  Construct the format specification for printing the strings
 	char **fmt = (char **) mxMalloc( nfield * sizeof(char *) );
@@ -239,7 +261,7 @@ static void fancyprint( MYSQL_RES *res )
 const double NaN = mxGetNaN();         //  Matlab NaN for null values
 const double secinday = 24.*60.*60.;   //  seconds in one day
 
-//==============================================
+//----------------------------------------------
 //  year,month,day --> serial date number, based on Matlab's own algorithm
 
 const int cummonday[2][12] =
@@ -256,7 +278,7 @@ static int daynum( int yr, int mon, int day )
 	        + cummonday[leap][mon-1] + day;
 }
 
-//================================================
+//------------------------------------------------
 
 static bool can_convert( enum_field_types t )
 {
@@ -352,10 +374,10 @@ static void fix_types( MYSQL_FIELD *f, MYSQL_RES *res )
 		  if (is_unknown[j])  n_unknown++; }}
 
 	if (debug)
-		{ mexPrintf("Starting types:");
+		{ mexPrintf("| Starting types:");
 		  for ( int j=0 ; j<nfield ; j++ )
-		  mexPrintf("  %s(%d)%s", typestr(f[j].type), f[j].length,
-		      ( is_unknown[j] ? "?" : "" ) );
+			mexPrintf("  %s(%d)%s", typestr(f[j].type), f[j].length,
+			    ( is_unknown[j] ? "?" : "" ) );
 		  mexPrintf("\n"); }
 
 	//  Look at successive rows as long as some columns are still unknown
@@ -369,10 +391,10 @@ static void fix_types( MYSQL_FIELD *f, MYSQL_RES *res )
 			  mexErrMsgTxt("Internal error in fix_types():  Failed to get a row"); }
 
 		if (debug)
-			{ mexPrintf("  row[%d]:",i+1);
+			{ mexPrintf("|   row[%d]:",i+1);
 			  for ( int j=0 ; j<nfield ; j++ )
-			   mexPrintf("  \"%s\"%s", ( row[j] ? row[j] : "NULL" ),
-			         ( is_unknown[j] ? "?" : "" ) );
+				mexPrintf("  \"%s\"%s", ( row[j] ? row[j] : "NULL" ),
+				      ( is_unknown[j] ? "?" : "" ) );
 			  mexPrintf("\n"); }
 
 		//  Look at each field to see if we can extract information
@@ -410,70 +432,79 @@ static void fix_types( MYSQL_FIELD *f, MYSQL_RES *res )
 		}}
 
 	if (debug)
-		{ mexPrintf("  Ending types:");
+		{ mexPrintf("|   Ending types:");
 		  for ( int j=0 ; j<nfield ; j++ )
-		   mexPrintf("  %s(%d)%s", typestr(f[j].type), f[j].length,
-		         ( is_unknown[j] ? "?" : "" ) );
+			mexPrintf("  %s(%d)%s", typestr(f[j].type), f[j].length,
+			     ( is_unknown[j] ? "?" : "" ) );
 		  mexPrintf("\n"); }
 
 	mxFree(is_unknown);  // should be automatically freed, but still...
 }
 
-/**********************************************************************
+/*********************************************************************
+ *  Static variables that contain connection state
  *
- * getstring():   Extract string from a Matlab array
- *    (Space allocated by mxCalloc() should be freed by Matlab
- *     when control returns out of the MEX-function.)
- *   This is based on an original by Kimmo Uutela
- *
- **********************************************************************/
-
-static char *getstring(const mxArray *a)
-{
-	int llen = mxGetM(a)*mxGetN(a)*sizeof(mxChar) + 1;
-	char *c = (char *) mxCalloc(llen,sizeof(char));
-	if (mxGetString(a,c,llen))
-		mexErrMsgTxt("Can\'t copy string in getstring()");
-	return c;
-}
-
-/**********************************************************************
- *
- * mysql():  Execute the actual action
- *
- *  Which action we perform is based on the first input argument,
- *  which must be present and must be a character string:
- *    'open', 'close', 'use', 'status', or a legitimate MySQL query.
- *
- *  This version does not permit binary characters in query string,
- *  since the query is converted to a C null-terminated string.
- *
- *  If no output argument is given, then information is displayed.
- *  If an output argument is given, then we operate silently, and
- *     return status information.
- *
- **********************************************************************/
-
-/*********************************************************************/
-//  Static variables that contain connection state
-/*
  *  isopen gets set to true when we execute an "open"
- *  isopen gets set to false when either we execute a "close"
- *                        or when a ping or status fails
+ *  goes false when we execute "close" or a ping or status fails
  *   We do not set it to false when a normal query fails;
  *   this might be due to the server having died, but is much
  *   more likely to be caused by an incorrect query.
  */
 
+typedef MYSQL *mp;
 class conninfo {
 public:
-	MYSQL *conn;   //  MySQL connection information structure
+	mp   conn;     //  MySQL connection information structure
 	bool isopen;   //  whether we believe that connection is open
 	conninfo()  { conn=NULL;  isopen=false; }
 };
 
 const int MAXCONN = 10;
-static conninfo c[MAXCONN];   //  preserve state for MAXCONN different connections
+
+//  List of connection information
+static conninfo c[MAXCONN];
+
+//  Stack for most recently used handles:  prevcid[ncid-1] is the most
+//  recent and   prevcid[0], ..., prevcid[ncid-1]  is the list.
+//  The elements of this list should always be precisely the set
+//   of c[] that have  isopen==true.
+//  Function stackdelete deletes a particular cid from this list,
+//    which of course requires us to find it first. The deletion
+//    requires some copying in the case  j < ncid-1.
+static int ncid=0, prevcid[MAXCONN];
+static void stackprint()
+{
+	mexPrintf("| Stack is [");
+	for ( int j=0 ; j<ncid ; j++ ) mexPrintf(" %d",prevcid[j]);
+	mexPrintf(" ]\n");
+}
+static void stackdelete(int cid)
+{
+	//  Locate  j = index of cid in prevcid[]
+	//  Search downward since commonly cid will be the last element
+	int j=ncid-1; while ( j>=0 && prevcid[j]!=cid ) j--;
+	if ( j<0 || j>=ncid ) return;
+
+	for ( int i=j+1 ; i<ncid ; i++ ) prevcid[i-1] = prevcid[i];
+	ncid--;
+}
+
+/*********************************************************************/
+
+static void showusage()
+{
+	mexPrintf("Usage:  %s( [dbHandle], command, [ host, user, password ] )\n",
+		mexFunctionName());
+}
+
+static double *setScalarReturn( int nlhs, mxArray *plhs[], double value )
+{
+	if (nlhs<1) return NULL;
+	if (!( plhs[0] = mxCreateDoubleMatrix(1,1,mxREAL) ))
+		mexErrMsgTxt("Unable to create matrix for output");
+	*mxGetPr(plhs[0]) = value;
+	return mxGetPr(plhs[0]);
+}
 
 extern "C" void mexFunction(int nlhs, mxArray *plhs[],
       int nrhs, const mxArray *prhs[]);
@@ -481,73 +512,102 @@ extern "C" void mexFunction(int nlhs, mxArray *plhs[],
 void mexFunction(int nlhs, mxArray *plhs[],
       int nrhs, const mxArray *prhs[])
 {
-	int cid=0;   // ID number of the current connection
+	int cid=-1;  // Handle of the current connection (invalid until we identify)
 	int jarg=0;  // Number of first string arg: becomes 1 if id is specified
 
 	/*********************************************************************/
-	// Parse the first argument to see if it is a specific id number
-	if (mxIsNumeric(prhs[0]))
+	// Parse the first argument to see if it is a specific database handle
+	if ( nrhs>0 && mxIsNumeric(prhs[0]) )
 		{ if ( mxGetM(prhs[0])!=1 || mxGetN(prhs[0])!=1 )
-			{ mexPrintf("Usage:  %s( [id], command, [ host, user, password ] )\n",
-			      mexFunctionName());
-			  mexPrintf("First argument is array %d x %d\n",
+			{ showusage();
+			  mexPrintf("First argument is array %d x %d, but it should be a scalar\n",
 			      mxGetM(prhs[0]),mxGetN(prhs[0]) );
-			  mexErrMsgTxt("Invalid connection ID"); }
+			  mexErrMsgTxt("Invalid connection handle"); }
 		  double xid = *mxGetPr(prhs[0]);
 		  cid = int(xid);
 		  if ( double(cid)!=xid || cid<0 || cid>=MAXCONN )
-			{ mexPrintf("Usage:  %s( [id], command, [ host, user, password ] )\n",
-			      mexFunctionName());
-			  mexPrintf("id = %g -- Must be integer between 0 and %d\n",
-			        xid,MAXCONN-1);
-			  mexErrMsgTxt("Invalid connection ID"); }
-		  jarg = 1; }
-	if (debug) mexPrintf("cid = %d  jarg = %d\n",cid,jarg);
-
-	// Shorthand notation now that we know which id we have
-	typedef MYSQL *mp;
-	mp &conn = c[cid].conn;
-	bool &isopen = c[cid].isopen;
+			{ showusage();
+			  mexPrintf("dbHandle = %g -- Must be integer between 0 and %d\n",
+			      xid,MAXCONN-1);
+			  mexErrMsgTxt("Invalid connection handle"); }
+		  jarg = 1;
+		  if (debug) mexPrintf("| Explicit  cid = %d\n",cid); }
 
 	/*********************************************************************/
-	//  Check that the arguments are all character strings
+	//  Check that the remaining arguments are all character strings
 	{ for ( int j=jarg ; j<nrhs ; j++ )
 		{ if (!mxIsChar(prhs[j]))
-			{ mexPrintf("Usage:  %s( [id], command, [ host, user, password ] )\n",
-			     mexFunctionName());
-			  mexErrMsgTxt("All args must be strings, except id"); }}}
+			{ showusage();
+			  mexErrMsgTxt("All args must be strings, except dbHandle"); }}}
 
 	/*********************************************************************/
-	//  Parse the result based on the first argument
+	//  Identify what action he wants to do
 
-	enum querytype { OPEN, CLOSE, USE, STATUS, CMD } q;
+	enum querytype { OPEN, CLOSE, CLOSEALL, USENAMED, USE,
+	                     STATUS, STATSALL, QUOTE, CMD } q;
 	char *query = NULL;
 
-	if (nrhs<=jarg)   q = STATUS;
+	if (nrhs<=jarg)   q = STATSALL;
 	else
-		{ query = getstring(prhs[jarg]);
-		  if (!strcasecmp(query,"open"))  q = OPEN;
-		  else if (!strcasecmp(query,"close"))  q = CLOSE;
-		  else if ( !strcasecmp(query,"use") || !strncasecmp(query,"use ",4) ) q = USE;
-		  else if (!strcasecmp(query,"status")) q = STATUS;
+		{ query = mxArrayToString(prhs[jarg]);
+		  if (streq(query,"open"))          q = OPEN;
+		  else if (streq(query,"close"))    q = CLOSE;
+		  else if (streq(query,"closeall")) q = CLOSEALL;
+		  else if (streq(query,"use"))      q = USENAMED;
+		  else if (streq(query,"use",3))    q = USE;
+		  else if (streq(query,"status"))   q = STATUS;
+		  else if (streq(query,"quote"))    q = QUOTE;
 		  else q = CMD; }
 
 	if (debug)
-		{ if (q==OPEN)   mexPrintf("q = OPEN\n");
-		  if (q==CLOSE)  mexPrintf("q = CLOSE\n");
-		  if (q==USE)    mexPrintf("q = USE\n");
-		  if (q==STATUS) mexPrintf("q = STATUS\n");
-		  if (q==CMD)    mexPrintf("q = CMD\n"); }
+		{ switch(q)
+			{ case OPEN:     mexPrintf("| q = OPEN\n");     break;
+			  case CLOSE:    mexPrintf("| q = CLOSE\n");    break;
+			  case CLOSEALL: mexPrintf("| q = CLOSEALL\n"); break;
+			  case USENAMED: mexPrintf("| q = USENAMED\n"); break;
+			  case USE:      mexPrintf("| q = USE\n");      break;
+			  case STATUS:   mexPrintf("| q = STATUS\n");   break;
+			  case STATSALL: mexPrintf("| q = STATSALL\n"); break;
+			  case QUOTE:    mexPrintf("| q = QUOTE\n");    break;
+			  case CMD:      mexPrintf("| q = CMD\n");      break;
+			                 mexPrintf("| q = ??\n");              }}
+
+	/*********************************************************************/
+	//  If he did not specify the handle, choose the appropriate one
+	//  If there are no previous connections, then we will still have
+	//     cid=-1, and this will be handled in the appropriate place.
+	if (jarg==0)
+		{
+		if (q==OPEN)
+			{ for ( cid=0 ; cid<MAXCONN & c[cid].isopen ; cid++ );
+			  if (cid>=MAXCONN) mexErrMsgTxt("Can\'t find free handle"); }
+		else if (ncid>0)
+			cid=prevcid[ncid-1];
+		}
+
+	if (debug) mexPrintf("| cid = %d\n",cid);
+
+	//  Shorthand notation so we don't need to write c[cid]...
+	//  These values must not be used if  cid<0
+	mp dummyconn;     mp &conn = (cid>=0) ? c[cid].conn : dummyconn;
+	bool dummyisopen; bool &isopen = (cid>=0) ? c[cid].isopen : dummyisopen;
 
 	if (q==OPEN)
 		{
+		if (cid<0)
+			{ mexPrintf("cid = %d !\n",cid);
+			  mexErrMsgTxt("Internal code error\n"); }
 		//  Close connection if it is open
-		if (isopen)  { mysql_close(conn);   isopen=false;  conn=NULL; }
+		if (isopen)
+			{ mexWarnMsgIdAndTxt("mysql:ConnectionAlreadyOpen",
+			    "Connection %d has been closed and overwritten",cid);
+			  mysql_close(conn);
+			  conn=NULL;  isopen=false;  stackdelete(cid); }
 
 		//  Extract information from input arguments
-		char *host=NULL;   if (nrhs>=jarg+2)  host = getstring(prhs[jarg+1]);
-		char *user=NULL;   if (nrhs>=jarg+3)  user = getstring(prhs[jarg+2]);
-		char *pass=NULL;   if (nrhs>=jarg+4)  pass = getstring(prhs[jarg+3]);
+		char *host=NULL;   if (nrhs>=jarg+2)  host = mxArrayToString(prhs[jarg+1]);
+		char *user=NULL;   if (nrhs>=jarg+3)  user = mxArrayToString(prhs[jarg+2]);
+		char *pass=NULL;   if (nrhs>=jarg+4)  pass = mxArrayToString(prhs[jarg+3]);
 		int port = hostport(host);  // returns zero if there is no port
 
 		if (nlhs<1)
@@ -566,90 +626,135 @@ void mexFunction(int nlhs, mxArray *plhs[],
 		const char *c=mysql_stat(conn);
 		if (c)  { if (nlhs<1) mexPrintf("%s\n",c); }
 		else    mexErrMsgTxt(mysql_error(conn));
-		isopen=true;
 
-		//  Now we are OK -- if he wants output, give him a 1
-		if (nlhs>=1)
-			{ if (!( plhs[0] = mxCreateDoubleMatrix( 1, 1, mxREAL ) ))
-				mexErrMsgTxt("Unable to create matrix for output");
-			  *mxGetPr(plhs[0]) = 1.; }
+		isopen=true;
+		ncid++;
+		if (ncid>MAXCONN)
+			{ mexPrintf("ncid = %d ?\n",ncid);
+			  mexErrMsgTxt("Internal logic error\n"); }
+		prevcid[ncid-1] = cid;
+
+		if (debug) stackprint();
+
+		//  Now we are OK -- return the connection handle opened.
+		setScalarReturn(nlhs,plhs,cid);
 		}
 
 	else if (q==CLOSE)
-		{ if (isopen) { mysql_close(conn);  isopen=false;  conn=NULL; } }
+		{
+		if ( cid>=0 && isopen )
+			{ if (debug) mexPrintf("| Closing %d\n",cid);
+			  mysql_close(conn);
+			  conn = NULL; isopen=false;  stackdelete(cid); }
+		if (debug) stackprint();
+		}
 
-	else if (q==USE)
-		{ if (!isopen)           mexErrMsgTxt("Not connected");
-		  if (mysql_ping(conn))
-			{ isopen=false;   mexErrMsgTxt(mysql_error(conn)); }
-		  char *db=NULL;
-		  if (!strcasecmp(query,"use"))
-			{ if (nrhs>=2) db=getstring(prhs[1]);
+	else if (q==CLOSEALL)
+		{ while (ncid>0)
+			{ if (debug) stackprint();
+			  cid = prevcid[ncid-1];
+			  if (debug) mexPrintf("| Closing %d\n",cid);
+			  if (!(c[cid].isopen))
+				{ mexPrintf("Connection %d is not marked open!\n",cid);
+				  mexErrMsgTxt("Internal logic error"); }
+			  mysql_close(c[cid].conn);
+			  c[cid].conn=NULL;  c[cid].isopen=false;  ncid--; }}
+
+	else if ( q==USE || q==USENAMED )
+		{
+		if ( cid<0 || !isopen ) mexErrMsgTxt("Not connected");
+		if (mysql_ping(conn))
+			{ stackdelete(cid);  isopen=false;
+			  mexPrintf(mysql_error(conn));
+			  mexPrintf("\nClosing connection %d\n",cid);
+			  mexErrMsgTxt("Use command failed"); }
+		char *db=NULL;
+		if (q==USENAMED)
+			{ if (nrhs>=2) db=mxArrayToString(prhs[jarg+1]);
 			  else         mexErrMsgTxt("Must specify a database to use"); }
-		  else if (!strncasecmp(query,"use ",4))
-			{ db = query + 4;
+		else
+			{ db = query + 3;
 			  while ( *db==' ' || *db=='\t' ) db++; }
-		  else
-			  mexErrMsgTxt("How did we get here?  Internal logic error!");
-		  if (mysql_select_db(conn,db))  mexErrMsgTxt(mysql_error(conn));
-		  if (nlhs<1) mexPrintf("Current database is \"%s\"\n",db); }
+		if (mysql_select_db(conn,db))  mexErrMsgTxt(mysql_error(conn));
+		if (nlhs<1) mexPrintf("Current database is \"%s\"\n",db); 
+		else        setScalarReturn(nlhs,plhs,1.);
+		}
 
 	else if (q==STATUS)
 		{
-		if (nlhs<1)  //  He just wants a report
-			{
-			if (jarg>0)  //  mysql(cid,'status')  Give status of the specified id
-				{
-				if (!isopen)  { mexPrintf("%2d: Not connected\n",cid);  return; }
-				if (mysql_ping(conn))
-					{ isopen=false;   mexErrMsgTxt(mysql_error(conn)); }
-				mexPrintf("%2d:  %-30s   Server version %s\n",
-				    cid, mysql_get_host_info(conn), mysql_get_server_info(conn) );
-				}
-			else         //  mysql('status') with no specified connection
-				{
-				int nconn=0;
-				{ for ( int j=0 ; j<MAXCONN ; j++ )  { if (c[j].isopen) nconn++; } }
-				if (debug) mexPrintf("%d connections open\n",nconn);
-				if (nconn==0)  { mexPrintf("No connections open\n");  return; }
-				if ( nconn==1 && c[0].isopen ) // Only connection number zero is open
-					{                      //  Give simple report with no connection id #
-					if (mysql_ping(conn))
-						{ isopen=false;   mexErrMsgTxt(mysql_error(conn)); }
-					mexPrintf("Connected to %s   Server version %s   Client %s\n",
-					    mysql_get_host_info(conn),
-					         mysql_get_server_info(conn), mysql_get_client_info() );
-					}
-				else  //  More than one connection is open
-					{  //     Give a detailed report of all open connections
-					for ( int j=0 ; j<MAXCONN ; j++ )
-						{ if (c[j].isopen)
-							{ if (mysql_ping(c[j].conn))
-								{ c[j].isopen=false;
-								  mexPrintf("%2d:  %s\n",mysql_error(c[j].conn));
-								  continue; }
-							  mexPrintf("%2d:  %-30s   Server version %s\n",
-							    j, mysql_get_host_info(c[j].conn),
-							     mysql_get_server_info(c[j].conn) ); }}
-					}
-				}
-			}
+		if (nlhs<1)  //  He wants a report
+			{ // print connection handle only if multiple connections
+			  char idstr[10];  idstr[0]=0;
+			  if ( cid>=0 && ncid>1 )  sprintf(idstr,"(%d) ",cid);
+			  if ( cid<0 || !isopen )
+			   { mexPrintf("%sNot connected\n",idstr,cid);  return; }
+			  if (mysql_ping(conn))
+				{ mexErrMsgTxt(mysql_error(conn)); }
+			  mexPrintf("%s%-30s   Server version %s\n",
+			    idstr, mysql_get_host_info(conn), mysql_get_server_info(conn) ); }
 		else         //  He wants a return value for this connection
-			{
-			if (!( plhs[0] = mxCreateDoubleMatrix( 1, 1, mxREAL ) ))
-				mexErrMsgTxt("Unable to create matrix for output");
-			double *pr=mxGetPr(plhs[0]);   *pr=0.;
-			if (!isopen)             {                *pr=1.; return; }
-			if (mysql_ping(conn))    { isopen=false;  *pr=2.; return; }
-			if (!mysql_stat(conn))   { isopen=false;  *pr=3.; return; }
-			}
+			{ double *pr=setScalarReturn(nlhs,plhs,0.);
+			  if ( cid<0 || !isopen ) { *pr=1.; return; }
+			  if (mysql_ping(conn))   { *pr=2.; return; }}
 		}
+
+	else if (q==STATSALL)
+		{
+		if (debug) stackprint();
+		if (ncid==0)      mexPrintf("No connections open\n");
+		else if (ncid==1) mexPrintf("1 connection open\n");
+		else              mexPrintf("%d connections open\n",ncid);
+		for ( int j=0 ; j<ncid ; j++ )
+			{ cid = prevcid[j];
+			  if (mysql_ping(c[cid].conn))
+				  mexPrintf("%2d:  %s\n",cid,mysql_error(conn));
+			  else
+				  mexPrintf("%2d:  %-30s   Server version %s\n",
+				        cid, mysql_get_host_info(c[cid].conn),
+				        mysql_get_server_info(c[cid].conn) ); }
+		}
+
+	// Quote the second string argument and return it (Chris Rodgers)
+	else if (q==QUOTE)
+		{
+		if ((nrhs-jarg)!=2)
+			mexErrMsgTxt("mysql('quote','string_to_quote') takes two string arguments!");
+
+		//  Check that we have a valid connection
+		if ( cid<0 || !isopen ) mexErrMsgTxt("No connection open");
+		if (mysql_ping(conn))
+			{ stackdelete(cid);  isopen=false;
+			  mexErrMsgTxt(mysql_error(conn)); }
+
+		const mxArray *a = prhs[jarg+1];
+		int llen = mxGetM(a)*mxGetN(a)*sizeof(mxChar);
+		char *from = (char *) mxCalloc(llen+1,sizeof(char));
+		if (mxGetString(a,from,llen)) mexErrMsgTxt("Can\'t copy string");
+		int l = strlen(from);
+
+		/* Allocate memory for input and output strings. */
+		char *to = (char*) mxCalloc( llen*2+3, sizeof(char));
+
+		/* Call the C subroutine. */
+		to[0] = '\'';
+		int n = mysql_real_escape_string( conn, to+1, from, l );
+		to[n+1] = '\'';
+
+		/* Set C-style string output_buf to MATLAB mexFunction output*/
+		plhs[0] = mxCreateString(to);
+
+		mxFree(from);  mxFree(to);  // just in case Matlab forgets
+		}
+
 	else if (q==CMD)
 		{
 		//  Check that we have a valid connection
-		if (!isopen) mexErrMsgTxt("No connection open");
+		if ( cid<0 || !isopen ) mexErrMsgTxt("No connection open");
 		if (mysql_ping(conn))
-			{ isopen=false; mexErrMsgTxt(mysql_error(conn)); }
+			{ stackdelete(cid);  isopen=false;
+			  mexPrintf(mysql_error(conn));
+			  mexPrintf("Closing connection %d\n",cid);
+			  mexErrMsgTxt("Query failed"); }
 
 		//  Execute the query (data stays on server)
 		if (mysql_query(conn,query))  mexErrMsgTxt(mysql_error(conn));
@@ -677,9 +782,7 @@ void mexFunction(int nlhs, mxArray *plhs[],
 					{ mexPrintf("%u rows affected\n",nrows);
 					  return; }
 				  else
-					{ if (!( plhs[0] = mxCreateDoubleMatrix(1,1,mxREAL) ))
-						mexErrMsgTxt("Unable to create numeric matrix for output");
-					  *(mxGetPr(plhs[0])) = (double) nrows;
+					{ setScalarReturn(nlhs,plhs,nrows);
 					  return; }}
 			else
 				  mexErrMsgTxt(mysql_error(conn));
