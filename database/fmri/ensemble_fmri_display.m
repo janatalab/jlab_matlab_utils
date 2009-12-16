@@ -10,6 +10,7 @@ function [outdata] = ensemble_fmri_display(indata,defs)
 %       meanhires
 %       paths
 %       sinfo
+%       permute_model (FIXME:have to save properly from ens_fmri_eval_perm)
 %   defs
 %       conj_idx
 %       conjunctions
@@ -19,10 +20,12 @@ function [outdata] = ensemble_fmri_display(indata,defs)
 %       paths
 %       plots
 %       plotdirstubs (optional)
+%       USE_PERMUTATION (requires permute_model)
 % 
 % RETURNS
 % 
 % FIXME: get paths from previous steps
+% FIXME: handle display using permutation testing
 % 
 % 02/25/06 Petr Janata
 % 09/13/08 FB - adapted from autobio_display
@@ -157,6 +160,8 @@ try USE_SPM = defs.display.USE_SPM; catch USE_SPM = 0; end
 try USE_FSL = defs.display.USE_FSL; catch USE_FSL = 0; end
 try ORTHO_PMOD_MODEL = defs.display.ORTHO_PMOD_MODEL;
   catch ORTHO_PMODMODEL = 0; end
+try USE_PERMUTATION = defs.USE_PERMUTATION;
+  catch USE_PERMUTATION = 0; end
 
 if PLOT_SINGLE_SUB
   % require subject info if plotting single subject
@@ -318,6 +323,22 @@ for iplot = 1:nplots
         SO.img(nimg).vol = spm_vol(hires_fname);
         SO.img(nimg).range = [];
 	
+        % 
+        %  load permutation results?
+        % 
+        if USE_PERMUTATION
+          % FIXME: use data from indata,'permute_models'
+          %%%% HACK: locating model perm results based on expected location
+          perm_fname = fullfile(stats_dir,'PermProb.hdr');
+          if ~exist(perm_fname,'file')
+            error('permutation results not found at %s',perm_fname);
+          end
+          
+          Vperm = spm_vol(perm_fname);
+          [Yperm,XYZperm] = spm_read_vols(Vperm);
+          permmask = Yperm < 0.05;
+        end
+        
         if ~isempty(strmatch(plot,'conjunctions','exact'))
 
             if ~CONJUNCTIONS || ~exist('conj_idx')
@@ -504,6 +525,13 @@ for iplot = 1:nplots
 	        continue
           end
 	    
+          for j=1:size(xSPM.XYZ,2)
+            x=xSPM.XYZ(:,j);
+            if ~permmask(x(1),x(2),x(3))
+              xSPM.Z(j) = 0;
+            end
+          end
+          
 	      % Add the job to the stack
 	      nimg = add2stack_spm(xSPM);
 

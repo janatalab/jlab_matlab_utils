@@ -30,15 +30,11 @@ function outdata = ensemble_fmri_build_model_l1(indata,defs)
 %           no pres_paths are given, the function will not run.
 %   defs.fmri
 %   defs.model
-%   defs.model.permute_params
 % 
 % OUTPUT
 %   sinfo
 %   modelspec
 %   resid
-%   permutespec
-% 
-% FIXME: no permutation testing handled in FSL right now ....
 % 
 % FB 2008.08.27
 
@@ -150,7 +146,6 @@ try SLICE_BASED = curr_model.slice_based; catch SLICE_BASED = 0; end
 
 %
 % get other vars
-try modelperm_dir = params.build_model_l1.modelperm_dir; catch modelperm_dir = ''; end
 try intensity_cutoff = params.build_model_l1.intensity_cutoff; catch intensity_cutoff = 10; end
 
 % check flags/vars
@@ -257,14 +252,6 @@ outdata.vars = [outdata.vars 'resid'];
 res_idx = length(outdata.vars);
 outdata.data{res_idx} = outdata.data{mod_idx};
 outdata.data{res_idx}.type = 'resid';
-
-if isfield(curr_model,'permute_params') && isstruct(curr_model.permute_params)
-  % permutations
-  outdata.vars = [outdata.vars 'permutespec'];
-  perm_idx = length(outdata.vars);
-  outdata.data{perm_idx} = outdata.data{mod_idx};
-  outdata.data{perm_idx}.type = 'permutespec';
-end
 
 % 
 % BEGIN SUBJECT LOOP
@@ -1235,116 +1222,151 @@ if exist('jobs','var') && ~isempty(jobs)
   r.data.jobs = jobs;
 end
 
+% % 
+% % MODEL PERMUTATIONS
+% % 
 % 
-% MODEL PERMUTATIONS
+% if isfield(curr_model,'permute_params')
+%     
+%   % get permutation parameters
+%   pp = curr_model.permute_params;
+%   try maxiter=pp.maxiter; catch maxiter=150; end
+%   est_method = curr_model.est_method;
+%   switch est_method
+%     case {'Classical'}
+%       pjobs{1}.stats{1}.fmri_est.method.Classical = 1;
+%     case {'Bayesian'}
+%       pjobs{1}.stats{1}.fmri_est.method.Bayesian = curr_model.bayes;
+%     case {'Bayesian2'}
+%       pjobs{1}.stats{1}.fmri_est.method.Bayes2 = 1;
+%     otherwise
+%       msg = sprintf('ERROR: Unknown estimation method: %s\n', est_method);
+%       r = update_report(r,msg);
+%       return
+%   end % switch est_method
+%   if isfield(pp,'stopping_rule_fun')
+%     stoprulefh = parse_fh(pp.stopping_rule_fun);
+%   else
+%     stoprulefh = '';
+%   end
+%   
+%   % get SPM struct from previous job
+%   spmfname = fullfile(model_outdir,'SPM.mat');
+%   load(spmfname);
+%   origSPM = SPM;
 % 
-
-if isfield(curr_model,'permute_params')
-    
-  % get permutation parameters
-  pp = curr_model.permute_params;
-  try maxiter=pp.maxiter; catch maxiter=150; end
-  est_method = curr_model.est_method;
-  switch est_method
-    case {'Classical'}
-      pjobs{1}.stats{1}.fmri_est.method.Classical = 1;
-    case {'Bayesian'}
-      pjobs{1}.stats{1}.fmri_est.method.Bayesian = curr_model.bayes;
-    case {'Bayesian2'}
-      pjobs{1}.stats{1}.fmri_est.method.Bayes2 = 1;
-    otherwise
-      msg = sprintf('ERROR: Unknown estimation method: %s\n', est_method);
-      r = update_report(r,msg);
-      return
-  end % switch est_method
-  stoprulefh = parse_fh(pp.stopping_rule_fun);
-  
-  % get SPM struct from previous job
-  spmfname = fullfile(model_outdir,'SPM.mat');
-  load(spmfname);
-  origSPM = SPM;
-
-  % calculate SPM
-  permjob.spmmat = {spmfname};
-  permjob.xCon = SPM.xCon;
-  permjob.conspec = pp.conspec;
-%   permjob.conspec.titlestr = pp.contrast.titlestr;
-%   permjob.conspec.mask = []; % contrasts for masking
-%   permjob.conspec.thresh = pp.contrast.thresh
-%   permjob.conspec.extent = 1;
-%   permjob.conspec.threshdesc = 'FWE';
-%   permjob.conspec.contrasts = ...
-%   strmatch('Tonreg_F',{SPM.xCon.name},'exact');
-  
-  [SPM,xSPM] = spm_getSPM(permjob);
-  nvox = size(xSPM.XYZ,2);  
-  pp.XYZ = xSPM.XYZ;
-  pp.vol_dim = SPM.xVol.DIM';
-  
-  % load residuals from original job
-  srcres_fname = fullfile(model_outdir,'ResMS.img');
-  if ~exist(srcres_fname,'file'), error('residuals not found!'), end
-  Vsrc = spm_vol(srcres_fname);  % map the filename
-  fprintf('Reading source data: %s\n', srcres_fname);
-  Ysrc = spm_read_vols(Vsrc); % read the data
-
-  % create empty permute residual struct
-  Vsrc = [];
-  Yperm = zeros([size(Ysrc) 0]);
-  
-  % iterate until stopping rule or max iter
-  done = false;
-  iter = 0;
-  permutations = []; % FIXME: save perms to make sure none are repeated ??
-  while (done)
-    iter = iter + 1;
-    curr_dir = fullfile(model_outdir,sprintf('perm%04d',iter));
-    check_dir(curr_dir);
-    
-    % permute, save data
-    SPM = fmri_permute_desmat(origSPM,pp);
-    outfname = fullfile(curr_dir,'SPM.mat');
-    save(outfname,'SPM');
-    
-    % estimate model
-    pjobs{1}.stats{1}.fmri_est.spmmat = {outfname};
-    warning off
-    msg = sprintf('Launching permutation %d ...\n',iter);
-    r = update_report(r,msg);
-    spm_jobman('run',pjobs);
-    warning on
-    
-    % load new residuals
-    permres_fname = fullfile(curr_dir,'ResMS.img');
-    Vperm(iter) = spm_vol(permres_fname);
-    Yperm(:,:,:,iter) = spm_read_vols(Vperm(iter));
-    
-    % estimate null distribution
-    [Ymu,Ysig,Yprob,YpermZ] = fmri_permute_eval_dist(Ysrc,Yperm,xSPM.XYZ);
-    
-    % evaluate stopping rule
-    pp.Ymu = Ymu;
-    pp.Ysig = Ysig;
-    pp.Yprob = Yprob;
-    pp.YpermZ = YpermZ;
-    [done,pp] = stoprulefh(pp);
-    
-    if iter == maxiter, done = true; end
-  end
-
-  % Write the probability volume to file
-  Vprob = Vsrc;
-  Vprob.fname = fullfile(srcpath,'PermProb.img');
-  Vprob.descrip = 'Probability that ResMS is lower than permuted models';
-  Vprob = rmfield(Vprob,'private');
-
-  Vprob = spm_create_vol(Vprob);
-  Vprob = spm_write_vol(Vprob,Yprob);  
-
-  %%%% FIXME: make permutation report, including model stats and status
-  
-
-end
+% %   % calculate SPM
+% %   permjob.spmmat = {spmfname};
+% %   permjob.xCon = SPM.xCon;
+% %   permjob.conspec = pp.conspec;
+% % %   permjob.conspec.titlestr = pp.contrast.titlestr;
+% % %   permjob.conspec.mask = []; % contrasts for masking
+% % %   permjob.conspec.thresh = pp.contrast.thresh
+% % %   permjob.conspec.extent = 1;
+% % %   permjob.conspec.threshdesc = 'FWE';
+% % %   permjob.conspec.contrasts = ...
+% % %   strmatch('Tonreg_F',{SPM.xCon.name},'exact');
+%   
+% %   [SPM,xSPM] = spm_getSPM(permjob);
+% %   nvox = size(xSPM.XYZ,2);
+% %   pp.XYZ = xSPM.XYZ;
+% %   pp.vol_dim = SPM.xVol.DIM';
+%   
+%   nvox = size(SPM.xVol.XYZ,2);
+%   pp.XYZ = SPM.xVol.XYZ;
+%   pp.vol_dim = SPM.xVol.DIM';
+%   
+%   % load residuals from original job
+%   srcres_fname = fullfile(model_outdir,'ResMS.img');
+%   if ~exist(srcres_fname,'file'), error('residuals not found!'), end
+%   Vsrc = spm_vol(srcres_fname);  % map the filename
+%   fprintf('Reading source data: %s\n', srcres_fname);
+%   Ysrc = spm_read_vols(Vsrc); % read the data
+% 
+%   % create empty permute residual struct
+%   Vsrc = [];
+%   Yperm = zeros([size(Ysrc) 0]);
+% 
+%   % init a place for permutation history
+%   pp.history.std_mu = [];
+%   pp.history.std_sig = [];
+%   pp.history.std_prob = [];
+%   
+%   % iterate until stopping rule or max iter
+%   done = false;
+%   iter = 0;
+%   permutations = []; % FIXME: save perms to make sure none are repeated ??
+%   while (~done)
+%     iter = iter + 1;
+%     curr_dir = fullfile(model_outdir,sprintf('perm%04d',iter));
+%     check_dir(curr_dir);
+%     
+%     % permute, save data
+%     [SPM,pp] = fmri_permute_desmat(origSPM,pp);
+%     outfname = fullfile(curr_dir,'SPM.mat');
+%     save(outfname,'SPM');
+%     
+%     % estimate model
+%     pjobs{1}.stats{1}.fmri_est.spmmat = {outfname};
+%     warning off
+%     msg = sprintf('Launching permutation %d ...\n',iter);
+%     r = update_report(r,msg);
+%     spm_jobman('run',pjobs);
+%     warning on
+%     
+%     % load new residuals
+%     permres_fname = fullfile(curr_dir,'ResMS.img');
+%     Vperm(iter) = spm_vol(permres_fname);
+%     Yperm(:,:,:,iter) = spm_read_vols(Vperm(iter));
+% 
+%     % estimate null distribution
+%     [Ymu,Ysig,Yprob,YpermZ] = fmri_permute_eval_dist(Ysrc,Yperm,pp.XYZ);
+%     
+%     % evaluate stopping rule
+%     pp.Ymu = Ymu;
+%     pp.Ysig = Ysig;
+%     pp.Yprob = Yprob;
+%     pp.YpermZ = YpermZ;
+%     if ~isempty(stoprulefh)
+%       [done,pp] = stoprulefh(pp);
+%     end
+%     
+%     % save this permutation's parameters
+%     pp.lastYmu = pp.Ymu;
+%     pp.lastYsig = pp.Ysig;
+%     pp.lastYprob = pp.Yprob;
+%     pp.history.std_mu(iter) = nanstd(Ymu(:));
+%     pp.history.std_sig(iter) = nanstd(Ysig(:));
+%     pp.history.std_prob(iter) = nanstd(Yprob(:));
+%     
+%     % plot mean and standard deviation of this perm's params
+%     figure(pfigh);
+%     subplot(3,1,1);
+%     plot(pp.history.std_mu);
+%     title(sprintf('std of Ymu over %d iterations',iter));
+%     subplot(3,1,2);
+%     plot(pp.history.std_sig);
+%     title(sprintf('std of Ysig over %d iterations',iter));
+%     subplot(3,1,3);
+%     plot(pp.history.std_prob);
+%     title(sprintf('std of Yprob over %d iterations',iter));
+%         
+%     if iter == maxiter, done = true; end
+%   end
+% 
+%   % Write the probability volume to file
+%   Vprob = Vsrc;
+%   Vprob.fname = fullfile(model_outdir,'PermProb.img');
+%   Vprob.descrip = 'Probability that ResMS is lower than permuted models';
+%   Vprob = rmfield(Vprob,'private');
+% 
+%   Vprob = spm_create_vol(Vprob);
+%   Vprob = spm_write_vol(Vprob,Yprob);  
+% 
+%   %%%% FIXME: make permutation report, including model stats and status
+%   
+% 
+% end
 
 % % % % %
 % % % % % Various sub-functions
