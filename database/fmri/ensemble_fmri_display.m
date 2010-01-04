@@ -525,10 +525,12 @@ for iplot = 1:nplots
 	        continue
           end
 	    
-          for j=1:size(xSPM.XYZ,2)
-            x=xSPM.XYZ(:,j);
-            if ~permmask(x(1),x(2),x(3))
-              xSPM.Z(j) = 0;
+          if USE_PERMUTATION
+            for j=1:size(xSPM.XYZ,2)
+              x=xSPM.XYZ(:,j);
+              if ~permmask(x(1),x(2),x(3))
+                xSPM.Z(j) = 0;
+              end
             end
           end
           
@@ -589,6 +591,9 @@ for iplot = 1:nplots
             end
 	        figdir = fullfile(rootpath,'figures',model_proto_name,outstr);
             check_dir(fileparts(figdir));
+            if USE_PERMUTATION
+              figdir = [figdir '_perm'];
+            end
 	        print_to_file(figdir, isub~=1);
           else
 	        switch plot
@@ -603,6 +608,9 @@ for iplot = 1:nplots
 	        figdir = fullfile(rootpath,'figures',model_proto_name,outstr);
             check_dir(fileparts(figdir));
 
+            if USE_PERMUTATION
+              figdir = [figdir '_perm'];
+            end
             print_to_file(figdir,~((iplot==1)&(append_flag==0)));
 	        append_flag = 1;
           end
@@ -823,6 +831,9 @@ for iplot = 1:nplots
         check_dir(fileparts(figdir));
       end
       if iplot == 1, append = 0; else append = 1; end
+      if USE_PERMUTATION
+        figdir = [figdir '_perm'];
+      end
       print_to_file(figdir, append);
       if CONVERT2PDF
         convert_to_pdf(figdir);
