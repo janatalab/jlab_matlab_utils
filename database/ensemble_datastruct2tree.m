@@ -55,3 +55,8 @@ for ifld = 1:length(fnames)
   
 end
 
+%copy ensemble data struct fields (name,type,report,meta)
+outtree.name = dataStruct.name;
+outtree.type = dataStruct.type;
+outtree.report = dataStruct.report;
+outtree.meta = dataStruct.meta;
