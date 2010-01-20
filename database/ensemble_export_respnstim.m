@@ -1,8 +1,8 @@
-function outData = ensemble_export_resp_x_stim(inData,params)
+function outData = ensemble_export_respnstim(inData,params)
 
 % tabulates subject-level and stimulus-based response-level data, exports one row per stim
 %
-% function outData = ensemble_export_resp_x_stim(inData,params)
+% function outData = ensemble_export_respnstim(inData,params)
 %
 % This function takes given response table data, extracts data that are
 % subject-level data (such as scores on a personality scale), extracts
@@ -86,9 +86,9 @@ function outData = ensemble_export_resp_x_stim(inData,params)
 %
 % OUTPUT
 %  outData - contains one row per stimulus per subject, one column for
-%    subject_id, stimulus_id, one column per subject-level score calculated,
-%    one column per stimulus_metadata var that was included in the inData
-%    struct, and one column per stimulus-level qnum.
+%    subject_id, stimulus_id, and trial_id, one column per subject-level
+%    score calculated, one column per stimulus_metadata var that was
+%    included in the inData struct, and one column per stimulus-level qnum.
 %  outData.origvars - the original variable names, most of which will be
 %    constructed from question and subquestion numbers. This is provided as
 %    a reference for re-named variables (see params.
@@ -106,9 +106,8 @@ function outData = ensemble_export_resp_x_stim(inData,params)
 % 
 % NOTE: if a given subject-level score variable contains more than one of
 % any given score for a subject, the first of each will be used. also, if
-% more than one iteration of a qnum exists for any given
-% question/stimulus pair, the first of the list will be reported for that
-% stimulus
+% more than one iteration of a qnum exists for any given question/stimulus
+% pair, the first of the list will be reported for that stimulus
 % 
 % NOTE: this script assumes that a given question will only be asked once
 % for a given stimulus_id within a given subject. If the same compqid is
@@ -117,17 +116,25 @@ function outData = ensemble_export_resp_x_stim(inData,params)
 % ignored.
 % 
 % FIXME - need to extract/integrate data from the misc_info column of a
-% given response table, include in the row for each stimulus
+% given response table, include in the row for each stimulus ... up to this
+% point, I have dealt with data stored in misc info by writing a separate
+% function to extract that data and add it as another variable in the
+% response_data struct. This might be a good way to deal with misc_info dat
+% moving forward.
 %
 % FB 12/17/07 - started scripting
-% 
+% FB 10/25/09 - added support for multiple trials with the same stimulus.
+% If a stimulus is presented multiple times, the trial number should be
+% incremented, and if this is done, export_respnstim will use the trial
+% number to dissociate responses to the same stimulus at different
+% presentations.
 
 % % initialize output data struct
 outData = ensemble_init_data_struct;
 outData.type = 'resp_x_stim'; % unique analysis type
 outData.vars = {}; % names of columns that will end up inas outData.data
 outData.datatype = {}; % tracks non-numeric data, for SAS output
-if isfield(params,'outDataName') & ~isempty(params.outDataName)
+if isfield(params,'outDataName') && ~isempty(params.outDataName)
     outData.name = params.outDataName;
 else
     outData.name = 'resp_x_stim';
@@ -205,7 +212,7 @@ if isfield(params.export,'by_subject')
                 lsData = {};
             end;
         end 
-        if ~isempty(lsData) & isstruct(lsData)
+        if ~isempty(lsData) && isstruct(lsData)
             lsCols = set_var_col_const(lsData.vars);
 
             % sanity check, make sure one row per subject
@@ -225,7 +232,7 @@ if isfield(params.export,'by_subject')
             end
             % if 'vars' field found under params.export.by_subject.(lfld)
             % then mask out all other vars & data
-            if isfield(subinc.(lfld),'vars') & iscell(subinc.(lfld).vars)
+            if isfield(subinc.(lfld),'vars') && iscell(subinc.(lfld).vars)
                 xvars = subinc.(lfld).vars;
                 if ~ismember(lsData.vars,xvars)
                     warning(['vars defined for %s can not be found, '...
@@ -305,6 +312,10 @@ outData.datatype = sub_st.datatype;
 % store scores
 if isfield(params.export,'by_stimulus')
 
+    % add var for trial_id and stim repetition number
+    outData.vars = [outData.vars 'trial_id' 'stim_rep'];
+    outData.datatype = [outData.datatype 'n' 'n'];
+    
     % % initialize stimulus-level data structure
     smData.vars={'stimulus_id'};
     smData.datatype = {'n'}; % tracks data type, (s)tr, (n)um, (l)ogical
@@ -333,7 +344,7 @@ if isfield(params.export,'by_stimulus')
                 end;
             end
 
-            if ~isempty(lsData) & isstruct(lsData)
+            if ~isempty(lsData) && isstruct(lsData)
                 lsCols = set_var_col_const(lsData.vars);
 
                 % sanity check, make sure one row per stimulus
@@ -377,7 +388,7 @@ if isfield(params.export,'by_stimulus')
 
                 % if 'vars' field found under params.export.by_stimulus.(sfld)
                 % then mask out all other vars & data
-                if isfield(stiminc.(sfld),'vars') & iscell(stiminc.(sfld).vars)
+                if isfield(stiminc.(sfld),'vars') && iscell(stiminc.(sfld).vars)
                     xvars = stiminc.(sfld).vars;
                     if ~ismember(lsData.vars,xvars)
                         warning(['vars defined for %s can not be found, '...
@@ -457,7 +468,7 @@ if isfield(params.export,'by_stimulus')
     ustims = {};
     % filter out non-stimulus response data
     ustims = unique(rsData.data{rsCols.stimulus_id});
-    stimidxs = find(~isnan(ustims));
+    stimidxs = ~isnan(ustims);
     ustims = ustims(stimidxs);
     filt = {};
     filt.include.all.stimulus_id = ustims;
@@ -519,7 +530,7 @@ if isfield(params.export,'by_stimulus')
             qnums = [qnums cqids.data{cqCqi}(icq)];
         end
     end
-    
+
     % add vars/init data cells
     qStructs = make_valid_struct_key(num2cell(qnums));
     numconst = length(outData.vars);
@@ -533,10 +544,10 @@ if isfield(params.export,'by_stimulus')
 
     % a few constants
     scol = rsCols.stimulus_id;
-    ccol = rsCols.compqid;
     qcol = rsCols.question_id;
     ecol = rsCols.response_enum;
-
+    tcol = rsCols.trial_id;
+    
     % sum(nstimpersub) = nrows
     nrows = 0;
     subData.vars = {'subid','locData','stim'};
@@ -553,7 +564,7 @@ if isfield(params.export,'by_stimulus')
 
         % get unique stim
         ustims = unique(locData.data{scol});
-        stimidxs = find(~isnan(ustims));
+        stimidxs = ~isnan(ustims);
         stim = ustims(stimidxs);
         subData.data{subCols.stim}(isub) = {stim};
 
@@ -581,11 +592,25 @@ if isfield(params.export,'by_stimulus')
         nstim   = length(stim);
 
         for istim = 1:nstim
+          stmFilt = {};
+          stmFilt.include.all.stimulus_id = stim(istim);
+          stmDataT = ensemble_filter(locData,stmFilt);
+          uTrials = unique(stmDataT.data{tcol});
+          nUt = length(uTrials);
+          
+          for in=1:nUt
+            tFilt.include.all.trial_id = uTrials(in);
+            stmData = ensemble_filter(stmDataT,tFilt);
+            
             outRow = outRow + 1;
+            
             % set id vars
             outData.data{outCols.subject_id}(outRow) = subid;
             outData.data{outCols.sNum}(outRow) = isub;
             outData.data{outCols.stimulus_id}(outRow) = stim(istim);
+            outData.data{outCols.trial_id}(outRow) = uTrials(in);
+            outData.data{outCols.stim_rep}(outRow) = in;
+            
             % set subject-level scores
             % start at 3, since subject_id and sNum are always 1 and 2
             for icon = 3:length(sub_st.vars)
@@ -593,7 +618,7 @@ if isfield(params.export,'by_stimulus')
             end
             % set stimulus metadata
             if smIdxs
-                stimidx = find(ismember(smData.data{smCols.stimulus_id},stim(istim)));
+                stimidx = ismember(smData.data{smCols.stimulus_id},stim(istim));
                 for ismd = 1:length(smIdxs)
                     smdidx = smIdxs(ismd);
                     smvar = smData.vars{smdidx};
@@ -607,9 +632,7 @@ if isfield(params.export,'by_stimulus')
                     end
                 end
             end
-            stmFilt = {};
-            stmFilt.include.all.stimulus_id = stim(istim);
-            stmData = ensemble_filter(locData,stmFilt);
+
             for iq = 1:length(qnums)
                 qi = qnums(iq);
                 if iscell(qi)
@@ -621,7 +644,7 @@ if isfield(params.export,'by_stimulus')
                     qcidx = qcidx{1};
                 end
                 qdata = {};
-                if length(qcidx)
+                if ~isempty(qcidx)
                     % data2bitmask, get items
                     lcqid = qi(1:qcidx-1);
                     lcqidx = find(ismember(cqids.data{cqCqi},lcqid));
@@ -695,6 +718,7 @@ if isfield(params.export,'by_stimulus')
                 end
             end % for iq=1:length(qnums)
             cqids.data{cqBit} = cell(length(cqids.data{cqScq}),1);
+          end % for in=1:nUt
         end % for istim = 1:nstim
     end % for isub = 1:nsub
 else
@@ -744,7 +768,6 @@ if fid ~= 1
         row = '';
         for ivar = 1:length(outData.vars)
             item = outData.data{ivar}(irow);
-            type = outData.datatype{ivar};
             if iscell(item)
                 if isempty(item)
                     item = '.';
@@ -753,7 +776,7 @@ if fid ~= 1
                     if iscell(item)
                         item = cell2str(item);
                         % does this break anything??? FIXME
-                        if ~length(item)
+                        if isempty(item)
                             item = '.';
                         end
                     end
@@ -777,10 +800,10 @@ if fid ~= 1
                 error('error trying to remove white space from a cell')
             end
             item = regexprep(item,'[^a-zA-Z0-9.]','_');
-            if length(regexp(item,'[^0-9.]')) & nndlm
+            if ~isempty(regexp(item,'[^0-9.]','once')) && ~isempty(nndlm)
                 item = [nndlm item nndlm];
             end
-            if ~length(row)
+            if isempty(row)
                 row = item;
             else
                 row = sprintf('%s%s%s',row,dlm,item);
@@ -793,12 +816,12 @@ if fid ~= 1
 
     % % % % GENERATE SAS IMPORT CODE
     % 
-    if isfield(params,'sas') & isfield(params.sas,'fname')
+    if isfield(params,'sas') && isfield(params.sas,'fname')
         % expects params.sas.fname & params.fname
         fname = params.fname;
         sfname = params.sas.fname;
         sid = fopen(sfname,'wt');
-        if sid == -1, error(sprintf('Could not open SAS file: %s\n', sfname)), end
+        if sid == -1, error('Could not open SAS file: %s\n', sfname), end
 
         % Generate some header information
         fprintf(sid,'/* File generated by ensemble_export_respnstim.m, %s  */\n',datestr(now));
@@ -814,8 +837,8 @@ if fid ~= 1
         %% include a $ in the SAS INPUT command for that variable
         fprintf(sid,'  INPUT %s;\n\n',generate_sas_input_str(outData));
         fprintf(sid,'PROC CONTENTS;\nPROC MEANS mean stddev min max n;\nrun;\n');
-        if isfield(params.sas,'libpath') & isfield(params.sas,'libsave') ...
-                & isfield(params.sas,'libname')
+        if isfield(params.sas,'libpath') && isfield(params.sas,'libsave') ...
+                && isfield(params.sas,'libname')
             fprintf(sid,'DATA xportlib.%s;\nSET exported;\n',params.sas.libname);
         end
         fclose(sid);
@@ -827,17 +850,17 @@ end
 
 function cval = sanitize_cell_value(cval,ctype)
 
-if ~length(cval)
+if isempty(cval)
     if ctype ~= 's'
         cval = NaN;
     else
         cval = '.';
     end
 end
-if iscell(cval) & length(cval) == 1
+if iscell(cval) && length(cval) == 1
     cval = cval{1};
 end
-if ctype ~= 's' & cval == '.'
+if ctype ~= 's' && cval == '.'
     cval = NaN;
 end
 
@@ -850,7 +873,7 @@ tempstr = '';
 
 for iv=1:length(struct.vars)
     tempstr = sprintf('%s %s',tempstr,struct.vars{iv});
-    if struct.datatype{iv} ~= 'n' & struct.datatype{iv} ~= 'l'
+    if struct.datatype{iv} ~= 'n' && struct.datatype{iv} ~= 'l'
         tempstr = sprintf('%s $',tempstr);
     end
     if length(tempstr) > 100
@@ -859,7 +882,7 @@ for iv=1:length(struct.vars)
     end
 end
 
-if length(tempstr) > 0
+if ~isempty(tempstr)
     input_str = sprintf('%s%s\n',input_str,tempstr);
 end
 
