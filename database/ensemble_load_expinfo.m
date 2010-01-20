@@ -33,6 +33,7 @@ function result = ensemble_load_expinfo(indata,params)
 %
 % 2009.05.18 FB - added some additional header documentation
 % 2009.10.18 PJ - added check to make sure response table was found
+% 2010.01.20 FB - now also returns 'misc_info' in the 'response_data' struct
 
 if( isstr( indata ) && strcmp( indata, 'getDefaultParams' ) )
 	result.ensemble.experiment_title = 'use local settings';
@@ -74,7 +75,7 @@ if ~isfield(params.ensemble, 'extract_vars') || isempty(params.ensemble.extract_
   extract_vars = {'session_id','subject_id', ...
 	'response_order','response_id', 'date_time', ...
 	'form_id','form_order','question_id','subquestion', ...
-	'stimulus_id','trial_id','response_enum','response_text'};
+	'stimulus_id','trial_id','response_enum','response_text','misc_info'};
 else
   extract_vars = params.ensemble.extract_vars;
 end
