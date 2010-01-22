@@ -128,6 +128,11 @@ function outData = ensemble_export_respnstim(inData,params)
 % incremented, and if this is done, export_respnstim will use the trial
 % number to dissociate responses to the same stimulus at different
 % presentations.
+% FB 01/22/10 - added 'response_order' to the output for 'by_stimulus'
+% output ... now outputs the response order of the first response for a
+% given session/subject/stimulus/trial. In this way, if you sort your data
+% by stimulus, or any other variable, you can later retrieve the order of
+% presentation of stimuli by sorting by response_order.
 
 % % initialize output data struct
 outData = ensemble_init_data_struct;
@@ -198,9 +203,7 @@ if isfield(params.export,'by_subject')
     for ifld=1:length(subfldnames)
         lsData = {};
         lfld = subfldnames(ifld);
-        if iscell(lfld)
-            lfld = lfld{1};
-        end
+        if iscell(lfld), lfld = lfld{1}; end
         lSchCrit.name = lfld;
         lIdx = ensemble_find_analysis_struct(inData,lSchCrit);
         if lIdx
@@ -312,9 +315,9 @@ outData.datatype = sub_st.datatype;
 % store scores
 if isfield(params.export,'by_stimulus')
 
-    % add var for trial_id and stim repetition number
-    outData.vars = [outData.vars 'trial_id' 'stim_rep'];
-    outData.datatype = [outData.datatype 'n' 'n'];
+    % add var for trial_id, stim repetition number, and response order
+    outData.vars = [outData.vars 'trial_id' 'stim_rep' 'response_order'];
+    outData.datatype = [outData.datatype 'n' 'n' 'n'];
     
     % % initialize stimulus-level data structure
     smData.vars={'stimulus_id'};
@@ -322,7 +325,7 @@ if isfield(params.export,'by_stimulus')
     smData.data = {[]};
     smCols = set_var_col_const(smData.vars);
     smIdxs = [];
-    stims = smData.data{smCols.stimulus_id};
+    stims = [];
 
     if isstruct(params.export.by_stimulus)
         stiminc = params.export.by_stimulus;
@@ -365,8 +368,7 @@ if isfield(params.export,'by_stimulus')
                         end
                     end
                     % add stimulus ids that aren't already in smData
-                    sxor = setxor(stims,ustim);
-                    newstim = intersect(sxor,ustim);
+                    newstim = setdiff(ustim,stims);
                     if newstim
                         smData.data{smCols.stimulus_id} = [stims newstim];
                         stims = smData.data{smCols.stimulus_id};
@@ -390,7 +392,7 @@ if isfield(params.export,'by_stimulus')
                 % then mask out all other vars & data
                 if isfield(stiminc.(sfld),'vars') && iscell(stiminc.(sfld).vars)
                     xvars = stiminc.(sfld).vars;
-                    if ~ismember(lsData.vars,xvars)
+                    if ~any(ismember(lsData.vars,xvars))
                         warning(['vars defined for %s can not be found, '...
                             'exporting all vars for this stimulus-level '...
                             'data source',sfld]);
@@ -438,23 +440,23 @@ if isfield(params.export,'by_stimulus')
                     end
                     for ivar = 1:nvars
                         vi = vidxs(ivar);
-                        li = find(ismember(lsData.vars,sub_st.vars{vi}));
+                        li = find(ismember(lsData.vars,smData.vars{vi}));
                         if ~isempty(li)
-                            if sub_st.datatype{vi} == 's'
+                            if smData.datatype{vi} == 's'
                                 svdata = lsData.data{li}{sidx};
                             else
                                 svdata = lsData.data{li}(sidx);
                             end
-                            svdata = sanitize_cell_value(svdata,sub_st.datatype{vi});
-                            if sub_st.datatype{vi} == 's'
-                                sub_st.data{vi}{isub} = svdata;
+                            svdata = sanitize_cell_value(svdata,smData.datatype{vi});
+                            if smData.datatype{vi} == 's'
+                                smData.data{vi}{istim} = svdata;
                             else
-                                sub_st.data{vi}(isub) = svdata;
-                            end
-                        end
-                    end
-                end
-            else
+                                smData.data{vi}(istim) = svdata;
+                            end % if smData.datatype{vi
+                        end % if ~isempty(li
+                    end % for ivar=1:
+                end % for istim = 1:
+            else 
                 warning('couldn''nt find inData struct or function handle for %s',...
                     sfld);
             end % for ~isempty(lsData
@@ -547,6 +549,7 @@ if isfield(params.export,'by_stimulus')
     qcol = rsCols.question_id;
     ecol = rsCols.response_enum;
     tcol = rsCols.trial_id;
+    rocol = rsCols.response_order;
     
     % sum(nstimpersub) = nrows
     nrows = 0;
@@ -596,11 +599,17 @@ if isfield(params.export,'by_stimulus')
           stmFilt.include.all.stimulus_id = stim(istim);
           stmDataT = ensemble_filter(locData,stmFilt);
           uTrials = unique(stmDataT.data{tcol});
-          nUt = length(uTrials);
+          nTrials = ~isnan(uTrials);
+          nUt = sum(nTrials);
+          if ~nUt, nUt = 1; end
           
           for in=1:nUt
-            tFilt.include.all.trial_id = uTrials(in);
-            stmData = ensemble_filter(stmDataT,tFilt);
+            if any(nTrials)
+              tFilt.include.all.trial_id = uTrials(in);
+              stmData = ensemble_filter(stmDataT,tFilt);
+            else
+              stmData = stmDataT;
+            end
             
             outRow = outRow + 1;
             
@@ -633,6 +642,9 @@ if isfield(params.export,'by_stimulus')
                 end
             end
 
+            % set response_order
+            outData.data{outCols.response_order}(outRow) = stmData.data{rocol}(1);
+            
             for iq = 1:length(qnums)
                 qi = qnums(iq);
                 if iscell(qi)
