@@ -12,6 +12,10 @@ function outdata = ensemble_fmri_build_model_l1(indata,defs)
 % 'pres_paths' in the indata, or findable on the disk using behav_indir,
 % the function will not build the model.
 % 
+% This function will support permutation testing, but it only supports this
+% if you are actually building and estimating one model for one subject
+% using this script, at the same time that you are permuting that model.
+% 
 % REQUIRES
 %   indata
 %       sinfo
@@ -38,7 +42,7 @@ function outdata = ensemble_fmri_build_model_l1(indata,defs)
 % 
 % FB 2008.08.27
 
-global r
+global r fped_figh
 
 outdata = ensemble_init_data_struct();
 outdata.type = 'build_model_l1';
@@ -66,7 +70,7 @@ for idata = 1:length(indata)
           cocol = set_var_col_const(coplanar.vars);
         case 'modelspec'
           modelspec = indata{idata};
-          mocol = set_var_col_const(modelspec.vars);
+          mcols = set_var_col_const(modelspec.vars);
         case 'physio_paths'
           physio_paths = indata{idata};
           physcol = set_var_col_const(physio_paths.vars);
@@ -143,6 +147,7 @@ try PLOT_DESMAT_COV = defs.build_model_l1.PLOT_DESMAT_COV; catch PLOT_DESMAT_COV
 try USE_SPM = defs.build_model_l1.USE_SPM; catch USE_SPM = 0; end
 try USE_FSL = defs.build_model_l1.USE_FSL; catch USE_FSL = 0; end
 try SLICE_BASED = curr_model.slice_based; catch SLICE_BASED = 0; end
+try PERMUTE_MODEL = isfield(curr_model,'permute_params'); catch PERMUTE_MODEL = 0; end
 
 %
 % get other vars
@@ -237,21 +242,43 @@ outdata.data{sinfo_idx}.data = sinfo;
 % modelspec
 outdata.vars = [outdata.vars 'modelspec'];
 mod_idx = length(outdata.vars);
-outdata.data{mod_idx} = ensemble_init_data_struct();
-outdata.data{mod_idx}.type = 'modelspec';
-outdata.data{mod_idx}.vars = {'subject_id','session','model_id','run','path'};
-mcols = set_var_col_const(outdata.data{mod_idx}.vars);
-outdata.data{mod_idx}.data{mcols.subject_id} = {};
-outdata.data{mod_idx}.data{mcols.session} = [];
-outdata.data{mod_idx}.data{mcols.model_id} = [];
-outdata.data{mod_idx}.data{mcols.run} = [];
-outdata.data{mod_idx}.data{mcols.path} = {};
+if ~BUILD_MODEL && ~isempty(modelspec.data{1})
+  outdata.data{mod_idx} = modelspec;
+else
+  outdata.data{mod_idx} = ensemble_init_data_struct();
+  outdata.data{mod_idx}.type = 'modelspec';
+  outdata.data{mod_idx}.vars = {'subject_id','session','model_id','run','path'};
+  mcols = set_var_col_const(outdata.data{mod_idx}.vars);
+  outdata.data{mod_idx}.data{mcols.subject_id} = {};
+  outdata.data{mod_idx}.data{mcols.session} = [];
+  outdata.data{mod_idx}.data{mcols.model_id} = [];
+  outdata.data{mod_idx}.data{mcols.run} = [];
+  outdata.data{mod_idx}.data{mcols.path} = {};
 
-% residuals
-outdata.vars = [outdata.vars 'resid'];
-res_idx = length(outdata.vars);
-outdata.data{res_idx} = outdata.data{mod_idx};
-outdata.data{res_idx}.type = 'resid';
+  if ESTIMATE_MODEL
+    % residuals
+    outdata.vars = [outdata.vars 'resid'];
+    res_idx = length(outdata.vars);
+    outdata.data{res_idx} = outdata.data{mod_idx};
+    outdata.data{res_idx}.type = 'resid';
+  end
+end
+
+% figures (mostly so they are copied back where they're needed by
+% copy2local
+outdata.vars = [outdata.vars 'figs'];
+fig_idx = length(outdata.vars);
+outdata.data{fig_idx} = ensemble_init_data_struct();
+outdata.data{fig_idx}.name = 'figs';
+outdata.data{fig_idx}.type = 'figs';
+outdata.data{fig_idx}.vars = {'subject_id','session','model_id','run','path'};
+fcols = set_var_col_const(outdata.data{fig_idx}.vars);
+outdata.data{fig_idx}.data{fcols.subject_id} = {};
+outdata.data{fig_idx}.data{fcols.session} = [];
+outdata.data{fig_idx}.data{fcols.model_id} = [];
+outdata.data{fig_idx}.data{fcols.run} = [];
+outdata.data{fig_idx}.data{fcols.path} = {};
+
 
 % 
 % BEGIN SUBJECT LOOP
@@ -406,6 +433,7 @@ for isub=1:nsub_proc
         nstat = nstat+1;
 
         jobs{njob}.stats{nstat}.fmri_spec = fmri_spec;
+        
       end % if USE_SPM
 
       %
@@ -915,7 +943,7 @@ end % if USE_FSL / elseif USE_SPM
           end
         end
       
-       jobs{njob}.stats{stat_idx}.fmri_spec.sess = cs;
+        jobs{njob}.stats{stat_idx}.fmri_spec.sess = cs;
 
         % save residual file name
         resid_fname =  fullfile(jobs{njob}.stats{stat_idx}.fmri_spec.dir{1},...
@@ -1153,7 +1181,7 @@ end % if BUILD_MODEL
         mfilt.include.all.session = isess;
         mfilt.include.all.model_id = model_id;
         mdata = ensemble_filter(modelspec,mfilt);
-        model_fname = mdata.data{mocol.path};
+        model_fname = mdata.data{mcols.path};
         model_dir = fileparts(model_fname);
       else
         model_dir = fullfile(lanal_outdir,sprintf('model_%02d', model_id));
@@ -1179,24 +1207,6 @@ end % if BUILD_MODEL
           continue
       end % switch est_method
     end % if ESTIMATE_MODEL & USE_SPM
-
-    if PLOT_DESMAT_COV && USE_SPM
-      msg = sprintf('Loading model info in: %s\n', model_fname);
-      r = update_report(r,msg);
-      
-      opts.printfig = 1;
-      opts.title = sprintf('%s, session %d, model %02d', subid, isess, model_id);
-      opts.figstub = fullfile(defs.paths.figpath, sprintf('descorr_model_%02d', model_id));
-      if ~started_desmat_cov_file
-        opts.append_str = '';
-        started_desmat_cov_file = 1;
-      else
-        opts.append_str = '-append';
-      end
-      figure(1), clf
-      opts.figh = gcf;
-      post_process_corrmat(model_fname, opts);
-    end % if PLOT_DESMAT_COV && USE_SPM
   end % for isess
 end % for isub=
 
@@ -1222,151 +1232,204 @@ if exist('jobs','var') && ~isempty(jobs)
   r.data.jobs = jobs;
 end
 
-% % 
-% % MODEL PERMUTATIONS
-% % 
+if PLOT_DESMAT_COV && USE_SPM
+  for j=1:length(outdata.data{mod_idx}.data{mcols.path})
+    subid = outdata.data{mod_idx}.data{mcols.subject_id}{j};
+    isess = outdata.data{mod_idx}.data{mcols.session}(j);
+    model_id = outdata.data{mod_idx}.data{mcols.model_id}(j);
+    model_fname = outdata.data{mod_idx}.data{mcols.path}{j};
+    
+    msg = sprintf('Loading model info in: %s\n', model_fname);
+    r = update_report(r,msg);
+
+    opts.printfig = 1;
+    opts.title = sprintf('%s, session %d, model %02d', subid, isess, model_id);
+    check_dir(defs.paths.figpath);
+    opts.figstub = fullfile(defs.paths.figpath, sprintf('descorr_model_%02d', model_id));
+    outdata.data{fig_idx} = ensemble_add_data_struct_row(outdata.data{fig_idx},...
+        'subject_id',subid,'session',isess,'model_id',model_id,...
+        'path',[opts.figstbus '.ps']);
+    if ~started_desmat_cov_file
+      opts.append_str = '';
+      started_desmat_cov_file = 1;
+    else
+      opts.append_str = '-append';
+    end
+    figure(1), clf
+    opts.figh = gcf;
+    post_process_corrmat(model_fname, opts);
+  end
+end % if PLOT_DESMAT_COV && USE_SPM
+
 % 
-% if isfield(curr_model,'permute_params')
-%     
-%   % get permutation parameters
-%   pp = curr_model.permute_params;
-%   try maxiter=pp.maxiter; catch maxiter=150; end
-%   est_method = curr_model.est_method;
-%   switch est_method
-%     case {'Classical'}
-%       pjobs{1}.stats{1}.fmri_est.method.Classical = 1;
-%     case {'Bayesian'}
-%       pjobs{1}.stats{1}.fmri_est.method.Bayesian = curr_model.bayes;
-%     case {'Bayesian2'}
-%       pjobs{1}.stats{1}.fmri_est.method.Bayes2 = 1;
-%     otherwise
-%       msg = sprintf('ERROR: Unknown estimation method: %s\n', est_method);
-%       r = update_report(r,msg);
-%       return
-%   end % switch est_method
-%   if isfield(pp,'stopping_rule_fun')
-%     stoprulefh = parse_fh(pp.stopping_rule_fun);
-%   else
-%     stoprulefh = '';
-%   end
-%   
-%   % get SPM struct from previous job
-%   spmfname = fullfile(model_outdir,'SPM.mat');
-%   load(spmfname);
-%   origSPM = SPM;
+% MODEL PERMUTATIONS
 % 
-% %   % calculate SPM
-% %   permjob.spmmat = {spmfname};
-% %   permjob.xCon = SPM.xCon;
-% %   permjob.conspec = pp.conspec;
-% % %   permjob.conspec.titlestr = pp.contrast.titlestr;
-% % %   permjob.conspec.mask = []; % contrasts for masking
-% % %   permjob.conspec.thresh = pp.contrast.thresh
-% % %   permjob.conspec.extent = 1;
-% % %   permjob.conspec.threshdesc = 'FWE';
-% % %   permjob.conspec.contrasts = ...
-% % %   strmatch('Tonreg_F',{SPM.xCon.name},'exact');
-%   
-% %   [SPM,xSPM] = spm_getSPM(permjob);
-% %   nvox = size(xSPM.XYZ,2);
-% %   pp.XYZ = xSPM.XYZ;
-% %   pp.vol_dim = SPM.xVol.DIM';
-%   
-%   nvox = size(SPM.xVol.XYZ,2);
-%   pp.XYZ = SPM.xVol.XYZ;
-%   pp.vol_dim = SPM.xVol.DIM';
-%   
-%   % load residuals from original job
-%   srcres_fname = fullfile(model_outdir,'ResMS.img');
-%   if ~exist(srcres_fname,'file'), error('residuals not found!'), end
-%   Vsrc = spm_vol(srcres_fname);  % map the filename
-%   fprintf('Reading source data: %s\n', srcres_fname);
-%   Ysrc = spm_read_vols(Vsrc); % read the data
-% 
-%   % create empty permute residual struct
-%   Vsrc = [];
-%   Yperm = zeros([size(Ysrc) 0]);
-% 
-%   % init a place for permutation history
-%   pp.history.std_mu = [];
-%   pp.history.std_sig = [];
-%   pp.history.std_prob = [];
-%   
-%   % iterate until stopping rule or max iter
-%   done = false;
-%   iter = 0;
-%   permutations = []; % FIXME: save perms to make sure none are repeated ??
-%   while (~done)
-%     iter = iter + 1;
-%     curr_dir = fullfile(model_outdir,sprintf('perm%04d',iter));
-%     check_dir(curr_dir);
-%     
-%     % permute, save data
-%     [SPM,pp] = fmri_permute_desmat(origSPM,pp);
-%     outfname = fullfile(curr_dir,'SPM.mat');
-%     save(outfname,'SPM');
-%     
-%     % estimate model
-%     pjobs{1}.stats{1}.fmri_est.spmmat = {outfname};
-%     warning off
-%     msg = sprintf('Launching permutation %d ...\n',iter);
-%     r = update_report(r,msg);
-%     spm_jobman('run',pjobs);
-%     warning on
-%     
-%     % load new residuals
-%     permres_fname = fullfile(curr_dir,'ResMS.img');
-%     Vperm(iter) = spm_vol(permres_fname);
-%     Yperm(:,:,:,iter) = spm_read_vols(Vperm(iter));
-% 
-%     % estimate null distribution
-%     [Ymu,Ysig,Yprob,YpermZ] = fmri_permute_eval_dist(Ysrc,Yperm,pp.XYZ);
-%     
-%     % evaluate stopping rule
-%     pp.Ymu = Ymu;
-%     pp.Ysig = Ysig;
-%     pp.Yprob = Yprob;
-%     pp.YpermZ = YpermZ;
-%     if ~isempty(stoprulefh)
-%       [done,pp] = stoprulefh(pp);
-%     end
-%     
-%     % save this permutation's parameters
-%     pp.lastYmu = pp.Ymu;
-%     pp.lastYsig = pp.Ysig;
-%     pp.lastYprob = pp.Yprob;
-%     pp.history.std_mu(iter) = nanstd(Ymu(:));
-%     pp.history.std_sig(iter) = nanstd(Ysig(:));
-%     pp.history.std_prob(iter) = nanstd(Yprob(:));
-%     
-%     % plot mean and standard deviation of this perm's params
-%     figure(pfigh);
-%     subplot(3,1,1);
-%     plot(pp.history.std_mu);
-%     title(sprintf('std of Ymu over %d iterations',iter));
-%     subplot(3,1,2);
-%     plot(pp.history.std_sig);
-%     title(sprintf('std of Ysig over %d iterations',iter));
-%     subplot(3,1,3);
-%     plot(pp.history.std_prob);
-%     title(sprintf('std of Yprob over %d iterations',iter));
-%         
-%     if iter == maxiter, done = true; end
-%   end
-% 
-%   % Write the probability volume to file
-%   Vprob = Vsrc;
-%   Vprob.fname = fullfile(model_outdir,'PermProb.img');
-%   Vprob.descrip = 'Probability that ResMS is lower than permuted models';
-%   Vprob = rmfield(Vprob,'private');
-% 
-%   Vprob = spm_create_vol(Vprob);
-%   Vprob = spm_write_vol(Vprob,Yprob);  
-% 
-%   %%%% FIXME: make permutation report, including model stats and status
-%   
-% 
-% end
+
+if PERMUTE_MODEL && USE_SPM && BUILD_MODEL &&  ESTIMATE_MODEL
+
+  % iterate over outdata.data{mod_idx}.data{mcols.path}, permute each model
+  for j=1:length(outdata.data{mod_idx}.data{mcols.path})
+    subid = outdata.data{mod_idx}.data{mcols.subject_id}{j};
+    isess = outdata.data{mod_idx}.data{mcols.session}(j);
+    model_id = outdata.data{mod_idx}.data{mcols.model_id}(j);
+    model_fname = outdata.data{mod_idx}.data{mcols.path}{j};
+    model_outdir = fileparts(model_fname);
+    
+    msg = sprintf('Loading model info in: %s\n', model_fname);
+    r = update_report(r,msg);
+    
+    midx = find(model_id == [defs.model.model_id]);
+    if isempty(midx)
+      warning('no model definition in defs found for model %d, SKIPPING',...
+          model_id);
+      continue
+    end
+    curr_model = defs.model(midx);
+    
+    % get permutation parameters
+    pp = curr_model.permute_params;
+    try maxiter=pp.maxiter; catch maxiter=150; end
+    if isfield(pp,'stopping_rule_fun')
+      stoprulefh = parse_fh(pp.stopping_rule_fun);
+    else
+      stoprulefh = '';
+    end
+    
+    % load estimated model
+    src = load(model_fname);
+    
+    nvox = size(src.SPM.xVol.XYZ,2);
+    pp.XYZ = src.SPM.xVol.XYZ;
+    pp.vol_dim = src.SPM.xVol.DIM';
+    
+    % load residuals from original job
+    srcres_fname = fullfile(model_outdir,'ResMS.img');
+    if ~exist(srcres_fname,'file')
+      warning('residuals not found!');
+      continue
+    end
+    Vsrc = spm_vol(srcres_fname);  % map the filename
+    fprintf('Reading source data: %s\n', srcres_fname);
+    Ysrc = spm_read_vols(Vsrc); % read the data
+
+    % init permutation residual image
+    Yperm = zeros([size(Ysrc) 0]);
+    
+    % init a place for permutation history
+    pp.history.Ymu = nan(size(Yperm));
+    pp.history.Ysig = nan(size(Yperm));
+    pp.history.Yprob = nan(size(Yperm));
+    pp.history.YpermZ = nan(size(Yperm));
+    
+    % set job indices containing data to permute
+    pp.model_job_idxs{1} = [1 1];
+
+    % iterate until stopping rule or max iter
+    done = false;
+    iter = 0;
+    while (~done)
+      iter = iter + 1;
+      curr_dir = fullfile(model_outdir,sprintf('perm%04d',iter));
+      check_dir(curr_dir);
+    
+      % permute data
+      [jobs,pp] = fmri_permute_model_job(jobs,pp);
+    
+      % estimate model
+      jobs{1}.stats{1}.fmri_spec.dir = {curr_dir};
+      outfname = fullfile(curr_dir,'SPM.mat');
+      jobs{1}.stats{2}.fmri_est.spmmat = {outfname};
+      warning off
+      msg = sprintf('Launching permutation %d ...\n',iter);
+      r = update_report(r,msg);
+      spm_jobman('run',jobs);
+      warning on
+    
+      % load new residuals
+      permres_fname = fullfile(curr_dir,'ResMS.img');
+      Vperm(iter) = spm_vol(permres_fname);
+      Yperm(:,:,:,iter) = spm_read_vols(Vperm(iter));
+
+      % estimate null distribution
+      [Ymu,Ysig,Yprob,YpermZ] = fmri_permute_eval_dist(Ysrc,Yperm,pp.XYZ);
+      
+      % save permutation in history
+      pp.history.Ymu(:,:,:,iter) = Ymu;
+      pp.history.Ysig(:,:,:,iter) = Ysig;
+      pp.history.Yprob(:,:,:,iter) = Yprob;
+      pp.history.YpermZ = YpermZ;
+      
+      if iter == 1, continue, end
+
+      % evaluate stopping rule
+      if ~isempty(stoprulefh)
+        [done,pp] = stoprulefh(pp);
+      end
+
+      % plot permutations
+      pp.pfigtitle = sprintf('%s, session %d, model %d, iteration %d',...
+          subid,isess,model_id,iter);
+      pp = fmri_permute_plot(pp);
+      
+      if iter == maxiter, done = true; end
+    end
+
+    % Write the probability volume to file
+    Vprob = Vsrc;
+    Vprob.fname = fullfile(model_outdir,'PermProb.img');
+    Vprob.descrip = 'Probability that ResMS is lower than permuted models';
+
+    Vprob = spm_create_vol(Vprob);
+    Vprob = spm_write_vol(Vprob,Yprob);
+
+    %%%% FIXME: make permutation report, including model stats and status
+    check_dir(defs.paths.figpath);
+    figfname = fullfile(defs.paths.figpath,...
+        sprintf('%s_sess%d_mod%d_permuted.ps',subid,isess,model_id));
+    printargs = {'-dpsc','-adobecset'};
+    figure(pp.pfigh);
+    set(gcf,'PaperPositionMode','auto');
+    set(gcf,'PaperPos',[0 0 8.5 11]);
+    set(gcf,'PaperType','usletter');
+    print(figfname,printargs{:});
+    printargs = [printargs '-append'];
+    figure(fped_figh);
+    set(gcf,'PaperPositionMode','auto');
+    set(gcf,'PaperPos',[0 0 8.5 11]);
+    set(gcf,'PaperType','usletter');
+    print(figfname,printargs{:});
+    
+    % print original design matrix to file
+    dfigh = figure();
+    set(gcf,'PaperPositionMode','auto');
+    set(gcf,'PaperPos',[0 0 8.5 11]);
+    set(gcf,'PaperType','usletter');
+    imagesc(src.SPM.xX.X);
+    title('source design matrix');
+    print(figfname,printargs{:});
+    
+    % iterate over permutations, print design matrix to file
+    for k=1:iter
+      spm_fname = fullfile(model_outdir,sprintf('perm%04d',iter),'SPM.mat');
+      if ~exist(spm_fname,'file')
+        warning('can not find SPM.mat %s for permutation %d!? SKIPPING',...
+            spm_fname,k);
+        continue
+      end
+      
+      pspm = load(spm_fname);
+      figure(dfigh);
+      imagesc(pspm.SPM.xX.X);
+      title(sprintf('design matrix, iteration %d',k));
+      print(figfname,printargs{:});
+    end
+    
+    outdata.data{fig_idx} = ensemble_add_data_struct_row(outdata.data{fig_idx},...
+        'subject_id',subid,'session',isess,'model_id',model_id,...
+        'path',figfname);
+    
+  end % for j=1:length(
+end % if PERMUTE_MODEL &&
 
 % % % % %
 % % % % % Various sub-functions

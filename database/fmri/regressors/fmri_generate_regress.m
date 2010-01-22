@@ -225,13 +225,14 @@ if USE_FSL
 elseif USE_SPM
     
   % Initiate the condition output variable
-  condstruct = struct('name','','onset',[],'duration',[],'tmod',0,'pmod',[]);
+  condstruct = struct('name','','onset',[],'duration',[],'pmod',[]);
   for ic=1:length(cnames)
     condstruct(ic).name = cnames{ic};
     condstruct(ic).onset = consets{ic};
     condstruct(ic).duration = durations{ic};
     condstruct(ic).pmod = pmods{ic};
   end
+  [condstruct(1:end).tmod] = deal(0);
 
   % Initialize the regressors output variable to an empty instance of the structure
   regressors = struct('name','','val',[]);
