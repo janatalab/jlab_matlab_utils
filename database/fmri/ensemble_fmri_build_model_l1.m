@@ -703,6 +703,7 @@ elseif USE_SPM
   pinfo.irun=irun;
   pinfo.resp_mapping = sess.resp_mapping;
   pinfo.USE_SPM = 1;
+  pinfo.mysql = defs.mysql;
   
   ppath = fileparts(flist{1});
   if USE_SPM_MOTPARAMS
