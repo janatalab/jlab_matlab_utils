@@ -48,7 +48,7 @@ for isub = 1:nsubs
   
   thisSubID  = subids{isub};
   subDOB = subInfo.data{subInfoCols.dob}{isub};
-  dobDatenum = datenum(subDOB);
+  dobDatenum = datenum(subDOB,'yyyy-mm-dd');
   
   subGender = subInfo.data{subInfoCols.gender};
   
