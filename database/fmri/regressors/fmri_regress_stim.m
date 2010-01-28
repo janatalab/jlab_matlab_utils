@@ -6,6 +6,9 @@ function [names,vals] = fmri_regress_stim(pinfo,minfo,sess)
 % 
 % called by fmri_generate_regress
 % 
+% also handles limits based on timespan judgments
+% NOTE: need to add a little of 
+% 
 % REQUIRES
 % 
 % RETURNS
@@ -38,6 +41,11 @@ onsets = sinfo.data{pc.RUN_REL_TIME}/1000;
 
 % Durations
 durs = ones(size(onsets))*minfo.music_dur;
+
+% limit by timespan?
+if ~isempty(strfind(regid,'timespan'))
+  [onsets,durs] = fmri_regress_timespan(pinfo,minfo,onsets,durs);
+end % if ~isempty(strfind(regid,'timespan
 
 % Now build the regressor
 vals = fmri_convolve_regress(onsets,durs,resp_params,pinfo.scanner.TR,...
