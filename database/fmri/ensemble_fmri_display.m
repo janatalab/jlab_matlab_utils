@@ -21,6 +21,9 @@ function [outdata] = ensemble_fmri_display(indata,defs)
 %       plots
 %       plotdirstubs (optional)
 %       USE_PERMUTATION (requires permute_model)
+%       perm_idxs (optional, requires USE_PERMUTATION) indicates indices of
+%           plots to mask using permutation data
+%       PERM_PROB - probability threshold for permutation mask
 % 
 % RETURNS
 % 
@@ -129,7 +132,6 @@ end
 try PLOT_SINGLE_SUB = defs.display.PLOT_SINGLE_SUB;
   catch PLOT_SINGLE_SUB = 0; end
 try PLOT_GROUP = defs.display.PLOT_GROUP; catch PLOT_GROUP = 0; end
-try ADD_SPLIT = defs.display.ADD_SPLIT; catch ADD_SPLIT = 1; end
 try ADD_SPLIT_CONTOUR = defs.display.ADD_SPLIT_CONTOUR;
   catch ADD_SPLIT_CONTOUR = 0; end
 try ADD_MASK_CONTOUR = defs.display.ADD_MASK_CONTOUR;
@@ -162,7 +164,9 @@ try ORTHO_PMOD_MODEL = defs.display.ORTHO_PMOD_MODEL;
   catch ORTHO_PMODMODEL = 0; end
 try USE_PERMUTATION = defs.USE_PERMUTATION;
   catch USE_PERMUTATION = 0; end
-
+try perm_idxs = defs.perm_idxs; catch perm_idxs = ''; end
+try PERM_PROB = defs.PERM_PROB; catch PERM_PROB = 0.05; end
+  
 if PLOT_SINGLE_SUB
   % require subject info if plotting single subject
   check_vars = {'sinfo'};
@@ -271,6 +275,12 @@ for iplot = 1:nplots
   plot = plots{iplot};
   disp(sprintf('Working on plots for %s', plot))
   
+  if USE_PERMUTATION && (ismember(iplot,perm_idxs) || isempty(perm_idxs))
+    PERM = 1;
+  else
+    PERM = 0;
+  end
+
   %
   % Some plots are single subject plots, whereas others are plots of group statistics
   %
@@ -326,7 +336,7 @@ for iplot = 1:nplots
         % 
         %  load permutation results?
         % 
-        if USE_PERMUTATION
+        if PERM
           % FIXME: use data from indata,'permute_models'
           %%%% HACK: locating model perm results based on expected location
           perm_fname = fullfile(stats_dir,'PermProb.hdr');
@@ -336,7 +346,7 @@ for iplot = 1:nplots
           
           Vperm = spm_vol(perm_fname);
           [Yperm,XYZperm] = spm_read_vols(Vperm);
-          permmask = Yperm < 0.05;
+          permmask = Yperm < PERM_PROB;
         end
         
         if ~isempty(strmatch(plot,'conjunctions','exact'))
@@ -525,7 +535,7 @@ for iplot = 1:nplots
 	        continue
           end
 	    
-          if USE_PERMUTATION
+          if PERM
             for j=1:size(xSPM.XYZ,2)
               x=xSPM.XYZ(:,j);
               if ~permmask(x(1),x(2),x(3))
@@ -591,7 +601,7 @@ for iplot = 1:nplots
             end
 	        figdir = fullfile(rootpath,'figures',model_proto_name,outstr);
             check_dir(fileparts(figdir));
-            if USE_PERMUTATION
+            if PERM
               figdir = [figdir '_perm'];
             end
 	        print_to_file(figdir, isub~=1);
@@ -831,7 +841,7 @@ for iplot = 1:nplots
         check_dir(fileparts(figdir));
       end
       if iplot == 1, append = 0; else append = 1; end
-      if USE_PERMUTATION
+      if PERM
         figdir = [figdir '_perm'];
       end
       print_to_file(figdir, append);

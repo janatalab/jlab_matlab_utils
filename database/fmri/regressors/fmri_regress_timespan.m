@@ -1,29 +1,50 @@
-function [onsets,durs] = fmri_regress_timespan(pinfo,minfo,onsets,durs)
+function [onsets,durs,resp_params] = fmri_regress_timespan(pinfo,minfo,inons,indurs,inresp)
 
 % limits onsets and durations by timespan ratings
 % 
-%   [names,vals] = fmri_regress_timespan(pinfo,minfo,ons,durs)
+%   [onsets,durs,resp_params] = fmri_regress_timespan(pinfo,minfo,inons,indurs,inresp)
 % 
-% takes presentation data, model information, onsets and durations, finds
-% and calculates timespan ratings, and then adjusts the onsets and durs to
-% only reflect the timespan that was rated for the given response. See
-% also: fmri_regress_stim.m
+% takes presentation data, model information, and event onsets, finds
+% and calculates timespan ratings, and then adjusts the onsets, durs, and
+% resp_params to only reflect the timespan that was rated for the given
+% response. those onsets and durations that are not adjusted by this
+% function are not returned. See also: fmri_regress_stim.m
+% 
+% REQUIRES
+%   pinfo - presentation data
+%   minfo - model info
+%   inons - onset times, in ms
+%   indurs - event durations, in s
+%   inresp - resp_params, or a parametric weighting of each event
+% 
+% RETURNS
+%   onsets - onsets, adjusted for each timespan rating, in ms
+%   durs - durations, adjusted for each timespan rating, in s
+%   resp_params - parametric weighting of each event being returned
 % 
 % FB 2010.01.27
 
-  if isfield(minfo,'timespan_defs')
+onsets = [];
+durs = [];
+resp_params = [];
+
+if isfield(minfo,'timespan_defs')
     tsd = minfo.timespan_defs;
-  else
+else
     error('no timspan defs found');
-  end
-  
-  pc = set_var_col_const(pinfo.vars);
-  
-  % calculate timespan ratings from presentation data
-  tsfind = strfind(pinfo.data{pc.EVENT_CODE},'timespan_cue');
-  tsidxs = find(~cellfun(@isempty,tsfind));
-  
-  for j=1:length(tsidxs);
+end
+
+if ~all([length(inons) length(indurs)] == length(inresp))
+    error('onsets, durations, and response parameters unequal in length');
+end
+
+pc = set_var_col_const(pinfo.vars);
+
+% calculate timespan ratings from presentation data
+tsfind = strfind(pinfo.data{pc.EVENT_CODE},'timespan_cue');
+tsidxs = find(~cellfun(@isempty,tsfind));
+
+for j=1:length(tsidxs);
     codes = pinfo.data{pc.RESP_CODE}{tsidxs(j)};
     pos = tsd.start; lvl = 0; start = 1; stop = tsd.nbins;
     for k=1:length(codes)
@@ -66,10 +87,11 @@ function [onsets,durs] = fmri_regress_timespan(pinfo,minfo,onsets,durs)
     
     % link this timespan judgment with a stimulus
     time = pinfo.data{pc.RUN_REL_TIME}(tsidxs(j))/1000;
-    oidx = find(onsets < time,1,'last');
+    oidx = find(inons < time,1,'last');
     
-    % modify the onset/dur for this stimulus
-    onsets(oidx) = onsets(oidx)+minfo.music_dur*start;
-    durs(oidx) = minfo.music_dur*(stop-start);
-  end % for j=1:length(tsidxs
+    % modify the onset/dur, add the resp_param, for this stimulus
+    onsets(end+1) = inons(oidx)+indurs(oidx)*start;
+    durs(end+1) = indurs(oidx)*(stop-start);
+    resp_params(end+1) = inresp(oidx);
+end % for j=1:length(tsidxs
   

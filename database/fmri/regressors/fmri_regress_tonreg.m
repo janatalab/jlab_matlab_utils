@@ -13,7 +13,9 @@ vals = [];
 
 regid = pinfo.regid;
 m = pinfo.mysql;
-minf.ensemble.conn_id = mysql_make_conn(m.host,m.database,m.conn_id);
+gendefs = minfo.ipem;
+gendefs.ensemble.conn_id = mysql_make_conn(m.host,m.database,m.conn_id);
+gendefs.scanner = pinfo.scanner;
 
 % Get a list of the IDs to process
 sfilt.include.all = minfo.response_filter;
@@ -23,6 +25,11 @@ pc = set_var_col_const(pinfo.vars);
 proc_ids = cellfun(@str2num,sdata.data{pc.EVENT_CODE});
 nids = length(proc_ids);
 onsets = sdata.data{pc.RUN_REL_TIME}/1000;
+
+if ~nids
+  fprintf(1,'no sound stimuli in this run, SKIPPING\n');
+return
+end
 
 tonregval = cell(nids,1);
 
@@ -50,8 +57,16 @@ for j = 1:nids
     tonregval{j} = [];
   end
 
-  [tonregval{j},tonregnames] = generate_tonreg(proc_ids(j),minfo.ipem);
+  [tonregval{j},tonregnames] = fmri_generate_tonreg(proc_ids(j),gendefs);
   curr_val = tonregval{j};
+  
+  if isfield(minfo,'music_dur_max')
+    % make sure that curr_val doesn't exceed music_dur_max
+    dmax = minfo.music_dur_max*dt/TR;
+    if size(curr_val,1) > dmax
+      curr_val(dmax+1:end,:) = [];
+    end
+  end
 
   if j == 1
     curr_val_cols = size(curr_val,2);
@@ -105,3 +120,8 @@ for ireg = 1:size(tonregmtx,2)
   names{ireg} = curr_name;
   vals(:,ireg) = convreg([0:(pinfo.scanner.actual_nvol-1)]*dt+1,ireg);
 end
+
+% scale to ~ -1:1
+vals = vals - mean(vals(:));
+vals = vals./max(max(vals(:)),abs(min(vals(:))));
+vals = vals - repmat(mean(vals),size(vals,1),1);

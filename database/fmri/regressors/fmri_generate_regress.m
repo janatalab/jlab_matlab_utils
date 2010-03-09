@@ -128,9 +128,10 @@ for ireg = 1:nreg
     
   regid = reglist{ireg};
 
+  linfo = pinfo;
+  linfo.regid = regid;
+  
   if strmatch('stim_',regid)
-    linfo = pinfo;
-    linfo.regid = regid;
     [lnames,lvals] = fmri_regress_stim(linfo,minfo,sess);
   else
     regstr = sprintf('fmri_regress_%s',regid);
@@ -141,7 +142,7 @@ for ireg = 1:nreg
     
     regfun = str2func(regstr);
   
-    [lnames,lvals] = regfun(pinfo,minfo,sess);
+    [lnames,lvals] = regfun(linfo,minfo,sess);
   end % if strmatch('stim_
   
   if isempty(lnames) || isempty(lvals)

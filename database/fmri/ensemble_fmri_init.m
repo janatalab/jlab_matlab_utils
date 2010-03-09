@@ -610,7 +610,7 @@ for isub=1:nsub_proc
                 title(sprintf('Run %d', runidx));
               end
 
-              if exist('WRITE2FILE','var')
+              if exist('WRITE2FILE','var') && WRITE2FILE
                 check_dir(defs.paths.figpath,1);
                 fvc_fname = fullfile(defs.paths.figpath,sprintf('fmri_vol_check_%s.ps',...
                   subid));
@@ -654,7 +654,9 @@ for isub=1:nsub_proc
           %%%%% END TOUCH_HEADERS
         end % if TOUCH_HEADERS
 	
-	    if REPLACE_BAD_VOLS && ~isempty(sinfo(isub).badvols{irun})
+	    if REPLACE_BAD_VOLS && isfield(sinfo(isub),'badvols') && ...
+                length(sinfo(isub).badvols) >= irun && ...
+                ~isempty(sinfo(isub).badvols{irun})
           %%%%% REPLACE_BAD_VOLS
             
             % Make sure we have a directory into which we can copy the
@@ -667,8 +669,8 @@ for isub=1:nsub_proc
               badvol_idx = sinfo(isub).badvols{irun}{ibad,1};
               goodvol_idxs = sinfo(isub).badvols{irun}{ibad,2};
 
-              badfname = fullfile(run_outdir,sprintf(epifstubfmt, isub, ...
-                  badvol_idx));
+              badfname = fullfile(run_outdir,sprintf(epifstubfmt,subid,...
+                  irun,badvol_idx,'img'));
 
               % Copy the original bad file
               unix_str = sprintf('cp %s %s', badfname, orig_dir);
@@ -678,7 +680,7 @@ for isub=1:nsub_proc
               goodflist = {};
               for igood = 1:ngood
                 goodflist{igood} = fullfile(run_outdir,sprintf(...
-                    epifstubfmt,isub,goodvol_idxs(igood)));
+                    epifstubfmt,subid,irun,goodvol_idxs(igood),'img'));
               end
 
               % Read in the header info for the good data
@@ -778,7 +780,7 @@ for isub=1:nsub_proc
           end
         end
       
-        if exist('flist') && ~isempty(flist)
+        if exist('flist') && ~isempty(flist) && exist('epi_idx','var')
           for ifl=1:size(flist,1)
             outdata.data{epi_idx} = ensemble_add_data_struct_row(...
                 outdata.data{epi_idx},'subject_id',subid,'session',...

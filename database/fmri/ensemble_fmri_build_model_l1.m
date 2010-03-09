@@ -39,6 +39,8 @@ function outdata = ensemble_fmri_build_model_l1(indata,defs)
 %   sinfo
 %   modelspec
 %   resid
+%   figs
+%   permprob
 % 
 % FB 2008.08.27
 
@@ -264,6 +266,22 @@ else
   end
 end
 
+% permprob?
+if PERMUTE_MODEL
+  outdata.vars = [outdata.vars 'permprob'];
+  ppidx = length(outdata.vars);
+  outdata.data{ppidx} = ensemble_init_data_struct();
+  outdata.data{ppidx}.type = 'permprob';
+  outdata.data{ppidx}.name = 'permprob';
+  outdata.data{ppidx}.vars = {'subject_id','session','model_id','nperms','path'};
+  ppcols = set_var_col_const(outdata.data{ppidx}.vars);
+  outdata.data{ppidx}.data{ppcols.subject_id} = {};
+  outdata.data{ppidx}.data{ppcols.session} = [];
+  outdata.data{ppidx}.data{ppcols.model_id} = [];
+  outdata.data{ppidx}.data{ppcols.nperms} = [];
+  outdata.data{ppidx}.data{ppcols.path} = {};
+end
+
 % figures (mostly so they are copied back where they're needed by
 % copy2local
 outdata.vars = [outdata.vars 'figs'];
@@ -462,12 +480,13 @@ for isub=1:nsub_proc
       
       nvols = [];
       for irun = 1:nruns
+        runnum = urun(irun);
         % get epi file list
         lmask = runm(:,irun);
         flist = sessdata.data{epicol.path}(lmask);
         
         % get presentation data for this run
-        presfilt.include.all.RUN=irun;
+        presfilt.include.all.RUN=runnum;
         pinfo = ensemble_filter(pres_info,presfilt);
         
         if exist('physio_paths','var')
@@ -587,7 +606,7 @@ if USE_FSL
 
   % generate EVs
   pinfo.evoutdir = fullfile(model_outdir,'evs'); check_dir(pinfo.evoutdir);
-  pinfo.evstub = sprintf('%s_run%d_ev%%d.txt',subid,irun);
+  pinfo.evstub = sprintf('%s_run%d_ev%%d.txt',subid,runnum);
   pinfo.scanner.nslice_per_vol = nslices;
   pinfo.scanner.actual_nvol = nvol;
   pinfo.scanner.nvol = nvol;
@@ -595,17 +614,17 @@ if USE_FSL
   pinfo.scanner.TR = protocol.epi.tr;
   pinfo.scanner.orig_nslices = protocol.epi.nslices;
   pinfo.protocol = protocol;
-  pinfo.irun = irun;
+  pinfo.irun = runnum;
   pinf.USE_FSL = 1;
   %%%%%%% HACK - FIXME: motionparam_fname should really either be a
   %%%%%%% filestub from params or better yet in its own output dataset from
   %%%%%%% ens_fmri_realign_epi
   if USE_FSL_MOTPARAMS
     pinfo.motionparam_fname = fullfile(fp,...
-        sprintf('%s_%d_run%dmc.par',subid,sess.ensemble_id,irun));
+        sprintf('%s_%d_run%dmc.par',subid,sess.ensemble_id,runnum));
   elseif USE_SPM_MOTPARAMS
     pinfo.motionparam_fname = fullfile(fp,...
-        sprintf('rp_%s',sprintf(epifstubfmt,subid,irun,1,'txt')));
+        sprintf('rp_%s',sprintf(epifstubfmt,subid,runnum,1,'txt')));
   end
   
   % fsf.ev = fmri_fsl_generate_evs(pinfo,curr_model,sess);
@@ -630,7 +649,7 @@ if USE_FSL
 
     fsf = setup_fsl_con(fsf,ev_names,contlist,Fcontlist);
 
-    run_outdir = fullfile(model_outdir,sprintf('run%d',irun));
+    run_outdir = fullfile(model_outdir,sprintf('run%d',runnum));
     check_dir(run_outdir);
     fsf.fsldir = run_outdir;
     fsf.outputdir = run_outdir;
@@ -661,7 +680,7 @@ if USE_FSL
     end
     
     outdata.data{mod_idx} = ensemble_add_data_struct_row(outdata.data{mod_idx},...
-        'subject_id',subid,'session',isess,'model_id',model_id,'run',irun,...
+        'subject_id',subid,'session',isess,'model_id',model_id,'run',runnum,...
         'path',fullfile(run_outdir,'design.fsf'));
 
     if ESTIMATE_MODEL
@@ -685,7 +704,7 @@ if USE_FSL
       end
 
       outdata.data{res_idx} = ensemble_add_data_struct_row(outdata.data{res_idx},...
-          'subject_id',subid,'session',isess,'model_id',model_id,'run',irun,...
+          'subject_id',subid,'session',isess,'model_id',model_id,'run',runnum,...
           'path',resid_fname);
     end
     
@@ -700,7 +719,7 @@ elseif USE_SPM
   pinfo.scanner.actual_nvol = actual_nvol;
   pinfo.scanner.TR = protocol.epi.tr;
   pinfo.scanner.orig_nslices = protocol.epi.nslices;
-  pinfo.irun=irun;
+  pinfo.irun=runnum;
   pinfo.resp_mapping = sess.resp_mapping;
   pinfo.USE_SPM = 1;
   pinfo.mysql = defs.mysql;
@@ -708,12 +727,12 @@ elseif USE_SPM
   ppath = fileparts(flist{1});
   if USE_SPM_MOTPARAMS
     pinfo.motionparam_fname = fullfile(ppath,...
-        sprintf('rp_%s',sprintf(epifstubfmt,subid,irun,1,'txt')));
+        sprintf('rp_%s',sprintf(epifstubfmt,subid,runnum,1,'txt')));
   elseif USE_FSL_MOTPARAMS
     pinfo.motionparam_fname = fullfile(ppath,...
-        sprintf('%s_%d_run%dmc.par',subid,sess.ensemble_id,irun));
+        sprintf('%s_%d_run%dmc.par',subid,sess.ensemble_id,runnum));
   end
-  pinfo.presfname = sess.pres.logfiles{irun,1};
+  pinfo.presfname = sess.pres.logfiles{runnum,1};
 
   % if there is physio data for this subject/run, and if there is a physio
   % data struct that has been provided as input for this job, then extract
@@ -722,13 +741,13 @@ elseif USE_SPM
     if exist('physio_paths','var')
       pf.include.all.subject_id = {subid};
       pf.include.all.session = isess;
-      pf.include.all.run = urun(irun);
+      pf.include.all.run = runnum;
       lphys = ensembl_filter(physio_paths,pf);
       if ~isempty(lphys.data{physcol.path}) && ...
               exist(lphys.data{physcol.path}{1},'file')
         pinfo.physiofname = lphys.data{physcol.path}{1};
       else
-        warning('physio file for run %d not found\n',urun(irun));
+        warning('physio file for run %d not found\n',runnum);
       end
     end
   end
@@ -856,7 +875,7 @@ elseif USE_SPM
               % is at least One mod
               msg = sprintf(['new parametric modulations for previously '...
                   'unmodulated condition (%s), subject %s session %d '...
-                  'run %d'],allconds{icond},isess,irun);
+                  'run %d'],allconds{icond},isess,runnum);
               r = update_report(r,msg);
               cs.cond(curr_cond_idx).pmod = spmsess.cond(new_cond_idx).pmod;
             end % if nnewmod && noldmod
@@ -933,7 +952,7 @@ end % if USE_FSL / elseif USE_SPM
           constant_reg = zeros(length(cs.scans),1);
           constant_reg(sum(nvols(1:irun))-nvols(irun)+1:sum(nvols(1:irun))) = 1;
           const_reg_idx = length(cs.regress)+1;
-          cs.regress(const_reg_idx).name = sprintf('run%d_constant', irun);
+          cs.regress(const_reg_idx).name = sprintf('run%d_constant',urun(irun));
           cs.regress(const_reg_idx).val = constant_reg;
         end
 
@@ -1017,7 +1036,7 @@ end % if USE_FSL / elseif USE_SPM
           end % for iev=1:
 
           % add run mean regressor
-          rmrname = sprintf('mean_run%d',irun);
+          rmrname = sprintf('mean_run%d',urun(irun));
           if isempty(strmatch(rmrname,evnames))
             nev = nev+1;
             desmat(:,nev) = 0;
@@ -1095,7 +1114,7 @@ end % if USE_FSL / elseif USE_SPM
         end
 
         outdata.data{mod_idx} = ensemble_add_data_struct_row(outdata.data{mod_idx},...
-            'subject_id',subid,'session',isess,'model_id',model_id,'run',irun,...
+            'subject_id',subid,'session',isess,'model_id',model_id,...
             'path',fullfile(fsf.fsldir,'design.fsf'));
 
         if ESTIMATE_MODEL
@@ -1119,7 +1138,7 @@ end % if USE_FSL / elseif USE_SPM
           end
 
           outdata.data{res_idx} = ensemble_add_data_struct_row(outdata.data{res_idx},...
-              'subject_id',subid,'session',isess,'model_id',model_id,'run',irun,...
+              'subject_id',subid,'session',isess,'model_id',model_id,...
               'path',resid_fname);
         end
 
@@ -1266,7 +1285,7 @@ end % if PLOT_DESMAT_COV && USE_SPM
 % MODEL PERMUTATIONS
 % 
 
-if PERMUTE_MODEL && USE_SPM && BUILD_MODEL &&  ESTIMATE_MODEL
+if PERMUTE_MODEL && USE_SPM && BUILD_MODEL && ESTIMATE_MODEL
 
   % iterate over outdata.data{mod_idx}.data{mcols.path}, permute each model
   for j=1:length(outdata.data{mod_idx}.data{mcols.path})
@@ -1345,6 +1364,9 @@ if PERMUTE_MODEL && USE_SPM && BUILD_MODEL &&  ESTIMATE_MODEL
       r = update_report(r,msg);
       spm_jobman('run',jobs);
       warning on
+      
+      % clean directory
+      fmri_permute_clean_dir(curr_dir);
     
       % load new residuals
       permres_fname = fullfile(curr_dir,'ResMS.img');
@@ -1375,7 +1397,7 @@ if PERMUTE_MODEL && USE_SPM && BUILD_MODEL &&  ESTIMATE_MODEL
       if iter == maxiter, done = true; end
     end
 
-    % Write the probability volume to file
+    % % % Write the probability volume to file
     Vprob = Vsrc;
     Vprob.fname = fullfile(model_outdir,'PermProb.img');
     Vprob.descrip = 'Probability that ResMS is lower than permuted models';
@@ -1383,22 +1405,30 @@ if PERMUTE_MODEL && USE_SPM && BUILD_MODEL &&  ESTIMATE_MODEL
     Vprob = spm_create_vol(Vprob);
     Vprob = spm_write_vol(Vprob,Yprob);
 
-    %%%% FIXME: make permutation report, including model stats and status
+    outdata.data{ppidx} = ensemble_add_data_struct_row(outdata.data{ppidx},...
+        'subject_id',subid,'session',isess,'model_id',model_id,...
+        'nperms',iter,'path',Vprob.fname);
+    
+    % % % print permutation report
     check_dir(defs.paths.figpath);
     figfname = fullfile(defs.paths.figpath,...
         sprintf('%s_sess%d_mod%d_permuted.ps',subid,isess,model_id));
     printargs = {'-dpsc','-adobecset'};
-    figure(pp.pfigh);
-    set(gcf,'PaperPositionMode','auto');
-    set(gcf,'PaperPos',[0 0 8.5 11]);
-    set(gcf,'PaperType','usletter');
-    print(figfname,printargs{:});
-    printargs = [printargs '-append'];
-    figure(fped_figh);
-    set(gcf,'PaperPositionMode','auto');
-    set(gcf,'PaperPos',[0 0 8.5 11]);
-    set(gcf,'PaperType','usletter');
-    print(figfname,printargs{:});
+    if isfield(pp,'pfigh')
+      figure(pp.pfigh);
+      set(gcf,'PaperPositionMode','auto');
+      set(gcf,'PaperPos',[0 0 8.5 11]);
+      set(gcf,'PaperType','usletter');
+      print(figfname,printargs{:});
+      printargs = [printargs '-append'];
+    end
+    if exist('fped_figh','var')
+      figure(fped_figh);
+      set(gcf,'PaperPositionMode','auto');
+      set(gcf,'PaperPos',[0 0 8.5 11]);
+      set(gcf,'PaperType','usletter');
+      print(figfname,printargs{:});
+    end
     
     % print original design matrix to file
     dfigh = figure();

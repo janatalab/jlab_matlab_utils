@@ -40,11 +40,18 @@ sinfo = ensemble_filter(pinfo,sfilt);
 onsets = sinfo.data{pc.RUN_REL_TIME}/1000;
 
 % Durations
-durs = ones(size(onsets))*minfo.music_dur;
+if isfield(minfo,'music_dur')
+  % Durations are constant
+  durs = ones(size(onsets))*minfo.music_dur;
+elseif isfield(minfo,'music_dur_db') && minfo.music_dur_db
+  sids = sinfo.data{pc.EVENT_CODE};
+  durs = fmri_stim_duration(pinfo,minfo,sids);
+end
 
 % limit by timespan?
 if ~isempty(strfind(regid,'timespan'))
-  [onsets,durs] = fmri_regress_timespan(pinfo,minfo,onsets,durs);
+  [onsets,durs,resp_params] = ...
+      fmri_regress_timespan(pinfo,minfo,onsets,durs,resp_params);
 end % if ~isempty(strfind(regid,'timespan
 
 % Now build the regressor
