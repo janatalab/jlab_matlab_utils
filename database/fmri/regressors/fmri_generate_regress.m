@@ -226,23 +226,26 @@ if USE_FSL
 elseif USE_SPM
     
   % Initiate the condition output variable
-  condstruct = struct('name','','onset',[],'duration',[],'pmod',[]);
-  for ic=1:length(cnames)
-    condstruct(ic).name = cnames{ic};
-    condstruct(ic).onset = consets{ic};
-    condstruct(ic).duration = durations{ic};
-    condstruct(ic).pmod = pmods{ic};
+  if ~isempty(consets)
+    condstruct = struct('name','','onset',[],'duration',[],'pmod',[]);
+    for ic=1:length(cnames)
+      condstruct(ic).name = cnames{ic};
+      condstruct(ic).onset = consets{ic};
+      condstruct(ic).duration = durations{ic};
+      condstruct(ic).pmod = pmods{ic};
+    end
+    [condstruct(1:end).tmod] = deal(0);
+    out.cond = condstruct;
   end
-  [condstruct(1:end).tmod] = deal(0);
-
+  
   % Initialize the regressors output variable to an empty instance of the structure
-  regressors = struct('name','','val',[]);
-  for ir=1:length(names)
-    regressors(ir).name = names{ir};
-    regressors(ir).val = vals(:,ir);
+  if ~isempty(vals)
+    regressors = struct('name','','val',[]);
+    for ir=1:length(names)
+      regressors(ir).name = names{ir};
+      regressors(ir).val = vals(:,ir);
+    end
+    out.regress = regressors;
   end
-
-  out.cond = condstruct;
-  out.regress = regressors;
   
 end % if USE_FSL/USE_SPM
