@@ -61,9 +61,12 @@ for idata = 1:length(indata)
         case 'sinfo'
           sinfo = indata{idata}.data;
           proc_subs = {sinfo(:).id};
-        case {'epi','realign_epi','resid'}
+        case {'epi','realign_epi'}
           epidata = indata{idata};
           epicol = set_var_col_const(epidata.vars);
+        case {'resid_epi'}
+          resdata = indata{idata};
+          rescol = set_var_col_const(resdata.vars);
         case 'paths'
           pathdata = indata{idata};
           pacol = set_var_col_const(pathdata.vars);
@@ -149,7 +152,11 @@ try PLOT_DESMAT_COV = defs.build_model_l1.PLOT_DESMAT_COV; catch PLOT_DESMAT_COV
 try USE_SPM = defs.build_model_l1.USE_SPM; catch USE_SPM = 0; end
 try USE_FSL = defs.build_model_l1.USE_FSL; catch USE_FSL = 0; end
 try SLICE_BASED = curr_model.slice_based; catch SLICE_BASED = 0; end
-try PERMUTE_MODEL = isfield(curr_model,'permute_params'); catch PERMUTE_MODEL = 0; end
+if isfield(curr_model,'permute_params') && ~isempty(curr_model.permute_params)
+  PERMUTE_MODEL = 1;
+else
+  PERMUTE_MODEL = 0;
+end
 
 %
 % get other vars
@@ -394,6 +401,7 @@ for isub=1:nsub_proc
       
       if exist(pres_matfname,'file')
         pres_info = load(pres_matfname);
+        picol = set_var_col_const(pres_info.vars);
         msg = sprintf('loaded presentation .mat file %s',pres_matfname);
         r = update_report(r,msg);
       else
@@ -505,10 +513,7 @@ for isub=1:nsub_proc
         % Only execute analyses if this run exists or if we are dealing with a
         % model that is using residuals from a previous model, rather than the
         % EPI data
-        try using_resid = strcmp(curr_model.srcdata,'residuals'); catch ...
-	      using_resid = 0; end
-      
-        if ~isempty(flist) || using_resid
+        if ~isempty(flist)
 
           % Check for congruency in number of pulses recorded by
           % Presentation and the number of volumes we actually have.
@@ -742,7 +747,7 @@ elseif USE_SPM
       pf.include.all.subject_id = {subid};
       pf.include.all.session = isess;
       pf.include.all.run = runnum;
-      lphys = ensembl_filter(physio_paths,pf);
+      lphys = ensemble_filter(physio_paths,pf);
       if ~isempty(lphys.data{physcol.path}) && ...
               exist(lphys.data{physcol.path}{1},'file')
         pinfo.physiofname = lphys.data{physcol.path}{1};
@@ -756,8 +761,8 @@ elseif USE_SPM
 
   % Generate arrays specifying the conditions, onsets, durations
   lsess = fmri_generate_regress(pinfo,curr_model,sess);
-  spmsess.cond = lsess.cond;
-  spmsess.regress = lsess.regress;
+  if isfield(lsess,'cond'), spmsess.cond = lsess.cond; end
+  if isfield(lsess,'regress'), spmsess.regress = lsess.regress; end
     
   spmsess.multi = {''}; % {condinfo_fname}
 
@@ -771,25 +776,27 @@ elseif USE_SPM
       % Calculate end of run time for this run
       end_of_run_time = actual_nvol*protocol.epi.tr;
 
-      % remove condition onsets that occur after end_of_run_time
-      for icond = 1:length(spmsess.cond)
-        run_mask = spmsess.cond(icond).onset < end_of_run_time;
-        if sum(run_mask) < length(spmsess.cond(icond).onset)
-          spmsess.cond(icond).onset = ...
-              spmsess.cond(icond).onset(run_mask);
-          spmsess.cond(icond).duration = ...
-              spmsess.cond(icond).duration(run_mask);
-          if isfield(spmsess.cond(icond),'pmod') && ...
-                  ~isempty(spmsess.cond(icond).pmod)
-            % remove parametric modulators for condition onsets that occur
-            % after end_of_run_time
-            for imod=1:length(spmsess.cond(icond).pmod)
-              spmsess.cond(icond).pmod(imod).param = ...
-                spmsess.cond(icond).pmod(imod).param(run_mask);
-            end
-          end % if isfield(
-        end % if sum(run_mask
-      end % for icond
+      if isfield(spmsess,'cond')
+        % remove condition onsets that occur after end_of_run_time
+        for icond = 1:length(spmsess.cond)
+          run_mask = spmsess.cond(icond).onset < end_of_run_time;
+          if sum(run_mask) < length(spmsess.cond(icond).onset)
+            spmsess.cond(icond).onset = ...
+                spmsess.cond(icond).onset(run_mask);
+            spmsess.cond(icond).duration = ...
+                spmsess.cond(icond).duration(run_mask);
+            if isfield(spmsess.cond(icond),'pmod') && ...
+                    ~isempty(spmsess.cond(icond).pmod)
+              % remove parametric modulators for condition onsets that occur
+              % after end_of_run_time
+              for imod=1:length(spmsess.cond(icond).pmod)
+                spmsess.cond(icond).pmod(imod).param = ...
+                  spmsess.cond(icond).pmod(imod).param(run_mask);
+              end
+            end % if isfield(
+          end % if sum(run_mask
+        end % for icond
+      end % if isfield(spmsess,'cond
       jobs{njob}.stats{stat_idx}.fmri_spec.sess = spmsess;
   elseif ~combine_runs
       jobs{njob}.stats{stat_idx}.fmri_spec.sess(end+1) = spmsess;
@@ -808,124 +815,128 @@ elseif USE_SPM
       % Concatenate list of scans
       cs.scans = [cs.scans; spmsess.scans];
 
-      % Create a union of the condition lists
-      allconds = union({cs.cond.name},{spmsess.cond.name});
+      if isfield(spmsess,'cond')
+        % Create a union of the condition lists
+        allconds = union({cs.cond.name},{spmsess.cond.name});
 
-      % Concatenate timing of conditions and copy condition information
-      % in the event that a new condition has to be added to the list
-      ncond = length(allconds);
-      for icond = 1:ncond
-		% Find the current condition in the original list
-		curr_cond_idx = strmatch(allconds{icond},{cs.cond.name},'exact');
-		new_cond_idx = strmatch(allconds{icond},{spmsess.cond.name},'exact');
-        if ~isempty(new_cond_idx)
-          % remove condition onsets that occur after end_of_run_time
-          run_mask = (spmsess.cond(new_cond_idx).onset+offset) < end_of_run_time;
-          if sum(run_mask) < length(spmsess.cond(new_cond_idx).onset)
-            spmsess.cond(new_cond_idx).onset = ...
-                spmsess.cond(new_cond_idx).onset(run_mask);
-            spmsess.cond(new_cond_idx).duration = ...
-                spmsess.cond(new_cond_idx).duration(run_mask);
-            if isfield(spmsess.cond(new_cond_idx),'pmod') && ...
-                    ~isempty(spmsess.cond(new_cond_idx).pmod)
-              % remove parametric modulators for condition onsets that occur
-              % after end_of_run_time
-              for imod=1:length(spmsess.cond(new_cond_idx).pmod)
-                spmsess.cond(new_cond_idx).pmod(imod).param = ...
-                  spmsess.cond(new_cond_idx).pmod(imod).param(run_mask);
+        % Concatenate timing of conditions and copy condition information
+        % in the event that a new condition has to be added to the list
+        ncond = length(allconds);
+        for icond = 1:ncond
+	      % Find the current condition in the original list
+	  	  curr_cond_idx = strmatch(allconds{icond},{cs.cond.name},'exact');
+	 	  new_cond_idx = strmatch(allconds{icond},{spmsess.cond.name},'exact');
+          if ~isempty(new_cond_idx)
+            % remove condition onsets that occur after end_of_run_time
+            run_mask = (spmsess.cond(new_cond_idx).onset+offset) < end_of_run_time;
+            if sum(run_mask) < length(spmsess.cond(new_cond_idx).onset)
+              spmsess.cond(new_cond_idx).onset = ...
+                  spmsess.cond(new_cond_idx).onset(run_mask);
+              spmsess.cond(new_cond_idx).duration = ...
+                  spmsess.cond(new_cond_idx).duration(run_mask);
+              if isfield(spmsess.cond(new_cond_idx),'pmod') && ...
+                      ~isempty(spmsess.cond(new_cond_idx).pmod)
+                % remove parametric modulators for condition onsets that occur
+                % after end_of_run_time
+                for imod=1:length(spmsess.cond(new_cond_idx).pmod)
+                  spmsess.cond(new_cond_idx).pmod(imod).param = ...
+                    spmsess.cond(new_cond_idx).pmod(imod).param(run_mask);
+                end
               end
             end
-          end
-          % concatenate conditions
-          if ~isempty(curr_cond_idx)
-            % concatenate condition onsets
-		    cs.cond(curr_cond_idx).onset = ...
-		        [cs.cond(curr_cond_idx).onset; ...
-			  spmsess.cond(new_cond_idx).onset+offset];
-            cs.cond(curr_cond_idx).duration = ...
-                [cs.cond(curr_cond_idx).duration; ...
-              spmsess.cond(new_cond_idx).duration];
-            nnewmod = length(spmsess.cond(new_cond_idx).pmod);
-            noldmod = length(cs.cond(curr_cond_idx).pmod);
-            if nnewmod && noldmod
-              % modulations previously added
-              % concatenate parametric modulations
-              for imod = 1:nnewmod
-                oldmodidx = strmatch(...
-                    spmsess.cond(new_cond_idx).pmod(imod).name,...
-                    {cs.cond(curr_cond_idx).pmod(:).name});
-                if oldmodidx
-                  % this mod existed previously
-                  % concatenate existing modulations
-                  cs.cond(curr_cond_idx).pmod(oldmodidx).param = ...
-                      [cs.cond(curr_cond_idx).pmod(oldmodidx).param; ...
-                      spmsess.cond(new_cond_idx).pmod(imod).param];
-                else
-                  % this mod didn't exist previously
-                  % add new modulation
-                  noldmod = noldmod + 1;
-                  cs.cond(curr_cond_idx).pmod(noldmod) = ...
-                      spmsess.cond(new_cond_idx).pmod(imod);
-                end % if oldmodidx
-              end % for imod =
-            elseif nnewmod
-              % no previous modulations found
-              % add new parametric modulation
-              % warning, given that there were previously NO mods, now there
-              % is at least One mod
-              msg = sprintf(['new parametric modulations for previously '...
-                  'unmodulated condition (%s), subject %s session %d '...
-                  'run %d'],allconds{icond},isess,runnum);
-              r = update_report(r,msg);
-              cs.cond(curr_cond_idx).pmod = spmsess.cond(new_cond_idx).pmod;
-            end % if nnewmod && noldmod
-          else
-            % need to add the condition
-  		    num_cond = length(cs.cond)+1;
-  		    cs.cond(num_cond).name = spmsess.cond(new_cond_idx).name;
- 		    cs.cond(num_cond).onset = ...
-		        spmsess.cond(new_cond_idx).onset+offset;
-		    cs.cond(num_cond).duration = ...
-		        spmsess.cond(new_cond_idx).duration;
-		    cs.cond(num_cond).tmod = spmsess.cond(new_cond_idx).tmod;
-		    cs.cond(num_cond).pmod = spmsess.cond(new_cond_idx).pmod;
-          end % if ~isempty(curr_cond_idx
-        end % if ~isempty(new_cond_idx
-	      end % for icond
-	    
-	      % Concatenate regressors
-	      allregs = union({cs.regress.name},{spmsess.regress.name});
-	      nreg = length(allregs);
-	      for ireg = 1:nreg
-		curr_name = allregs{ireg};
-		% We need to handle some regressors as run specific, e.g. linear
-		% trends, etc
+            % concatenate conditions
+            if ~isempty(curr_cond_idx)
+              % concatenate condition onsets
+		      cs.cond(curr_cond_idx).onset = ...
+		          [cs.cond(curr_cond_idx).onset; ...
+  		  	      spmsess.cond(new_cond_idx).onset+offset];
+              cs.cond(curr_cond_idx).duration = ...
+                  [cs.cond(curr_cond_idx).duration; ...
+                  spmsess.cond(new_cond_idx).duration];
+              nnewmod = length(spmsess.cond(new_cond_idx).pmod);
+              noldmod = length(cs.cond(curr_cond_idx).pmod);
+              if nnewmod && noldmod
+                % modulations previously added
+                % concatenate parametric modulations
+                for imod = 1:nnewmod
+                  oldmodidx = strmatch(...
+                      spmsess.cond(new_cond_idx).pmod(imod).name,...
+                      {cs.cond(curr_cond_idx).pmod(:).name});
+                  if oldmodidx
+                    % this mod existed previously
+                    % concatenate existing modulations
+                    cs.cond(curr_cond_idx).pmod(oldmodidx).param = ...
+                        [cs.cond(curr_cond_idx).pmod(oldmodidx).param; ...
+                        spmsess.cond(new_cond_idx).pmod(imod).param];
+                  else
+                    % this mod didn't exist previously
+                    % add new modulation
+                    noldmod = noldmod + 1;
+                    cs.cond(curr_cond_idx).pmod(noldmod) = ...
+                        spmsess.cond(new_cond_idx).pmod(imod);
+                  end % if oldmodidx
+                end % for imod =
+              elseif nnewmod
+                % no previous modulations found
+                % add new parametric modulation
+                % warning, given that there were previously NO mods, now there
+                % is at least One mod
+                msg = sprintf(['new parametric modulations for previously '...
+                    'unmodulated condition (%s), subject %s session %d '...
+                    'run %d'],allconds{icond},isess,runnum);
+                r = update_report(r,msg);
+                cs.cond(curr_cond_idx).pmod = spmsess.cond(new_cond_idx).pmod;
+              end % if nnewmod && noldmod
+            else
+              % need to add the condition
+  	  	      num_cond = length(cs.cond)+1;
+  	  	      cs.cond(num_cond).name = spmsess.cond(new_cond_idx).name;
+ 		      cs.cond(num_cond).onset = ...
+		          spmsess.cond(new_cond_idx).onset+offset;
+		      cs.cond(num_cond).duration = ...
+		          spmsess.cond(new_cond_idx).duration;
+		      cs.cond(num_cond).tmod = spmsess.cond(new_cond_idx).tmod;
+		      cs.cond(num_cond).pmod = spmsess.cond(new_cond_idx).pmod;
+            end % if ~isempty(curr_cond_idx
+          end % if ~isempty(new_cond_idx
+	    end % for icond
+      end % if isfield(spmsess,'cond
+      
+      if isfield(spmsess,'regress')
+  	    % Concatenate regressors
+	    allregs = union({cs.regress.name},{spmsess.regress.name});
+	    nreg = length(allregs);
+	    for ireg = 1:nreg
+		  curr_name = allregs{ireg};
+		  % We need to handle some regressors as run specific, e.g. linear
+		  % trends, etc
 		
-		curr_reg_idx = strmatch(allregs{ireg},{cs.regress.name},'exact');
-		new_reg_idx = ...
-		    strmatch(allregs{ireg},{spmsess.regress.name},'exact');
+  		  curr_reg_idx = strmatch(allregs{ireg},{cs.regress.name},'exact');
+  		  new_reg_idx = ...
+		      strmatch(allregs{ireg},{spmsess.regress.name},'exact');
 	      
-		if ~isempty(curr_reg_idx) && ~isempty(new_reg_idx)
-		    cs.regress(curr_reg_idx).val = [cs.regress(curr_reg_idx).val; ...
-			  spmsess.regress(new_reg_idx).val];
-		elseif ~isempty(new_reg_idx)
+	  	  if ~isempty(curr_reg_idx) && ~isempty(new_reg_idx)
+		      cs.regress(curr_reg_idx).val = [cs.regress(curr_reg_idx).val; ...
+			    spmsess.regress(new_reg_idx).val];
+  		  elseif ~isempty(new_reg_idx)
 		    num_regress = length(cs.regress)+1;
 		    cs.regress(num_regress).name = ...
 			spmsess.regress(new_reg_idx).name;
    		    cs.regress(num_regress).val = [zeros(init_num_scans,1); ...
 			  spmsess.regress(new_reg_idx).val];
-        end
-      end % for ireg
-
-      % fill out the end of regressors that weren't treated in this run
-      for icr = 1:length(cs.regress)
-          ncr = length(cs.regress(icr).val);
-          nsc = length(cs.scans);
-          if ncr < nsc
-              cs.regress(icr).val = [cs.regress(icr).val; ...
-                  zeros(nsc-ncr,1)];
           end
-      end
+        end % for ireg
+
+        % fill out the end of regressors that weren't treated in this run
+        for icr = 1:length(cs.regress)
+            ncr = length(cs.regress(icr).val);
+            nsc = length(cs.scans);
+            if ncr < nsc
+                cs.regress(icr).val = [cs.regress(icr).val; ...
+                    zeros(nsc-ncr,1)];
+            end
+        end
+      end % if isfield(spmsess,'regress
 
       % Assign the modified structure back into the session structure
       jobs{njob}.stats{stat_idx}.fmri_spec.sess = cs;
@@ -940,29 +951,34 @@ end % if USE_FSL / elseif USE_SPM
     % Add a constant for this run as a regressor if we are combining
     % regressors across runs
     if combine_runs
-      if USE_SPM && ((isfield(curr_model,'srcdata') && ...
-              ~strcmp(curr_model.srcdata,'residuals')) || ...
-              ~isfield(curr_model,'srcdata'))
-
+      if USE_SPM
+          
         stat_idx = build_model_idx_offset;
 
         cs = jobs{njob}.stats{stat_idx}.fmri_spec.sess;
+        
+        % Fill out any short regressors with zeros
+        if isfield(cs,'regress')
+          for ireg = 1:length(cs.regress)
+            if length(cs.regress(ireg).val) < sum(nvols)
+              cs.regress(ireg).val(sum(nvols)) = 0;
+            end
+          end
+        end
+        
         cwrun = 0;
         for irun = 2:length(nvols)
           constant_reg = zeros(length(cs.scans),1);
           constant_reg(sum(nvols(1:irun))-nvols(irun)+1:sum(nvols(1:irun))) = 1;
-          const_reg_idx = length(cs.regress)+1;
+          if isfield(cs,'regress')
+            const_reg_idx = length(cs.regress)+1;
+          else
+            const_reg_idx = 1;
+          end
           cs.regress(const_reg_idx).name = sprintf('run%d_constant',urun(irun));
           cs.regress(const_reg_idx).val = constant_reg;
         end
 
-        % Fill out any short regressors with zeros
-        for ireg = 1:length(cs.regress)
-          if length(cs.regress(ireg).val) < sum(nvols)
-            cs.regress(ireg).val(sum(nvols)) = 0;
-          end
-        end
-      
         jobs{njob}.stats{stat_idx}.fmri_spec.sess = cs;
 
         % save residual file name
@@ -1142,24 +1158,24 @@ end % if USE_FSL / elseif USE_SPM
               'path',resid_fname);
         end
 
-	if PLOT_DESMAT_COV
-	  msg = sprintf('Loading model info in: %s\n', fsf.fsldir);
-      	  r = update_report(r,msg);
+  	    if PLOT_DESMAT_COV
+  	      msg = sprintf('Loading model info in: %s\n', fsf.fsldir);
+          r = update_report(r,msg);
       
-	  opts.printfig = 1;
-      	  opts.title = sprintf('%s, session %d, model %02d', subid, isess, model_id);
-      	  opts.figstub = fullfile(defs.paths.figpath, sprintf('descorr_model_%02d', model_id));
-      	  if ~started_desmat_cov_file
+   	      opts.printfig = 1;
+       	  opts.title = sprintf('%s, session %d, model %02d', subid, isess, model_id);
+          opts.figstub = fullfile(defs.paths.figpath, sprintf('descorr_model_%02d', model_id));
+          if ~started_desmat_cov_file
             opts.append_str = '';
             started_desmat_cov_file = 1;
-	  else
+          else
             opts.append_str = '-append';
           end
       	  figure(1), clf
-      	  opts.figh = gcf;
+          opts.figh = gcf;
 
       	  post_process_corrmat_fsl(fsf.fsldir,opts);
-	end
+	    end
 
       end % if USE_SPM && ((isfield(curr_model,'srcdata
     end % if combine_runs
@@ -1169,13 +1185,11 @@ end % if USE_FSL / elseif USE_SPM
 	  strcmp(curr_model.srcdata,'residuals')
 
       resid_flist = '';
-      if isfield(curr_model,'srcdata') && ...
-            strcmp(curr_model.srcdata,'residuals')
-        srcdir = fullfile(lanal_outdir, sprintf('model_%02d', ...
+      
+      srcdir = fullfile(lanal_outdir, sprintf('model_%02d', ...
 	      curr_model.srcmodel),'resid');
-        srcstub = sprintf('ResI*.img');
-        resid_flist = get_spm_flist(srcdir,srcstub);
-      end
+      srcstub = sprintf('ResI*.img');
+      resid_flist = get_spm_flist(srcdir,srcstub);
 
       stat_idx = build_model_idx_offset;
       jobs{njob}.stats{stat_idx}.fmri_spec.sess.scans = cellstr(resid_flist);
