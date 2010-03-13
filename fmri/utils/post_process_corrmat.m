@@ -1,8 +1,22 @@
 function [cmat, X] = post_process_corrmat(spm_fname,opt)
-% [cmat X] = post_process_corrmat(spm_fname)
-
+% plots & returns the design matrix intercorrelation for an SPM analysis
+% 
+%   [cmat X] = post_process_corrmat(spm_fname)
+% 
+% REQUIRES
+%   opt.figh - handle of figure to print the correlation matrix to
+%   opt.names - regressor names (from SPM.xX.name) that you want to
+%       correlate. If not provided, all regressors in the design matrix
+%       will be correlated
+%   opt.plot_corr_txt - text to be printed on figure
+%   opt.printfig - (1) print the figure, return values, (0) return values
+%   opt.title
+%   opt.figstub
+%   opt.append_str
+% 
 % 05/19/06 Petr Janata - modified from a 2004 version of the script.  Added
 % support for SPM5 structure of the SPM.mat file.
+% 2010.02.16 FB - added opt.names, header documentation
 
 if nargin < 2
   opt = struct([]);
@@ -34,7 +48,12 @@ for irun = 1:nruns
   % Get the columns corresponding to this run
   cc = Sess(irun).col;
   cr = Sess(irun).row;
-  
+
+  % only plot a subset of correlations?
+  if isfield(opt,'names')
+    cc = find(ismember(Xnames,opt.names));
+  end
+
   % Get the data corresponding to this run
   X = xX.X(cr,cc);
 
