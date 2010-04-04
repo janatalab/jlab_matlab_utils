@@ -106,7 +106,7 @@ if isfield(params,'display')
   if isfield(params.display, 'tables')
     if isfield(params.display.tables,'group_stats') && ...
 	  params.display.tables.group_stats
-      fprintf('Completion time statistics\n');
+      fprintf('\nCompletion time statistics\n');
       fprintf('Minimum elapsed time (min): %1.2f\n', report.min_time/60);
       fprintf('Maximum elapsed time (min): %1.2f\n', report.max_time/60);
       fprintf('Mean elapsed time(min): %1.2f\n', report.mean_time/60);

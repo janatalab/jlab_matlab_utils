@@ -48,7 +48,11 @@ for isub = 1:nsubs
   
   thisSubID  = subids{isub};
   subDOB = subInfo.data{subInfoCols.dob}{isub};
-  dobDatenum = datenum(subDOB,'yyyy-mm-dd');
+  try 
+    dobDatenum = datenum(subDOB,'yyyy-mm-dd');
+  catch
+    dobDatenum = NaN;  % PJ - to allow for analysis of deidentified data
+  end
   
   subGender = subInfo.data{subInfoCols.gender};
   
@@ -74,8 +78,9 @@ for isub = 1:nsubs
     
   end
   
-  serialAge = useSessDatenum - dobDatenum;
-  subAges(isub) = floor(serialAge/365);
+
+    serialAge = useSessDatenum - dobDatenum;
+    subAges(isub) = floor(serialAge/365);
   
 end
 

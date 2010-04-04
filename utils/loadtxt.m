@@ -84,7 +84,7 @@
 % Initial revision
 %
 
-function array = loadtxt( filename, varargin );
+function array = loadtxt( filename, varargin )
 
 if nargin < 1
 	help loadtxt;
