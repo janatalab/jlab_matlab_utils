@@ -138,8 +138,8 @@ end
 % signal bounds?
 if isfield(params,'signal_bounds') && length(params.signal_bounds) == 2
   % convert from params.signal_bounds in secs to sig_start/end in samples
-  sig_start = params.signal_bounds(1)*60*srate;
-  sig_end = params.signal_bounds(2)*60*srate;
+  sig_start = params.signal_bounds(1)*srate;
+  sig_end = params.signal_bounds(2)*srate;
   if ~isnumeric(sig_start) || sig_start < 1
     sig_start = 1;
   end
