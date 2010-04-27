@@ -10,7 +10,7 @@ global defaults r
 VERBOSE = 1;
 
 outdata = ensemble_init_data_struct();
-outdata.type = 'evaluate contrasts';
+outdata.type = 'generate_residuals';
 
 r = init_results_struct;
 

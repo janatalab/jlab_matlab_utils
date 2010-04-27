@@ -303,10 +303,13 @@ for iplot = 1:nplots
         session_stub = sess.id;
         sessdir = fullfile(sub_outdir,session_stub);
 
-        anatdir = fullfile(sessdir, 'anatomy');
-        analdir = fullfile(sessdir, 'analyses');
-        spmdir = fullfile(analdir, 'spm');
-        stats_dir = fullfile(spmdir, sprintf('model_%02d', model_id));
+        anatdir = fullfile(sessdir,'anatomy');
+        analdir = fullfile(sessdir,'analyses');
+        spmdir = fullfile(analdir,'spm');
+        
+        if isempty(strmatch(plot,'Hires4Subject','exact'))
+          stats_dir = fullfile(spmdir,sprintf('model_%02d',model_id));
+        end
 
         % Clear the img stack
         SO.img = [];
@@ -320,7 +323,7 @@ for iplot = 1:nplots
         SO.img(nimg).prop = .6;
         SO.img(nimg).cmap = gray;
 
-        if USE_INDIVIDUAL_HIRES
+        if USE_INDIVIDUAL_HIRES && exist('hires','var')
           % get individual hires
           hfilt.include.all.subject_id = {subid};
           hdata = ensemble_filter(hires,hfilt);
@@ -585,7 +588,7 @@ for iplot = 1:nplots
   		  	  subid, model_proto_name, threshold_p_indiv);
 	      case 'Hires4Subject'
 	        title_str = sprintf('%s, %s sections, %s', subid,...
-              xfm_type, sinfo(sub_idx).sessinfo(1).date);
+              xfm_type, sinfo(isub).sessinfo(1).date);
           otherwise
 	        title_str = sprintf(['Subject: %s, Session %d\nModel: %s,\t%s,'...
               '\tp-crit: %1.4f'], subid, isess, model_proto_name, ...
@@ -609,6 +612,7 @@ for iplot = 1:nplots
 	        switch plot
 	          case 'Hires4Subject'
                 outstr = sprintf('%s_%s_%s',subid,plot,xfm_type);
+                model_proto_name = 'hires';
               case 'conjunctions'
                 outstr = sprintf('%s_conj_%d_%s_%s',model_proto_name,...
                     conj_idx,xfm_type,subid);
@@ -643,7 +647,7 @@ for iplot = 1:nplots
     
     % Get the anatomical for the group
     spm_root = defs.fmri.spm.paths.spm_root;
-    if exist('meanhires','var')
+    if USE_GROUP_HIRES && exist('meanhires','var')
       hires_fname = meanhires.data{mhicol.path}{1};
     else
       hires_fname = fullfile(spm_root,'canonical/avg152T1.nii');
@@ -654,7 +658,10 @@ for iplot = 1:nplots
     SO.img(nimg).prop = 1;
     SO.img(nimg).cmap = gray;
     
-    model_dir = fullfile(rootpath, 'analyses/spm/group', sprintf('model_%02d',model_id));
+    if isempty(strmatch(plot,'meanhires','exact'))
+      model_dir = fullfile(rootpath,'analyses/spm/group',...
+          sprintf('model_%02d',model_id));
+    end
 
     if CONJUNCTIONS
 
@@ -750,7 +757,7 @@ for iplot = 1:nplots
         end % for im = 1:nitems
         
         
-    else
+    elseif isempty(strmatch(plot,'meanhires','exact'))
     
         stats_dir = fullfile(model_dir, plotdirstubs{iplot});
         model_fname = fullfile(stats_dir,'SPM.mat');
@@ -818,6 +825,10 @@ for iplot = 1:nplots
         group_model_str = sprintf('Sum tonreg perm, model: %s',...
             model_proto_name);
         pstr = 'Likelihood orig data by chance: 0.05';
+      case {'meanhires'}
+        group_model_str = sprintf('Mean Hires Image: %d subjects',...
+            meanhires.data{mhicol.nsub}(1));
+        pstr = '';
       otherwise
         group_model_str = sprintf('Group: %d subjects, Model: %s',...
             fix(xSPM.df(2))+1, model_proto_name);
@@ -834,6 +845,9 @@ for iplot = 1:nplots
             tp.transform_types{tp.transform_idx});
         figdir = fullfile(conj_dir,fstub);
         check_dir(fileparts(figdir));
+      elseif ~isempty(strmatch(plot,'meanhires','exact'))
+        fstub = sprintf('mean_hires_%s',tp.transform_types{tp.transform_idx});
+        figdir = fullfile(rootpath,'figures',fstub);
       else
         fstub = sprintf('group_%s_%s',model_proto_name,...
             tp.transform_types{tp.transform_idx});
