@@ -68,11 +68,13 @@ switch host
   case 	{'127.0.0.1','localhost','atonal','atonal.ucdavis.edu','atonal.cmb.ucdavis.edu'}
 
    switch db
-    case {'ensemble_main','ensemble_tarp'}
-     mysql_researcher_login; %populates user and passwd variables. This script
-			     %should sit in a location that is not publically visible.
-    case {'ensemble_dev','ensemble_test','ensemble_dhmc'}
-     mysql_researcher_dev_login;
+     case {'ensemble_main','ensemble_tarp'}
+       mysql_researcher_login; %populates user and passwd variables. This script
+       %should sit in a location that is not publically visible.
+     case {'ensemble_dev','ensemble_test','ensemble_dhmc'}
+       mysql_researcher_dev_login;
+     case {'ensemble_class'}
+       mysql_class_login;
    end
 
 end

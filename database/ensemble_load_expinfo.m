@@ -34,6 +34,7 @@ function result = ensemble_load_expinfo(indata,params)
 % 2009.05.18 FB - added some additional header documentation
 % 2009.10.18 PJ - added check to make sure response table was found
 % 2010.01.20 FB - now also returns 'misc_info' in the 'response_data' struct
+% 2010.05.08 PJ - isolated subject_summary_stats in try/catch
 
 if( isstr( indata ) && strcmp( indata, 'getDefaultParams' ) )
 	result.ensemble.experiment_title = 'use local settings';
@@ -188,9 +189,13 @@ if ~all(isnan(respinfo.data{respcols.stimulus_id}))
 end 
 
 %get subject summary stats
-subSummaryStats = ensemble_summary_subject_stats({subInfo sessInfo});
-result.vars{end+1} = 'subject_summary_stats';
-result.data{end+1} = subSummaryStats;
+try
+  subSummaryStats = ensemble_summary_subject_stats({subInfo sessInfo});
+  result.vars{end+1} = 'subject_summary_stats';
+  result.data{end+1} = subSummaryStats;
+catch
+  warning('Unable to run ensemble_summary_subject_stats');
+end
 
 if(exist('tmp_conn_id','var'))
   mysql(conn_id,'close');

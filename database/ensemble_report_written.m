@@ -43,14 +43,17 @@ end
 %
 
 % Get a list of unique composite question IDs
+fprintf('Getting list of unique composite question IDs\n')
 qids = fix(unique(data_st.data{incol.compqid}));
 
+fprintf('Extracting question metadata\n');
 qinfo = mysql_extract_metadata('table','question', ...
     'question_id',qids, ...
     'conn_id', conn_id);
 
 % Figure out which of the questions in the qinfo structure are varchar or text and remove
 % those that are not
+fprintf('Removing non-text questions\n');
 qinfo_char_mask = ismember({qinfo.type},{'varchar','text'});
 if sum(~qinfo_char_mask)
   qinfo(~qinfo_char_mask) = [];
@@ -71,6 +74,9 @@ data_st = ensemble_filter(data_st,filt);
 % Check to see if we are writing all responses to a single file and open a file
 % if necessary
 %
+if ~isfield(params,'report')
+  params.report = struct();
+end
 composite_fid = ensemble_init_fid(params.report);
 
 % See if we are only writing responses to the file and not question or subject
