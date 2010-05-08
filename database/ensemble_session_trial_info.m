@@ -4,9 +4,17 @@ function sessData = ensemble_session_trial_info(indata,params)
 % indata is a cell array of two data structures (response_data and
 % session_info), as returned from ensemble_load_expinfo
 %
-% This function extracts the trial IDs and session IDs in the order
-% they were presented for each session, and assigns these as
-% variables to the session data struct.
+% This function looks at the response table (from ensemble_load_expinfo)
+% of an experiment to extract the trial IDs and stimulus IDs for each 
+% session, in the order which they were presented. This info is stored 
+% in a 'trial info' structure that is tagged to the end of each session 
+% in the session structure (also retrieved from ensemble_load_expinfo). Optionally,
+% the audio corresponding to each trial can be parsed from a session recording
+% (e.g. from digital performer). The time offsets of each trial relative to
+% the beginning of the recording are then recorded. This information is then
+% used to parse MIDI responses corresponding to each trial (if MIDI data was
+% recorded along-side the audio recording.
+% 
 %
 % handles only single stimulus trials for now
 %
