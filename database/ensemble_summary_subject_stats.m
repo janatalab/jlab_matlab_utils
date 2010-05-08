@@ -30,6 +30,9 @@ function outData = ensemble_summary_subject_stats(inData)
 %                                 then 4 values are reported).
 %
 % Nov 3, 2009 - Stefan Tomic, First Version
+% May 8, 2010 - S.T. fixed handling of anon_<hash> subIDs, which don't exist in
+%               subject table. Loops by subject ID retrieved in sessInfo
+  
 
 fParams.name = 'session_info';
 an_idx = ensemble_find_analysis_struct(inData,fParams);
@@ -41,21 +44,44 @@ an_idx = ensemble_find_analysis_struct(inData,fParams);
 subInfo = inData{an_idx};
 subInfoCols = set_var_col_const(subInfo.vars);
 
-nsubs = length(subInfo.data{subInfoCols.subject_id});
-subids = subInfo.data{subInfoCols.subject_id};
+subids = unique(sessInfo.data{sessInfoCols.subject_id});
+nsubs = length(subids);
+nFemales = 0;
+nMales = 0;
+nGenderNoReport = 0;
 
 for isub = 1:nsubs
   
   thisSubID  = subids{isub};
-  subDOB = subInfo.data{subInfoCols.dob}{isub};
-  try 
-    dobDatenum = datenum(subDOB,'yyyy-mm-dd');
-  catch
-    dobDatenum = NaN;  % PJ - to allow for analysis of deidentified data
+  
+  [subInSubTable,subInfoIdx] = ismember(thisSubID,subInfo.data{subInfoCols.subject_id});
+  
+  if(subInSubTable)
+    subDOB = subInfo.data{subInfoCols.dob}{subInfoIdx};
+  
+    if(~isnan(subDOB))
+      dobDatenum = datenum(subDOB,'yyyy-mm-dd');
+    else
+      dobDatenum = NaN;
+    end
+      
+    subGender = subInfo.data{subInfoCols.gender}{subInfoIdx};
+    
+    switch(subGender)
+     case 'F'
+      nFemales = nFemales +1;
+     case 'M'
+      nMales = nMales+1;
+     otherwise
+      nGenderNoReport = nGenderNoReport + 1;
+    end
+    
+  else
+    subDOB = NaN;
+    dobDatenum = NaN;
+    nGenderNoReport = nGenderNoReport + 1;
   end
-  
-  subGender = subInfo.data{subInfoCols.gender};
-  
+    
   sessionIdxs = strmatch(thisSubID,sessInfo.data{sessInfoCols.subject_id},'exact');
   nSess(isub) = length(sessionIdxs);
   
@@ -78,9 +104,8 @@ for isub = 1:nsubs
     
   end
   
-
-    serialAge = useSessDatenum - dobDatenum;
-    subAges(isub) = floor(serialAge/365);
+  serialAge = useSessDatenum - dobDatenum;
+  subAges(isub) = floor(serialAge/365);
   
 end
 
@@ -105,9 +130,6 @@ else
   nSessPerSub = [min(nSess) max(nSess)];
 end
 
-nFemales = length(strmatch('F',subInfo.data{subInfoCols.gender},'exact'));
-nMales =  length(strmatch('M',subInfo.data{subInfoCols.gender},'exact'));
-nGenderNotReported = length(strmatch('',subInfo.data{subInfoCols.gender},'exact'));
 
 outData = ensemble_init_data_struct;
 outData.vars = {'nsubs','mean_age','std_age','age_range','num_female','num_male','num_gender_no_report' ...
@@ -119,6 +141,6 @@ outData.data{outDataCols.std_age} = stdAge;
 outData.data{outDataCols.age_range} = ageRange;
 outData.data{outDataCols.num_female} = nFemales;
 outData.data{outDataCols.num_male} = nMales;
-outData.data{outDataCols.num_gender_no_report} = nGenderNotReported;
+outData.data{outDataCols.num_gender_no_report} = nGenderNoReport;
 outData.data{outDataCols.sessions_per_sub} = nSessPerSub;
 outData.data{outDataCols.mean_session_dur_minutes} = sessMeanDur;
