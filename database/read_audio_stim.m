@@ -21,7 +21,10 @@ function [sig,fs,nbits,opts] = read_audio_stim(stimulus_id,varargin)
 % July 8, 2005 Original Version S.T.
 % Sept. 15, 2005 Modified by S.T. use mp3read matlab function instead of sox 
 % Dec. 7, 2005 Mod. by S.T. read stims from nfs space rather than copy to localhost using scp
-
+% May 6, 2010 S.T. - added support for wav files. Since wavread doesn't support
+%                    downsampling, this function simply reports an error if downsampling was set
+%                    to a value other than one and a wav file was specified
+  
 ensemble_globals;
 
 if(nargin < 5)
@@ -48,26 +51,64 @@ stim_location = mysql(mysql_conn_id,sql_choose_stim);
 
 stim_location = char(stim_location);
 
+%determine the file extension and use the appropriate sound file reader for
+%that extension
+[p,fstub,ext] = fileparts(stim_location);
+
+switch(ext) 
+ case '.mp3'
+  sfreader = @mp3read;
+ case '.wav'
+  sfreader = @wavread;
+ otherwise
+  error('Did not recognize sound file name extension');
+end
+
+
+
 %read the mp3 file
 switch(nargin)
  case 1
-  [sig,fs,nbits,opts] = mp3read(fullfile(stimulus_root,stim_location));
+  N = [];
+  mono = 0;
+  downsamp = 1;
  case 2
-    N = varargin{1};
-    [sig,fs,nbits,opts] = mp3read(fullfile(stimulus_root,stim_location),N);
+  N = varargin{1};
+  mono = 0;
+  downsamp = 1;
  case 3
-    N = varargin{1};
-    mono = varargin{2};
-    [sig,fs,nbits,opts] = mp3read(fullfile(stimulus_root,stim_location),N,mono);
+  N = varargin{1};
+  mono = varargin{2};
+  downsamp = 1;
  case {4,5}
-    N = varargin{1};
-    mono = varargin{2};
-    if(isempty(varargin{3}))
-      downsamp = 1;
-    else
-      downsamp = varargin{3};
-    end
-    [sig,fs,nbits,opts] = mp3read(fullfile(stimulus_root,stim_location),N,mono,downsamp);
+  N = varargin{1};
+  mono = varargin{2};
+  if(isempty(varargin{3}))
+    downsamp = 1;
+  else
+    downsamp = varargin{3};
+  end
+  
 end
 
+
+if((downsamp ~= 1) && (strcmp(ext,'.wav')))
+  error('This function doesn''t support downsampling of wav files. Wav files must be downsampled in the calling function.');
+end
+
+if(isempty(N) && (downsamp == 1))
+  [sig,fs,nbits,opts] = sfreader(fullfile(stimulus_root,stim_location));
+elseif(~isempty(N) && (downsamp == 1))
+  [sig,fs,nbits,opts] = sfreader(fullfile(stimulus_root,stim_location),N);
+elseif(isempty(N) && (downsamp ~= 1))
+  %only mp3read supports this call (downsamp ~=1)
+  [sig,fs,nbits,opts] = sfreader(fullfile(stimulus_root,stim_location),N,0,downsamp);
+elseif(~isempty(N) && (downsamp ~= 1))
+  %only mp3read supports this call (downsamp ~=1)
+  [sig,fs,nbits,opts] = sfreader(fullfile(stimulus_root,stim_location),N,0,downsamp);
+end
+
+if(mono)
+  sig = mean(sig,2);
+end
 

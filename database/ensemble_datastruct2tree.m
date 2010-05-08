@@ -11,7 +11,8 @@ function outtree = ensemble_datastruct2tree(dataStruct,params)
 %                               differing data lengths. No longer
 %                               performing conversion to array of structs
 % 10/19/07  PJ Fixed trapping of empty values
-
+% 2/22/10   ST Fixed conversion of regular (non-cell) struct arrays
+  
 outtree = [];
 
 fnames = dataStruct.vars;
@@ -46,9 +47,10 @@ for ifld = 1:length(fnames)
       else
 	convertedData(idx) = dataVals(idx);
       end
-      clear dataVals
-      dataVals = convertedData;
+     
     end
+    clear dataVals
+    dataVals = convertedData;
   end
    
   outtree.(fnames{ifld}) = dataVals;
