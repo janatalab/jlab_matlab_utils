@@ -361,12 +361,6 @@ if(strcmp(table,'question'))
       sqid = tableStruct(tsIdx).subquestion;
       compqid = qid +  sqid ./100;
       tableStruct(tsIdx).compqid = compqid;
-      %copy the heading to question_text if the text for the
-      %subquestion is located in heading field 
-      %(true for subquestion # >=2)
-      if(~isempty(tableStruct(tsIdx).heading))
-	tableStruct(tsIdx).question_text = tableStruct(tsIdx).heading;
-      end
     end
     
   end
