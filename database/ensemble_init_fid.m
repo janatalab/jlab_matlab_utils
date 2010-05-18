@@ -15,6 +15,12 @@ function fid = ensemble_init_fid(params)
 
 % 02/03/07 Petr Janata
 
+% Check to see if we already have a registered output file id
+if isfield(params, 'fid') && ~isempty(params.fid) && params.fid>0
+  return
+end
+  
+
 fid = 1;  % default to standard out
 
 try print_tables = params.print; catch print_tables=1; end

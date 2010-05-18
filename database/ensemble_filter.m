@@ -138,7 +138,7 @@ for itype = 1:ntypes
 	
 	%if the crit_val is NaN, need to use isnan function,
         %otherwise we can use ismember
-	if(~iscell(crit_vals) & isnan(crit_vals))
+	if(~iscell(crit_vals) && any(isnan(crit_vals)))
 	  tmp = isnan(data_st.data{data_col});
     else
 	  tmp = ismember(data_st.data{data_col}, crit_vals);
@@ -146,7 +146,7 @@ for itype = 1:ntypes
 	
 	% Check to see if any of the criterion values have wildcards, in which case
 	% we need to switch to regexp
-	if iscellstr(crit_vals) | isstr(crit_vals)
+	if iscellstr(crit_vals) || ischar(crit_vals)
 	  is_wild = ~cellfun('isempty',regexp(crit_vals,'[*]'));
 	  wild_idxs = find(is_wild);
 	  for iwild = 1:length(wild_idxs)

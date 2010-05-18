@@ -14,6 +14,16 @@ function an_st = ensemble_report_written(data_st,params)
 % answers to the same question on different forms combined, you must filter the
 % data to only process forms with unique question IDs.  This behavior may
 % change in future versions.
+%
+% params.ensemble.conn_id - mysql connection to use
+% params.filt - any filtering criteria that are to be applied
+% params.report - structure containing directives regarding the output.
+%                 See ensemble_init_fid()
+% params.report.print - generate output
+% params.report.write2file - write output to a file (otherwise stdout)
+% params.report.fname - name of file to write responses to
+% params.report.filemode - defaults to 'wt'
+% params.report.verbose - devaults to 1
 
 % 04/29/07 Petr Janata - adapted from ensemble_enum_stats
 % 07/17/08 PJ - fixed call to ensemble_init_fid to conform to new param handling
@@ -44,7 +54,8 @@ end
 
 % Get a list of unique composite question IDs
 fprintf('Getting list of unique composite question IDs\n')
-qids = fix(unique(data_st.data{incol.compqid}));
+%qids = fix(unique(data_st.data{incol.compqid}));
+qids = unique(fix(data_st.data{incol.compqid}));
 
 fprintf('Extracting question metadata\n');
 qinfo = mysql_extract_metadata('table','question', ...
@@ -102,7 +113,8 @@ for iqid = 1:nqid
   col = set_var_col_const(curr_st.vars);
 
   if ~response_only
-    fprintf(composite_fid,'\n\nQUESTION: %s\n', qinfo(iqid).question_text);
+    fprintf(composite_fid,'\n\nCompqid: %.2f\nQUESTION: %s\nSUBQUESTION: %s\n', ...
+      curr_id, qinfo(iqid).question_text, qinfo(iqid).heading);
   end
   
   % Loop over the rows in the data and write out each response to the file
@@ -115,7 +127,7 @@ for iqid = 1:nqid
     else
       subject_str = '';
     end
-    fprintf(composite_fid,'%s%s\n', subject_str, curr_st.data{col.response_text}{irow});
+    fprintf(composite_fid,'\n%s%s\n', subject_str, curr_st.data{col.response_text}{irow});
   end
 end % for iqid
 

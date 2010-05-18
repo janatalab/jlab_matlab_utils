@@ -1,16 +1,19 @@
-function outData = check_completion_v2(params)
+function outData = check_completion_v2(varargin)
 % provides details on subjects who have started and who have completed a given experiment
 %
 % adapted from anps_collect_check_completion.m written by Fred Barrett
 %
 % REQUIRED PARAMS
-% params.resptbl_name              - The name of the response table for the experiment
+% Either 
+%    params.resptbl_name              - The name of the response table for the experiment
+% or 
+%    params.ensemble.experiment_title - The title of the experiment
+%
+% OPTIONAL PARAMS
 % params.terminal_form             - The form ID to check against for
 %                                    completion of experiment
-% params.terminal_question         - The question ID to check against for completion
-% params.ensemble.experiment_title - The title of the experiment
-
-% OPTIONAL PARAMS
+% params.terminal_question         - The question ID to check against for
+%                                    completion
 % params.filt                      - Filter params to filter out unwanted subjects
 % params.ensemble.conn_id          - Connection ID to use for database 
 %                                    if no live connection, a new connection is established
@@ -27,6 +30,16 @@ function outData = check_completion_v2(params)
 % Author(s)
 % 2/21/2009 Fred Barrett - Original Author
 % 4/7/2009 Stefan Tomic - adapted script into a more general purpose function for all experiments
+
+outData = [];
+
+if nargin == 1
+  params = varargin{1};
+elseif nargin == 2
+  params = varargin{2};
+else
+  fprintf('%s: Wrong number of arguments: %d\n', mfilename, nargin);
+end
 
 ensemble_globals;
 enc_key = ensemble_get_encryption_key;
@@ -60,12 +73,33 @@ if(mysql(conn_id,'status') ~= 0)
   mysql_make_conn(host,database,conn_id);
 end
 
-tbl_name = params.resptbl_name;
+try tbl_name = params.resptbl_name; catch tbl_name = ''; end
 
-form_id = params.terminal_form;
-question_id = params.terminal_question;
+if isempty(tbl_name) && isfield(params.ensemble, 'experiment_title')
+  mysql_str = sprintf('SELECT response_table, experiment_id FROM experiment WHERE experiment_title="%s"', params.ensemble.experiment_title);
+  [tbl_name, exp_id] = mysql(conn_id, mysql_str);
+  tbl_name = tbl_name{1};
+end
 
-PRINT_TO_FILE=0;
+try form_id = params.terminal_form; catch form_id = []; end;
+
+% If form_id is unspecified, get it from the experiment_x_form table
+if isempty(form_id)
+  mysql_str = sprintf('SELECT form_id, form_order FROM experiment_x_form WHERE experiment_id=%d;', exp_id);
+  [ids,order] = mysql(conn_id, mysql_str);
+  % Get next to last form, as last form is an end_session form that doesn't
+  % leave its mark on the response table
+  form_id = ids(order==(max(order)-1));
+end
+
+try question_id = params.terminal_question; catch question_id = []; end
+if isempty(question_id)
+  mysql_str = sprintf('SELECT question_id, form_question_num FROM form_x_question WHERE form_id=%d;', form_id);
+  [qids, order] = mysql(conn_id,mysql_str);
+  question_id = qids(order==max(order));
+end
+
+try PRINT_TO_FILE = params.report.write2file; catch PRINT_TO_FILE=0; end
 
 % % % REPORT AFTER THIS DATE
 try
@@ -75,14 +109,119 @@ catch
   report_after = 0;
 end
 
+%% Consult the session table to get list of completed subs, sessions, and time stamps
+vars = {'session_id','date_time','end_datetime','subject_id','ticket_id'};
+mysql_str = sprintf('SELECT %s FROM session WHERE experiment_id =%d;', cell2str(vars,','), exp_id);
+data = cell(1,length(vars));
+[data{:}] = mysql(conn_id,mysql_str);
+completedData = ensemble_init_data_struct;
+completedData.vars = vars;
+completedData.data = data;
+cdCols = set_var_col_const(vars);
+
+% Get the ticket codes
+
+%% Filter completion data if desired
+completedData = ensemble_filter(completedData,params.filt);
+
 % open logfile
 if exist('PRINT_TO_FILE','var') && PRINT_TO_FILE
-  logfname = fullfile(params.paths.logpath,...
-      sprintf('anps_cc_%s.txt',datestr(now,30)));
+  logfname = fullfile(params.paths.logpath,'completion_info.txt');
   fid = fopen(logfname,'wt');
+  fprintf(fid,'Completion information for experiment: %s\n\n\n', params.ensemble.experiment_title);
 else
   fid = 1; % stdout
 end
+params.report.fid = fid;
+
+nsess = length(completedData.data{cdCols.session_id});
+fprintf(fid,'%d initiated sessions\n', nsess);
+
+completed_mask = ~isnan(completedData.data{cdCols.end_datetime});
+completed_idxs = find(completed_mask);
+fprintf(fid,'%d completed sessions\n', sum(completed_mask));
+
+for itype = 1:2
+  if itype == 1
+    idx_list = completed_idxs;
+    type_str = 'COMPLETED';
+  else
+    idx_list = find(~completed_mask);
+    type_str = 'INCOMPLETE';
+  end
+  
+  fprintf(fid,'\n%s\n', type_str);
+  fprintf(fid,'Session\tSubject\tTicketID\tTicketCode\n');
+  for isess = 1:length(idx_list)
+    curr_idx = idx_list(isess);
+    
+    curr_tick_id = completedData.data{cdCols.ticket_id}(curr_idx);
+    mysql_str = sprintf('SELECT ticket_code FROM ticket WHERE ticket_id = %d;', curr_tick_id);
+    ticket_code = mysql(conn_id, mysql_str);
+    
+    fprintf(fid, '%d\t%s\t%d\t%s\n', ...
+      completedData.data{cdCols.session_id}(curr_idx), ...
+      completedData.data{cdCols.subject_id}{curr_idx}, ...
+      curr_tick_id, ticket_code{1});
+  end
+end
+
+
+return
+%% EVERYTHING BELOW HERE NEED TO BE FIXED
+
+
+%% Print out list of those session and subject IDs that completed
+curr_filt.exclude.any.end_datetime = NaN;
+ensemble_display_table(ensemble_filter(completedData,curr_filt),params.report);
+
+[completedSubs,completedSess,completedDateTimes] = ...
+    mysql(conn_id,sprintf(['select subject_id,session_id,date_time from' ...
+		    ' %s where form_id = %d and question_id = %d group by session_id'],tbl_name,form_id,question_id));
+
+%place in ensemble data struct so that we can filter out the subs
+%that we aren't interested in.
+completedData = ensemble_init_data_struct;
+completedData.vars = {'subject_id','session_id','date_time'};
+completedDataCols = set_var_col_const(completedData.vars);
+completedData.data{completedDataCols.subject_id} = completedSubs;
+completedData.data{completedDataCols.session_id} = completedSess;
+completedData.data{completedDataCols.date_time} = completedDateTimes;
+completedData = ensemble_filter(completedData,params.filt);
+
+subids = completedData.data{completedDataCols.subject_id};
+sessids = completedData.data{completedDataCols.session_id};
+timestamps = completedData.data{completedDataCols.date_time};
+nsess = length(subids);
+
+
+fprintf(fid,'participants who have completed\n');
+fprintf(fid,'-------------------------------\n');
+fprintf(fid,'Name\t\t\tSubID\t\tSession\tTimestamp\t\tNumStims\tDuration\n');
+for isess = 1:nsess
+    if strmatch('tmp_',subids{isess}), continue, end
+    idx = strmatch(subids{isess},subs.data{sCol.subject_id},'exact');
+    if timestamps(isess) > report_after
+        if isempty(subs.data{sCol.name_last}(idx)) || ...
+                isempty(subs.data{sCol.name_last}(idx)) || ...
+                isempty(subs.data{sCol.name_first}(idx))
+          fprintf(fid,'Cannot find any subjects\n');
+        end
+        subid = subids{isess};
+        first = cell2str(subs.data{sCol.name_first}(idx));
+        last  = cell2str(subs.data{sCol.name_last}(idx));
+        nstim = subs.data{sCol.nstim}(idx);
+        dur   = subs.data{sCol.dur}(idx)*24;
+        fprintf(fid,'%s %s\t\t%s\t%d\t%s\t%d\t\t%.2f\n',...
+		first, last,subids{isess},sessids(isess),...
+		datestr(timestamps(isess)),nstim,dur);
+    end
+end
+
+fprintf(fid,'\n\nTOTAL COMPLETED:%d\n\n',isess);
+
+ndidxs  = ~ismember(subs.data{sCol.subject_id},subids);
+notdone = subs.data{sCol.subject_id}(ndidxs);
 
 % Tally # completed stim and total time spent for all ppts
 expinfo = ensemble_load_expinfo({},params);
@@ -137,54 +276,6 @@ end
 
 fprintf(fid,'\n\n');
 
-%get list of completed subs, sessions, and time stamps
-[completedSubs,completedSess,completedDateTimes] = ...
-    mysql(conn_id,sprintf(['select subject_id,session_id,date_time from' ...
-		    ' %s where form_id = %d and question_id = %d group by session_id'],tbl_name,form_id,question_id));
-
-%place in ensemble data struct so that we can filter out the subs
-%that we aren't interested in.
-completedData = ensemble_init_data_struct;
-completedData.vars = {'subject_id','session_id','date_time'};
-completedDataCols = set_var_col_const(completedData.vars);
-completedData.data{completedDataCols.subject_id} = completedSubs;
-completedData.data{completedDataCols.session_id} = completedSess;
-completedData.data{completedDataCols.date_time} = completedDateTimes;
-completedData = ensemble_filter(completedData,params.filt);
-
-subids = completedData.data{completedDataCols.subject_id};
-sessids = completedData.data{completedDataCols.session_id};
-timestamps = completedData.data{completedDataCols.date_time};
-nsess = length(subids);
-
-
-fprintf(fid,'participants who have completed\n');
-fprintf(fid,'-------------------------------\n');
-fprintf(fid,'Name\t\t\tSubID\t\tSession\tTimestamp\t\tNumStims\tDuration\n');
-for isess = 1:nsess
-    if strmatch('tmp_',subids{isess}), continue, end
-    idx = strmatch(subids{isess},subs.data{sCol.subject_id},'exact');
-    if timestamps(isess) > report_after
-        if isempty(subs.data{sCol.name_last}(idx)) || ...
-                isempty(subs.data{sCol.name_last}(idx)) || ...
-                isempty(subs.data{sCol.name_first}(idx))
-          error('empty item\n');
-        end
-        subid = subids{isess};
-        first = cell2str(subs.data{sCol.name_first}(idx));
-        last  = cell2str(subs.data{sCol.name_last}(idx));
-        nstim = subs.data{sCol.nstim}(idx);
-        dur   = subs.data{sCol.dur}(idx)*24;
-        fprintf(fid,'%s %s\t\t%s\t%d\t%s\t%d\t\t%.2f\n',...
-		first, last,subids{isess},sessids(isess),...
-		datestr(timestamps(isess)),nstim,dur);
-    end
-end
-
-fprintf(fid,'\n\nTOTAL COMPLETED:%d\n\n',isess);
-
-ndidxs  = ~ismember(subs.data{sCol.subject_id},subids);
-notdone = subs.data{sCol.subject_id}(ndidxs);
 
 fprintf(1,'DONE!\n\n');
 
