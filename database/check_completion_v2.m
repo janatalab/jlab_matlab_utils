@@ -128,7 +128,8 @@ completedData = ensemble_filter(completedData,params.filt);
 if exist('PRINT_TO_FILE','var') && PRINT_TO_FILE
   logfname = fullfile(params.paths.logpath,'completion_info.txt');
   fid = fopen(logfname,'wt');
-  fprintf(fid,'Completion information for experiment: %s\n\n\n', params.ensemble.experiment_title);
+  fprintf(fid,'Completion information for experiment: %s\n', params.ensemble.experiment_title);
+  fprintf(fid,'Generated: %s\n\n\n', datestr(now));
 else
   fid = 1; % stdout
 end
