@@ -51,9 +51,12 @@ result = ensemble_init_data_struct;
 try
   conn_id = params.ensemble.conn_id;
 catch
-  conn_id = 1;
+  params.ensemble.conn_id = 1;
   tmp_conn_id = 1;
 end
+
+% Check to see if we have a valid connection
+conn_id = mysql_make_conn(params.ensemble);
 
 expname = params.ensemble.experiment_title;
 

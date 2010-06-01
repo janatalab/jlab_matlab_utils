@@ -32,15 +32,38 @@ function outData = ensemble_summary_subject_stats(inData)
 % Nov 3, 2009 - Stefan Tomic, First Version
 % May 8, 2010 - S.T. fixed handling of anon_<hash> subIDs, which don't exist in
 %               subject table. Loops by subject ID retrieved in sessInfo
+% May 22, 2010  PJ - added searching on type=session_info, and
+%               type=subject_info when search for these variables in name field
+%               fails. Fixed handling of age=0.
   
 
 fParams.name = 'session_info';
 an_idx = ensemble_find_analysis_struct(inData,fParams);
+
+% if searching on name field failed, try searching on type field
+if isempty(an_idx)
+  fParams = struct('type','session_info');
+  an_idx = ensemble_find_analysis_struct(inData,fParams);
+end
+if isempty(an_idx)
+  fprintf('Failed to find session_info\n')
+  return
+end
+
 sessInfo = inData{an_idx};
 sessInfoCols = set_var_col_const(sessInfo.vars);
 
 fParams.name = 'subject_info';
 an_idx = ensemble_find_analysis_struct(inData,fParams);
+% if searching on name field failed, try searching on type field
+if isempty(an_idx)
+  fParams = struct('type','subject_info');
+  an_idx = ensemble_find_analysis_struct(inData,fParams);
+end
+if isempty(an_idx)
+  fprintf('Failed to find subject_info\n')
+  return
+end
 subInfo = inData{an_idx};
 subInfoCols = set_var_col_const(subInfo.vars);
 
@@ -107,6 +130,12 @@ for isub = 1:nsubs
   serialAge = useSessDatenum - dobDatenum;
   subAges(isub) = floor(serialAge/365);
   
+  % If the age is somehow set to zero, e.g. if subject accidentally entered
+  % current day as birthday, enter NaN
+  if subAges(isub) == 0
+    subAges(isub) = NaN;
+  end
+  
 end
 
 %replace zeros in sessDurations with NaNs. These are sessions that were not
@@ -120,9 +149,9 @@ for iSess = 1:nMaxSess
   sessMeanDur(iSess) = nanmean(sessDurations(:,iSess));
 end
 
-meanAge = mean(subAges);
-stdAge = std(subAges);
-ageRange = [min(subAges) max(subAges)];
+meanAge = nanmean(subAges);
+stdAge = nanstd(subAges);
+ageRange = [nanmin(subAges) nanmax(subAges)];
 
 if(all(diff(nSess) == 0))
   nSessPerSub = nSess(1);

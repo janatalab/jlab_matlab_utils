@@ -35,7 +35,7 @@ else
   HOST = '';
   DB = '';
   CONN_ID = 0;
-  DATABASE_SCRIPT_PATH = '/afs/cmb.ucdavis.edu/share/matlab/janata/database/';
+  DATABASE_SCRIPT_PATH = './';
   write2file = 0;
   close_conn = 1;
 end

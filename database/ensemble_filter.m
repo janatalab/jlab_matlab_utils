@@ -16,12 +16,15 @@ function [data_st] = ensemble_filter(data_st,filt)
 % specified in a .any structure, any of the conditions have to evaluate to true.
 %
 % Examples: 
-% filt.exclude.any.subject_id = {'tmp_*','01zin79271','08tgs78071'};
+% filt.exclude.any.subject_id = {'^tmp_.*','^01ttf.*','01zin79271','08tgs78071'};
 % filt.exclude.any.session_id = [1873 1984  1523:1576];
 % would cause any rows that have subject IDs beginning with tmp_ to be removed,
-% along with the specific subject IDs given by the 2nd and 3rd elements in the
+% along with the specific subject IDs given by the 3rd and 4th elements in the
 % cell array of strings, as well as any sessions that match the session IDs
 % given in the list.
+%
+% Note: regexp is used for filtering strings, so string filters must
+% conform to regexp rules.
 %
 % DATE/TIME FILTERING PARAMETERS
 % 

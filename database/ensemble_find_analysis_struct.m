@@ -22,6 +22,8 @@ function an_st_idxs = ensemble_find_analysis_struct(an_st_array, search_crit)
 % be 'subject_id'
 
 % 01/31/07 Petr Janata
+% 05/23/10 PJ - Fixed handling of an array of input structures
+
 an_st_idxs = []; % Initialize the output variable to empty
 
 if isstruct(an_st_array)
@@ -66,12 +68,12 @@ for ifld = 1:ncrit_fld
   end
   if isstr(crit_val) || crit_val_is_struct
     analysis_vals(crit_fld_mask) = ...
-	cellfun(@getfield,an_st_array(crit_fld_mask), ...
-	repmat({crit_fld},1,sum(crit_fld_mask)), 'UniformOutput',false);
+      cellfun(@getfield,an_st_array(crit_fld_mask), ...
+      repmat({crit_fld},1,sum(crit_fld_mask)), 'UniformOutput',false);
   else
     analysis_vals(crit_fld_mask) = ...
-	cellfun(@getfield,an_st_array(crit_fld_mask), ...
-	repmat({crit_fld},1,sum(crit_fld_maks)));
+      cellfun(@getfield,an_st_array(crit_fld_mask), ...
+      repmat({crit_fld},1,sum(crit_fld_mask)));
   end
   
   if isstr(crit_val)
@@ -79,13 +81,20 @@ for ifld = 1:ncrit_fld
   end
   
   % If the criterion value is not a structure, then match the analysis values
-  % against the criterion values to get our mask
+  % against the criterion values to get our mask.
+  % 05/23/10 PJ - fixed handling of analysis_vals when it is an array of
+  % cells. However, this may have broken situation when analysis_vals is
+  % not a cell. Line 66 above: analysis_vals = zeros(1,na)*NaN; is suspect.
   curr_mask = false(1,na);
   if ~crit_val_is_struct
-    if isstr(crit_val)
-      curr_mask = ismember(analysis_vals, crit_val);
-    else
-      curr_mask = analysis_vals == crit_val;
+    for ia = 1:na
+      if isstr(crit_val) && iscell(analysis_vals{ia})
+        curr_mask(ia) = any(ismember(analysis_vals{ia}, crit_val));
+      elseif isstr(crit_val) && isstr(analysis_vals{ia})
+        curr_mask(ia) = strcmp(crit_val,analysis_vals{ia});
+      else
+        curr_mask(ia) = analysis_vals(ia) == crit_val;
+      end
     end
   else
     % Otherwise, recursively call this function

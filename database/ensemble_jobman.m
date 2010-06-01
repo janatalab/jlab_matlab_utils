@@ -43,8 +43,12 @@ try conn_id = params.ensemble.conn_id;
 catch conn_id = []; conn_local = false; 
 end
 
+try ignoreEmptyConnID = params.ensemble.ignoreEmptyConnID;
+catch ignoreEmptyConnID = 0;
+end
+
 % If connection ID is not empty, check to see if it is open
-if ~isempty(conn_id) 
+if ~isempty(conn_id) && ~ignoreEmptyConnID
   if mysql(conn_id,'status')
     if conn_id == 0
       conn_local = true;
