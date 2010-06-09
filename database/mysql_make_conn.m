@@ -17,8 +17,12 @@ function conn_id = mysql_make_conn(host_or_struct, db, conn_id)
 %             that contains all of the information
 % 10/30/09 PJ minor fix to handle empty first argument
 % 11/3/09  ST minor fix (use host_or_struct in first try instead of host)
-DEFAULT_HOST = 'atonal.ucdavis.edu';
-DEFAULT_DATABASE = 'ensemble_main';
+% 06/08/10 ST abstracted function to work with any host or database
+%             branching based on host and database moved to mysql_researcher_login.m
+  
+%ensemble_globals loads DEFAULT_HOST and DEFAULT_DATABASE
+%see ensemble_globals_template.m for further information
+ensemble_globals;
 
 try 
   host_or_struct(1);
@@ -64,20 +68,10 @@ end;
 
 user = '';
 passwd = '';
-switch host
-  case 	{'127.0.0.1','localhost','atonal','atonal.ucdavis.edu','atonal.cmb.ucdavis.edu'}
 
-   switch db
-     case {'ensemble_main','ensemble_tarp'}
-       mysql_researcher_login; %populates user and passwd variables. This script
-       %should sit in a location that is not publically visible.
-     case {'ensemble_dev','ensemble_test','ensemble_dhmc'}
-       mysql_researcher_dev_login;
-     case {'ensemble_class'}
-       mysql_class_login;
-   end
-
-end
+%populates user and passwd
+%see mysql_researcher_login_template.m for further information
+mysql_researcher_login;
 
 if mysql(conn_id,'status')
   % Need to open a mysql connection
