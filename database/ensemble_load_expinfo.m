@@ -35,6 +35,8 @@ function result = ensemble_load_expinfo(indata,params)
 % 2009.10.18 PJ - added check to make sure response table was found
 % 2010.01.20 FB - now also returns 'misc_info' in the 'response_data' struct
 % 2010.05.08 PJ - isolated subject_summary_stats in try/catch
+% 2010.06.14 PJ - call to mysql_get_subinfo now requirese that encryption
+%                 key information be passed along
 
 if( isstr( indata ) && strcmp( indata, 'getDefaultParams' ) )
 	result.ensemble.experiment_title = 'use local settings';
@@ -140,7 +142,7 @@ respcols = set_var_col_const(respinfo.vars);
 % Check to see if we are filtering using 'terminal_form'
 respFilt = [];
 try term_form = params.ensemble.terminal_form; catch term_form = []; end
-if ~isempty(term_form) & remove_incomplete
+if ~isempty(term_form) && remove_incomplete
   form_mask = respinfo.data{respcols.form_id} == term_form;
   finished_sessids = unique(respinfo.data{respcols.session_id}(form_mask));
   respFilt.include.any.session_id = finished_sessids;
@@ -160,7 +162,7 @@ result.vars{end+1} = 'response_data';
 result.data{end+1} = respinfo;
 
 % Refilter session information if necessary
-if remove_incomplete & ~isempty(term_form)
+if remove_incomplete && ~isempty(term_form)
   fprintf('Removing incomplete sessions from session_info ...\n');
   clear tmpFilt
   tmpFilt.include.any.session_id = finished_sessids;
@@ -173,8 +175,12 @@ result.data{end+1} = sessInfo;
 
 % Pull the subject information for all of the subjects
 fprintf('Loading subject information ...\n');
-subInfo = mysql_get_subinfo('subject_id', ...
-			    sessInfo.data{sess_colNames.subject_id},'conn_id', conn_id);
+if ~isfield(params.ensemble,'enc_key')
+  params.ensemble.enc_key = '';
+end
+subInfo = mysql_get_subinfo('subject_id', sessInfo.data{sess_colNames.subject_id}, ...
+  'conn_id', conn_id, ...
+  'enc_key', params.ensemble.enc_key);
 subInfo.name = 'subject_info';
 subInfo.type = 'subject_info';
 

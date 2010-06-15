@@ -66,16 +66,14 @@ try conn_id(1);
 catch conn_id = 0;
 end;
 
-user = '';
-passwd = '';
-
 %populates user and passwd
 %see mysql_researcher_login_template.m for further information
-mysql_researcher_login;
+ensemble = struct('host',host,'database',db);
+ensemble = mysql_researcher_login(ensemble);
 
 if mysql(conn_id,'status')
   % Need to open a mysql connection
-  status = mysql(conn_id,'open',host,user,passwd);
+  status = mysql(conn_id,'open',ensemble.host,ensemble.user,ensemble.passwd);
 
   database_str = sprintf('use %s', db);
   mysql(conn_id,database_str);

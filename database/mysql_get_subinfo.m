@@ -17,7 +17,6 @@ ensemble_globals;
 % Initialize some variables
 subinfo = ensemble_init_data_struct;
 
-
 % Parse the input arguments
 narg = length(varargin);
 for iarg = 1:2:narg
@@ -26,6 +25,8 @@ for iarg = 1:2:narg
       subids = varargin{iarg+1};
     case 'conn_id'
       conn_id = varargin{iarg+1};
+    case 'enc_key'
+      enc_key = varargin{iarg+1};
     otherwise
       fprintf('mysql_get_subinfo: Unknown input argument: %s\n', varargin{iarg});
   end
@@ -43,7 +44,9 @@ subinfo.type = 'subject_info';
 
 % Call mysql_extract_data
 enc_fields = encrypted_fields.subject;
-enc_key = ensemble_get_encryption_key;
+if ~exist('enc_key')
+  enc_key = ensemble_get_encryption_key;
+end
 
 [subinfo.data, subinfo.vars] = mysql_extract_data('table','subject','subject_id',subids,'encrypted_fields',enc_fields,'enc_key',enc_key,'conn_id',conn_id);
 
