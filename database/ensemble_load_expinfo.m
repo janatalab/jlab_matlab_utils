@@ -179,8 +179,7 @@ if ~isfield(params.ensemble,'enc_key')
   params.ensemble.enc_key = '';
 end
 subInfo = mysql_get_subinfo('subject_id', sessInfo.data{sess_colNames.subject_id}, ...
-  'conn_id', conn_id, ...
-  'enc_key', params.ensemble.enc_key);
+  'ensemble', params.ensemble);
 subInfo.name = 'subject_info';
 subInfo.type = 'subject_info';
 
