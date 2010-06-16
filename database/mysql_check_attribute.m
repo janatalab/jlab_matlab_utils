@@ -21,12 +21,12 @@ try
 catch
   tmp_conn_id = 1;
   conn_id = 0;
+  params.conn_id = conn_id;
 end
 
+
 if mysql_check_conn(conn_id)
-  try host = params.host; catch host = []; end
-  try database = params.database; catch database = []; end
-  mysql_make_conn(host,database,conn_id);
+  mysql_make_conn(params);
 end
 
 % Check to see if we are creating missing attributes
@@ -71,4 +71,5 @@ end
 % Close connection if necessary
 if tmp_conn_id
   mysql(conn_id,'close');
+  params.conn_id = [];
 end

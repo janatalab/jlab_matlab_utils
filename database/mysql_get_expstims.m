@@ -4,8 +4,11 @@ function [stiminfo, stim_fields] = mysql_get_expstims(resp_tbl,varargin)
 %
 % Retrieves list of auditory stimuli (and associated info) of all stimuli that are
 % associated with a response table.
+%
+% 'conn_id' <conn_id> is REQUIRED
 
 % 12/29/07 Petr Janata
+% 06/15/10 PJ - sanitized mysql_make_conn
 
 stiminfo = {};
 
@@ -20,12 +23,9 @@ for iarg = 1:2:narg
   end
 end
 
-% Check for connection to database
-try conn_id(1);
-catch   
-  tmp_conn_id = 1;
-  mysql_make_conn;
-  conn_id = 0;
+% Check for valid connection to database
+if ~exist('conn_id','var') || isempty(conn_id) || mysql(conn_id,'status')
+  error('%s: Do not have a valid connection ID', mfilename);
 end
 
 % Get list of stimulus IDs that are in the response table
@@ -35,7 +35,6 @@ mysql_str = sprintf(['SELECT DISTINCT stimulus_id FROM %s ' ...
 
 [stiminfo, stim_fields] = mysql_get_stim_attributes('stimulus_id',stimids,conn_id);
 
-if (exist('tmp_conn_id','var'))
-  mysql(conn_id,'close');
-end
+return
+
 

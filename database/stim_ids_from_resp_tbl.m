@@ -18,7 +18,9 @@ function [data,vars] = stim_ids_from_resp_tbl(params)
 % mysql_get_stim_by_attribute, with two returns: data and vars, as opposed
 % to one return of an ensemble data struct containing data and vars
 % 
+
 % FB 2009.05.11
+% 06/15/10 PJ - sanitized connection handling
 
 % initialize vars
 data{1} = nan(0);
@@ -34,11 +36,17 @@ else
   m = struct();
 end
 
-if ~isfield(m,'host'), m.host = ''; end
-if ~isfield(m,'database'), m.database = ''; end
-if ~isfield(m,'conn_id'), m.conn_id = 6; end
-
-mysql_make_conn(m.host,m.database,m.conn_id);
+if ~isfield(m,'conn_id') || mysql(m.conn_id,'status')
+  if ~all(isfield(m,{'host','database','user','passwd'}))
+    error('%s: No valid connection or insufficient information to establish one', mfilename);
+  else
+    m.conn_id = 6;
+    mysql_make_conn(m);
+    tmp_conn_id = 1;
+  end
+else
+  tmp_conn_id = 0;
+end
 
 % get response table information
 if ~isfield(params,'stim_ids_from_resp_tbl') || ...
@@ -73,4 +81,9 @@ for i = 1:length(t)
   % get the unique stimulus IDs
   b = unique(tdata.data{tcol.stimulus_id});
   data{1} = union(b,data{1});
+end
+
+if tmp_conn_id
+  mysql(m.conn_id,'close');
+  m.conn_id = [];
 end

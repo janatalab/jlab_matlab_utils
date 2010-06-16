@@ -8,16 +8,15 @@ function [dfid] = mysql_qid2dfid(qid, conn_id)
 % 
 % Column 1 of qid contains questions, and column 2 contains the associated
 % subquestions.  A single part question has a subquestion id of 1
+%
+% conn_id - connection to database - required
 
 % 09/14/05 Petr Janata
+% 06/15/10 PJ - mysql_make_conn sanitization
 
-
-% Connect to host
-try conn_id(1);
-catch   
-  mysql_make_conn;
-  conn_id = 0;
-  tmp_conn_id = 1;
+% Check for valid connection to database
+if ~exist('conn_id','var') || isempty(conn_id) || mysql(conn_id,'status')
+  error('%s: Do not have a valid connection ID', mfilename);
 end
 
 [unique_quest_ids, quest_idxs] = unique(qid,'rows'); % get the unique questions
@@ -33,7 +32,4 @@ mysql_str = sprintf(['SELECT type, data_format_id FROM data_format ' ...
       'WHERE (%s);'], qid_str);
 [types, dfid] = mysql(conn_id,mysql_str);
 
-% Close the mysql connection if this was a temporary opening of the database
-if exist('tmp_conn_id','var')
-  mysql(conn_id,'close');
-end
+return

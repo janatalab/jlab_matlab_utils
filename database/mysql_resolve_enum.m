@@ -6,16 +6,16 @@ function [strs,ids] = mysql_resolve_enum(dfid, conn_id)
 %
 % strs = mysql_resolve_enum(dfid);
 %
+% conn_id - connection to database - required
 
 % 08/27/05 Petr Janata
 % 11/10/05 PJ - modified output format
+% 06/15/10 PJ - mysql_make_conn sanitization
 
-% Connect to host
-try conn_id(1);
-catch   
-  tmp_conn_id = 1;
-  mysql_make_conn;
-  conn_id = 0;
+
+% Check for valid connection to database
+if ~exist('conn_id','var') || isempty(conn_id) || mysql(conn_id,'status')
+  error('%s: Do not have a valid connection ID', mfilename);
 end
 
 id_str = sprintf('%d,', dfid);
@@ -39,7 +39,4 @@ for iid = 1:ndfid
   end
 end
 
-% Close the mysql connection if this was a temporary opening of the database
-if exist('tmp_conn_id','var')
-  mysql(conn_id,'close');
-end
+return

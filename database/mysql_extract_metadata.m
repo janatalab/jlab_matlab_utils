@@ -23,8 +23,7 @@ function tableStruct = mysql_extract_metadata(varargin)
 % 
 % table: either 'experiment','form','question',or 'data_format'
 %
-% conn_id: the mysql connection ID to use. If none is specified, 
-%          a default conn_id of 1 will be used.
+% conn_id: the mysql connection ID to use. Required
 %
 % keep_db_open: normally only used for recursively calling this
 %               function so that the database isn't closed during
@@ -40,6 +39,7 @@ function tableStruct = mysql_extract_metadata(varargin)
 % 05/01/07 PJ - enable passing in of host and database arguments for
 %               establishing connections to databases other than the
 %               default database
+% 06/15/10 PK - added script enforcing of conn_id
 
 
 extractDataArgs = {};
@@ -48,21 +48,15 @@ for(itag = 1:2:length(varargin))
   switch(varargin{itag})
     case 'table'
       table = varargin{itag+1};
-     
-    case 'host'
-      host = varargin{itag+1};
-      
-    case 'database'
-      database = varargin{itag+1};
-      
+           
     case 'conn_id'
-    conn_id = varargin{itag+1};
+      conn_id = varargin{itag+1};
     
-   case 'keep_db_open'
-    keep_db_open = varargin{itag+1};
+    case 'keep_db_open'
+      keep_db_open = varargin{itag+1};
     
-   case 'addJunctionTableFields'
-    addJunctionTableFields = varargin{itag+1}{:};
+    case 'addJunctionTableFields'
+      addJunctionTableFields = varargin{itag+1}{:};
     
    case 'addJunctionTableVals'
     addJunctionTableVals = varargin{itag+1}{:};
@@ -74,24 +68,9 @@ for(itag = 1:2:length(varargin))
   end
 end
 
-
-% Check for connection to database
-try database(1); 
-catch
-  database = []; 
-end
-try host(1); 
-catch
-  host = []; 
-end
-try conn_id(1);
-catch   
-  conn_id = 1;
-  disp('making connection to db');
-  mysql_make_conn(host,database,conn_id);
-  temp_conn_id = 1;
-  varargin{end+1} = 'conn_id';
-  varargin{end+1} = conn_id;
+% Check for valid connection to database
+if ~exist('conn_id','var') || isempty(conn_id) || mysql(conn_id,'status')
+  error('%s: Do not have a valid connection ID', mfilename);
 end
 
 try 

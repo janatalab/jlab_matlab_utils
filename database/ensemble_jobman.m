@@ -31,16 +31,19 @@ function analysis_list = ensemble_jobman(analysis_list,params)
 % 8/25/08  - ST, if conn_id is empty, conn_local is now set to
 %            false. Reverted last version, since 'dbstop if error' didn't take
 %            you to the desired breakpoint
+% 06/15/10 - PJ cleaning mysql_make_conn support
 
 
 %if conn_id is set in params, then open a mysql connection
 %this mysql connection may be used by analysis functions that
 %specify the same conn_id in their params
 conn_local = false;
-try host = params.ensemble.host; catch host = []; end
-try database = params.ensemble.database; catch database = []; end
-try conn_id = params.ensemble.conn_id; 
-catch conn_id = []; conn_local = false; 
+
+try 
+  conn_id = params.ensemble.conn_id; 
+catch
+  conn_id = []; 
+  conn_local = false;
 end
 
 try ignoreEmptyConnID = params.ensemble.ignoreEmptyConnID;
@@ -53,7 +56,7 @@ if ~isempty(conn_id) && ~ignoreEmptyConnID
     if conn_id == 0
       conn_local = true;
     end
-    mysql_make_conn(host,database,conn_id);
+    mysql_make_conn(params.ensemble);
   end
 end
 

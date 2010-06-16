@@ -30,6 +30,8 @@ function outData = check_completion_v2(varargin)
 % Author(s)
 % 2/21/2009 Fred Barrett - Original Author
 % 4/7/2009 Stefan Tomic - adapted script into a more general purpose function for all experiments
+% 06/15/2010 PJ - eliminated ensemble_globals, and forced new
+%                 msyql_make_conn scheme.
 
 outData = [];
 
@@ -41,26 +43,11 @@ else
   fprintf('%s: Wrong number of arguments: %d\n', mfilename, nargin);
 end
 
-ensemble_globals;
-enc_key = ensemble_get_encryption_key;
-
 try
   conn_id = params.ensemble.conn_id;
 catch
   conn_id = 7;
   params.ensemble.conn_id = conn_id;
-end
-
-try
-  host = params.ensemble.host;
-catch
-  host = '';
-end
-
-try
-  database = params.ensemble.database;
-catch
-  database = '';
 end
 
 try
@@ -70,7 +57,7 @@ catch
 end
 
 if(mysql(conn_id,'status') ~= 0)
-  mysql_make_conn(host,database,conn_id);
+  mysql_make_conn(params.ensemble);
 end
 
 try tbl_name = params.resptbl_name; catch tbl_name = ''; end

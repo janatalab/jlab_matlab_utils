@@ -6,7 +6,7 @@ function qtxt = mysql_get_qtxt(qids,varargin)
 % A flexible number of options can be passed into the function as tag/value
 % pairs.
 %
-% 'conn_id', conn_id - the ID of the mysql connection
+% 'conn_id', conn_id - the ID of the mysql connection - REQUIRED
 
 % Parse the input arguments
 narg = length(varargin);
@@ -19,12 +19,9 @@ for iarg = 1:2:narg
   end
 end
 
-% Check for connection to database
-try conn_id(1);
-catch   
-  tmp_conn_id = 1;
-  mysql_make_conn;
-  conn_id = 0;
+% Check for valid connection to database
+if ~exist('conn_id','var') || isempty(conn_id) || mysql(conn_id,'status')
+  error('%s: Do not have a valid connection ID', mfilename);
 end
 
 qid_str = sprintf('%d,', qids);
@@ -34,9 +31,5 @@ mysql_str = sprintf(['SELECT question_text FROM question ' ...
       'WHERE question_id IN %s;'], qid_str);
 
 qtxt = mysql(conn_id,mysql_str);
-
-if exist('conn_id','var')
-  mysql(conn_id,'close');
-end
 
 return

@@ -9,7 +9,7 @@ function [data] = extract_formdata(resp_tbl,form_ids,varargin)
 % A flexible number of options can be passed into the function as tag/value
 % pairs.
 %
-% 'conn_id', conn_id - the ID of the mysql connection
+% 'conn_id', conn_id - the ID of the mysql connection - REQUIRED
 % 'subids', {subids} - a cell array of subject IDs
 % 'sessids', [sessids] - a vector of session IDs
 % 'extract_vars', {extract_vars} - cell array of field names to
@@ -17,8 +17,7 @@ function [data] = extract_formdata(resp_tbl,form_ids,varargin)
 
 % 06/22/06 PJ - Adapted from extract_generic
 % 10/28/06 PJ - enabled handling of vector of form_ids. 
-
-global SQL_HOST DATABASE
+% 06/15/10 PJ - sanitized mysql_make_conn
 
 % Parse the input arguments
 narg = length(varargin);
@@ -37,11 +36,8 @@ for iarg = 1:2:narg
   end
 end
 
-% Check for connection to database
-try conn_id(1);
-catch   
-  mysql_make_conn;
-  conn_id = 0;
+if ~exist('conn_id','var') || isempty(conn_id)
+  error('%s: Do not have a valid connection ID', mfilename);
 end
 
 try 

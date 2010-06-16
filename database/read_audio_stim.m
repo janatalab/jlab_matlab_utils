@@ -24,30 +24,28 @@ function [sig,fs,nbits,opts] = read_audio_stim(stimulus_id,varargin)
 % May 6, 2010 S.T. - added support for wav files. Since wavread doesn't support
 %                    downsampling, this function simply reports an error if downsampling was set
 %                    to a value other than one and a wav file was specified
+% 06/15/10 PJ - mysql_make_conn sanitization.  Input variable handling
+%               still needs cleanup
   
 ensemble_globals;
 
 if(nargin < 5)
   mysql_conn_id = 7;
 else
-  mysql_conn_id = varargin{4};
+  mysql_conn_id = varargin{4};  % doesn't this defy the purpose of varargin?
 end
 
 if(nargin == 0)
   error('Need a stimulus_id from the stimulus table. Type ''help read_audio_stim'' for more information.');
 end
 
-if(nargin < 5)
-  mysql_conn_id = 7;
-end
-
-if(mysql(mysql_conn_id,'status'))
-  mysql_make_conn('','',mysql_conn_id);
+% Check for valid connection to database
+if ~exist('mysql_conn_id','var') || isempty(mysql_conn_id) || mysql(mysql_conn_id,'status')
+  error('%s: Do not have a valid connection ID', mfilename);
 end
 
 sql_choose_stim = sprintf('select location from stimulus where stimulus_id = %d',stimulus_id);
 stim_location = mysql(mysql_conn_id,sql_choose_stim);
-
 
 stim_location = char(stim_location);
 

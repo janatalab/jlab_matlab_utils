@@ -18,6 +18,7 @@ function sinfo = mysql_get_sinfo(subid,conn_id)
 % 10/05/09 Stefan Tomic - reads in subject name and DOB as encrypted data
 % 10/30/09 PJ - minor fix to convert date string to datenum, following
 %               subject table encryption modification
+% 06/15/10 PJ - mysql_make_conn
 
 sinfo = [];
 
@@ -28,12 +29,9 @@ if ~isempty(msg)
   return
 end
 
-% Connect to host
-try conn_id(1);
-catch   
-  tmp_conn_id = 1;
-  mysql_make_conn;
-  conn_id = 0;
+% Check for valid connection to database
+if ~exist('conn_id','var') || isempty(conn_id) || mysql(conn_id,'status')
+  error('%s: Do not have a valid connection ID', mfilename);
 end
 
 % Initialize the output structure

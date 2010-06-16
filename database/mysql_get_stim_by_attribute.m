@@ -9,9 +9,7 @@ function [data, vars] = mysql_get_stim_by_attribute(varargin)
 %   'name','attrib_name' - a string or cell array of strings containing the
 %                          attribute names to be matched.
 %   'conn_id' - database connection ID to use
-%   'host' - database host
-%   'database' - database on host to use
-%   'params' - a structure containing the above parameters as fields
+%   'params' - a structure containing host,database,user,passwd as fields
 %   'extract_vars' | 'extract_flds' - specify column names to return, default=all
 %       NOTE: all extract_vars must have the table specified (tbl.field,
 %       not just 'field') ... due to the specialization of this function to
@@ -21,6 +19,7 @@ function [data, vars] = mysql_get_stim_by_attribute(varargin)
 % 07/12/07 Petr Janata
 % 10/09/07 FB - general support to specify return variables, including support
 % for when you pass '*'. if no extract_vars are passed, the default set will be used
+% 06/15/10 PJ - mysql_make_conn sanitization
 
 data = {};
 vars = {};
@@ -29,7 +28,7 @@ inputargs = varargin;
 % valid search tables
 tables = {'stimulus','attribute','stimulus_x_attribute'};
 
-% Check to see if params is one of the input argumentes
+% Check to see if params is one of the input arguments
 str_idxs = find(cellfun(@isstr,inputargs));
 params_idx = strmatch('params',inputargs(str_idxs));
 
@@ -77,13 +76,12 @@ catch
     catch
         tmp_conn_id = 1;
         conn_id = 0;
+        params.conn_id = 0;
     end
 end
 
 if mysql_check_conn(conn_id)
-  try host = params.host; catch host = []; end
-  try database = params.database; catch database = []; end
-  mysql_make_conn(host,database,conn_id);
+  params.conn_id = mysql_make_conn(params);
 end
 
 % Form the SQL query
@@ -182,6 +180,7 @@ end
 
 if exist('tmp_conn_id','var')
   mysql(conn_id,'close');
+  params.conn_id = [];
 end
 end % mysql_get_stim_by_attribute
 

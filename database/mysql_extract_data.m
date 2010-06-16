@@ -13,8 +13,7 @@ function [data,vars] = mysql_extract_data(varargin)
 % {'order_by','sort_by'} - an optional field that specifies which fields should be used to
 %              order the data
 %
-% 'conn_id' - the connection ID to the MySQL database to use. If this is left
-%             empty, a temporary ID is created.
+% 'conn_id' - the connection ID to the MySQL database to use. REQUIRED
 %
 % 'encrypted_fields' - a cell array of field names that were encrypted in the
 %                      table using aes_encryption. They will be decrypted using
@@ -36,6 +35,7 @@ function [data,vars] = mysql_extract_data(varargin)
 % 10/05/09 Stefan Tomic - added support for reading in encrypted fields,
 %                         identified by 'encrypted_fields' cell array. The key
 %                         is passed in as 'enc_key'
+% 06/15/10 PJ Sanitized mysql_make_conn
 
 % Initialize some variables
 fld.crit_flds = {};
@@ -101,12 +101,9 @@ if isempty(table)
   return
 end
 
-% Check for connection to database
-try conn_id(1);
-catch 
-  tmp_conn_id = 1;
-  CONN_ID = 0;
-  conn_id = mysql_make_conn([],[],CONN_ID);
+% Check for valid connection to database
+if ~exist('conn_id','var') || isempty(conn_id) || mysql(conn_id,'status')
+  error('%s: Do not have a valid connection ID', mfilename);
 end
 
 % Make sure that all the fields we want to extract or sort by actually exist in the table

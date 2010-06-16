@@ -4,30 +4,28 @@ function result = mysql_insert_trial_mtx(trial_mtx,params)
 % USAGE: result = mysql_insert_trial_mtx(trial_mtx,params);
 %
 % trial_mtx: stimulus_id1, stimulus_id2, question_id, data_format_id, correct_response_enum
+%
+% params should be a structure containing database information so that it can connect to the
+% database: 
+% Either: host,database,user,passwd
+% or conn_id
 
 % 07/18/09 Petr Janata
+% 06/15/10 PJ - sanitized mysql_make_conn
 
 result = [];
 
-% Check for connection to database
-try 
-  conn_id = params.conn_id;
-  tmp_conn_id = 0;
-catch
+if mysql_check_conn(params.conn_id)
+  if ~all(isfield(params,{'host','database'}))
+    error('%s: Insufficient information to establish database connection', mfilename);
+  else
+    params.login_type = 'researcher';
+    params = mysql_login(params);
+  end
+  params = mysql_make_conn(params);
   tmp_conn_id = 1;
-  conn_id = 0;
-end
-
-if mysql_check_conn(conn_id)
-  host = '';
-  database = '';
-  if isfield(params,'host')
-    host = params.host;
-  end
-  if isfield(params,'database')
-    database = params.database;
-  end
-  mysql_make_conn(host,database,conn_id);
+else
+  tmp_conn_id = 0;
 end
 
 % 
@@ -92,5 +90,5 @@ end
 
 % Close connection if necessary
 if tmp_conn_id
-  mysql(conn_id,'close');
+  mysql(params.conn_id,'close');
 end

@@ -18,6 +18,7 @@ function [expinfo] = mysql_get_expinfo(expmt, host, database, conn_id)
 %               robust. Now returns information for list of experiments in
 %               expmt.
 % 10/05/09 Stefan Tomic - reads in subject name and DOB as encrypted data
+% 06/15/10 PJ - sanitized mysql_make_conn
   
 expinfo = [];
 
@@ -28,18 +29,13 @@ if ~isempty(msg)
   return
 end
 
-if nargin < 4
-  conn_id = 0;
-end
-
-% See if we have a connection
-if mysql(conn_id,'status')
-  try 
-    mysql_make_conn(host, database, conn_id);
-  catch  
+% Check for valid connection to database
+if ~exist('conn_id','var') || isempty(conn_id) || mysql(conn_id,'status')
+  if exist('host','var') && ~isempty(host) && exist('database','var') && ~isempty(database)
+    conn_id = mysql_make_conn(mysql_login(struct('host',host,'database',database,'login_type','researcher')));
     tmp_conn_id = 1;
-    mysql_make_conn;
-    conn_id = 0;
+  else
+    error('%s: Do not have a valid connection ID', mfilename);
   end
 end
 

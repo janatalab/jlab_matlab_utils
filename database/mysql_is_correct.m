@@ -14,6 +14,7 @@ function outstr = mysql_is_correct(varargin)
 % of forms in Ensemble.
 
 % 08/31/2009 Petr Janata
+% 06/15/10 PJ - adapted mysql_make_conn handling
 
 global mysql_conn_id
 
@@ -62,21 +63,9 @@ if isempty(session_id)
   error(error_str);
 end
 
-% Check for connection to database
-try 
-  mysql_conn_id(1);
-  conn_id = mysql_conn_id;
-  if VERBOSE
-    fprintf(fid, 'Using conn_id: %d\n', conn_id);
-  end
-  tmp_conn_id = 0;
-catch   
-  if VERBOSE, 
-    fprintf(fid, 'No global conn_id available, making database connection\n');
-  end
-  mysql_make_conn;
-  conn_id = 0;
-  tmp_conn_id = 1;
+% Check for valid connection to database
+if ~exist('mysql_conn_id','var') || isempty(mysql_conn_id) || mysql(mysql_conn_id,'status')
+  error('%s: Do not have a valid connection ID', mfilename);
 end
 
 % We need to get the response table name, based on the session ID
@@ -84,14 +73,14 @@ if VERBOSE, fprintf(fid,'Figuring out response table ... '); end
 mysql_str = sprintf(['SELECT response_table FROM experiment WHERE ' ...
   'experiment_id = (SELECT experiment_id FROM session WHERE session_id = %d);'], session_id);
 if VERBOSE, fprintf(fid,mysql_str); end
-response_table = mysql(conn_id, mysql_str);
+response_table = mysql(mysql_conn_id, mysql_str);
 response_table = response_table{1};
 if VERBOSE, fprintf(fid,'using %s\n', response_table); end
 
 % Get the trial information from the trial table
 mysql_str = sprintf(['SELECT correct_response_enum, correct_response_text FROM trial ', ...
       'WHERE trial_id = %d;'], trial_id);
-[correct_response_enum, correct_response_text] = mysql(conn_id, mysql_str);
+[correct_response_enum, correct_response_text] = mysql(mysql_conn_id, mysql_str);
 correct_response_text = correct_response_text{1};
 if isempty(correct_response_text) && isnumeric(correct_response_enum);
   use_enum = true;
@@ -104,7 +93,7 @@ end
 % trial were presented in this session
 mysql_str = sprintf(['SELECT response_enum, response_text, response_order FROM %s ' ...
       'WHERE session_id = %d AND trial_id = %d;'], response_table, session_id, trial_id);
-[response_enum, response_text, response_order] = mysql(conn_id, mysql_str);
+[response_enum, response_text, response_order] = mysql(mysql_conn_id, mysql_str);
 
 [dummy, resp_idx] = max(response_order);
 response_text = response_text{resp_idx};
@@ -130,10 +119,6 @@ if ~return_true
   else
     outstr = 'TRUE';
   end
-end
-
-if tmp_conn_id
-  mysql(conn_id, 'close')
 end
 
 if VERBOSE, fclose(fid); end

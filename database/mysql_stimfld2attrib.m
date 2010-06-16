@@ -31,13 +31,9 @@ for iarg = 1:2:narg
   end
 end
 
-% Check for connection to database
-try conn_id(1);
-  tmp_conn_id = 0;
-catch   
-  mysql_make_conn;
-  conn_id = 0;
-  tmp_conn_id = 1;
+% Check for valid connection to database
+if ~exist('conn_id','var') || isempty(conn_id) || mysql(conn_id,'status')
+  error('%s: Do not have a valid connection ID', mfilename);
 end
 
 params.conn_id = conn_id;
@@ -81,7 +77,4 @@ else
   fprintf('No stimulus IDs to be inserted\n');
 end
 
-% Close connection if necessary
-if tmp_conn_id
-  mysql(conn_id,'close');
-end
+return

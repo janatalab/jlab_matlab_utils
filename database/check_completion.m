@@ -12,6 +12,7 @@ function [subids, sessids, form_id, question_id, timestamps] = check_completion(
 % 'question_id', 456
 
 % 07/02/06 Petr Janata
+% 06/15/10 PJ - eliminated mysql_make_conn
 
 % Parse input arguments
 narg = length(varargin);
@@ -20,6 +21,7 @@ cond_str = '';
 FIND_BY_SUBJECT = 0;
 FIND_BY_TICKET = 0;
 
+conn_id = [];
 for iarg = 1:2:narg
   curr_arg = varargin{iarg};
   if isempty(cond_str)
@@ -33,7 +35,7 @@ for iarg = 1:2:narg
     if isfield(ap,'ticket_code') && ~isempty(ap.ticket_code)
       ticket_code = ap.ticket_code;
       if ~iscell(ticket_code)
-	ticket_code = {ticket_code};
+        ticket_code = {ticket_code};
       end
       ntickets = length(ticket_code);
       FIND_BY_TICKET = 1;
@@ -41,24 +43,24 @@ for iarg = 1:2:narg
   else
     switch curr_arg
       case 'form_id'
-	form_id = varargin{iarg+1};
-	cond_str = sprintf('%s %s form_id=%d ', cond_str, prefix_str, form_id);
+        form_id = varargin{iarg+1};
+        cond_str = sprintf('%s %s form_id=%d ', cond_str, prefix_str, form_id);
       case 'question_id'
-	question_id = varargin{iarg+1}
-	cond_str = sprintf('%s %s question_id=%d ', cond_str, prefix_str, question_id);
+        question_id = varargin{iarg+1}
+        cond_str = sprintf('%s %s question_id=%d ', cond_str, prefix_str, question_id);
       case 'subject_id'
-	subids = varargin{iarg+1};
-	cond_str = sprintf('%s %s subject_id="%s" ', cond_str, prefix_str, subids);
-	FIND_BY_SUBJECT = 1;
+        subids = varargin{iarg+1};
+        cond_str = sprintf('%s %s subject_id="%s" ', cond_str, prefix_str, subids);
+        FIND_BY_SUBJECT = 1;
+      case 'conn_id'
+        conn_id = varargin{iarg+1};
     end
   end % if isstruct(curr_arg)
 end % for iarg=
 
 % Connect to host with a temporary connection if necessary
-try conn_id(1);
-catch   
-  mysql_make_conn;
-  conn_id = 0;
+if isempty(conn_id) || mysql(conn_id,'status')
+  error('%s: No connection ID specifed or connection not open')
 end
 
 % 

@@ -4,10 +4,13 @@ function sublist = make_exp_sublist(expname,varargin)
 %
 % Generates a list of all unique subject IDs contained in the repsonse table of
 % the experiment specified in expname.
+%
+%  'conn_id' - database connection ID to use during the query
 % 
 % Optional arguments:
 %  'exclude_subs' - list of subjects to remove from the list
-%  'conn_id' - database connection ID to use during the query
+
+% 06/15/10 PJ - sanitized mysql_make_conn
 
 conn_id = [];
 exclude_subs = {};
@@ -28,11 +31,8 @@ for iarg = 1:2:narg
   end % switch
 end % iarg
 
-% Check for connection to database
-try conn_id(1);
-catch   
-  mysql_make_conn;
-  conn_id = 0;
+if ~exist('conn_id','var') || isempty(conn_id)
+  error('%s: Do not have a valid connection ID', mfilename);
 end
 
 % Get the experiment info

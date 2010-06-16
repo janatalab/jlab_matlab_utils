@@ -2,16 +2,14 @@ function [stiminfo, stim_fields] = mysql_get_stim_attributes(stim_crit_fld, stim
 % Returns info from the stimulus table for a given stimulus.
 % [stiminfo, stim_fields] = mysql_get_stim_attributes(stim_crit_fld,stim_crit_vals);
 %
-% 
+% 'conn_id' - connection ID to database - required
 
 % 11/24/06 PJ modified to handle list of stim ids
+% 06/15/10 PJ msyql_make_conn handling
 
-% Check for connection to database
-try conn_id(1);
-catch   
-  tmp_conn_id = 1;
-  mysql_make_conn;
-  conn_id = 0;
+% Check for valid connection to database
+if ~exist('conn_id','var') || isempty(conn_id) || mysql(conn_id,'status')
+  error('%s: Do not have a valid connection ID', mfilename);
 end
 
 [tbl.flds,tbl.types,tbl.null, tbl.key,tbl.default,tbl.extra] = ...

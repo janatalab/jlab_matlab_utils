@@ -18,12 +18,11 @@ function [form_id_const, form_name_id_const_map, form_name_list] = make_form_nam
 % 8/17/09 Stefan Tomic - added flag to only close db connection if
 %                        the ID wasn't passed into the function
 %                        (otherwise, this is a conn that we may want to use later)
+% 06/15/10 PJ - sanitized mysql_make_conn
 
 close_conn = 0;
 
 if nargin && isfield(params,'ensemble')
-  try HOST = params.ensemble.host; catch HOST = ''; end
-  try DB = params.ensemble.database; catch DB = ''; end
   try CONN_ID = params.ensemble.conn_id; catch CONN_ID = 0; close_conn = 1; end
   try DATABASE_SCRIPT_PATH = params.paths.project_root; 
   catch DATABASE_SCRIPT_PATH = '.'; 
@@ -32,15 +31,13 @@ if nargin && isfield(params,'ensemble')
   try write2file = params.write2file; catch write2file = 0; end
   
 else
-  HOST = '';
-  DB = '';
   CONN_ID = 0;
   DATABASE_SCRIPT_PATH = './';
   write2file = 0;
   close_conn = 1;
 end
 
-mysql_make_conn(HOST,DB,CONN_ID);
+mysql_make_conn(params.ensemble);
 
 mysql_str = sprintf('SELECT form_name, form_id FROM form');
 [names, ids] = mysql(CONN_ID, mysql_str);

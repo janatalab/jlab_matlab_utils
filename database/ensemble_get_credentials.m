@@ -35,6 +35,10 @@ if ~exist(fname,'file')
 end
 
 fid = fopen(fname,'rt');
+if fid==-1
+  warning(sprintf('Failed to open credentials file: %s\n', fname));
+  return
+end
 
 while ~feof(fid)
   str = fgetl(fid);

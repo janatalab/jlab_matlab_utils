@@ -1,10 +1,12 @@
 function mysql_group_attribs(parent_attrib_name,attrib_names,conn_id)
 % Groups attributes together under a parent attribute in the attribute_x_attribute table
-%
 % mysql_group_attribs(parent_attrib_name,attrib_names,conn_id)
+%
+% conn_id - database connection ID - required
 %
 
 % 08/18/05 Petr Janata
+% 06/15/10 PJ sanitized mysql_make_conn handling
 
 % Do some input parameter checking. 
 min_arg = 2;
@@ -16,12 +18,9 @@ if ~isempty(msg)
   return
 end
 
-% Connect to host with a temporary connection if necessary
-try conn_id(1);
-catch   
-  tmp_conn_id = 1;
-  mysql_make_conn;
-  conn_id = 0;
+% Check for valid connection to database
+if ~exist('conn_id','var') || isempty(conn_id) || mysql(conn_id,'status')
+  error('%s: Do not have a valid connection ID', mfilename);
 end
 
 %
