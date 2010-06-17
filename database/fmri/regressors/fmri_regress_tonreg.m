@@ -40,7 +40,8 @@ if isfield(minfo,'tonreg')
   segnames = tregp.seg_names;
   segvals = tregp.seg_vals;
   nseg = length(segvals);
-  cue_type = tregp.seg_cue;
+  ccm = parse_fh(minfo.cond_cue_map);
+  cue = ccm(tregp.seg_cue);
   resp_params = extract_resp_params_v2(cue,pinfo,minfo,sess);
 else
   tregp = '';

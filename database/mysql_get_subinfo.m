@@ -29,10 +29,6 @@ for iarg = 1:2:narg
   switch varargin{iarg}
     case {'subject_id','subject_ids'}
       subids = varargin{iarg+1};
-    case 'conn_id'
-      conn_id = varargin{iarg+1};
-    case 'enc_key'
-      enc_key = varargin{iarg+1};
     case {'mysql','ensemble'}
       params = varargin{iarg+1};
     otherwise
@@ -40,7 +36,9 @@ for iarg = 1:2:narg
   end
 end
 
-if ~exist('params','var') && ~exist('conn_id','var')
+if ~exist('params','var') || ~isfield(params,'conn_id') || ...
+        ~isfield(params,'user') || ~isfield(params,'passwd') || ...
+        ~isfield(params,'host') || ~isfield(params,'database')
   error('%s: Insufficient information for establishing database connection', mfilename)
 end
 
@@ -50,7 +48,7 @@ params = mysql_login(params);
 
 % Check for connection to database
 tmp_conn_id = false;
-if mysql(conn_id,'status')
+if mysql(params.conn_id,'status')
   tmp_conn_id = true;
 end
 
