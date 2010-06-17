@@ -8,6 +8,12 @@ function [form_id_const, form_name_id_const_map, form_name_list] = make_form_nam
 %  corresponding cell array that contains the original (Ensemble) name of the form
 %  and the new constant name.  In order to get at the form ID field from the
 %  original name, one can write form_name_const.(form_name_list{form_idx,2})
+%
+% params is a structure with fields
+%  .ensemble - structure containing information for connecting to database.
+%              See mysql_make_conn()
+%  .write2file - whether mappings should be written to a file name
+%                form_name_defs.m
 
 % 10/28/06 Petr Janata - updated from an earlier version.  
 % 01/03/07 PJ - fixed to implement stated functionality and deal with bad
@@ -37,7 +43,13 @@ else
   close_conn = 1;
 end
 
-mysql_make_conn(params.ensemble);
+param_fld_names = {'ensemble','mysql'};
+idxs = find(isfield(params,param_fld_names));
+if isempty(idxs)
+  error('%s: Do not have sufficient database connection information', mfilename)
+else
+  CONN_ID = mysql_make_conn(params.(param_fld_names{idxs(1)}));
+end
 
 mysql_str = sprintf('SELECT form_name, form_id FROM form');
 [names, ids] = mysql(CONN_ID, mysql_str);
