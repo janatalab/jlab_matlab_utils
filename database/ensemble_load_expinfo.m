@@ -37,6 +37,8 @@ function result = ensemble_load_expinfo(indata,params)
 % 2010.05.08 PJ - isolated subject_summary_stats in try/catch
 % 2010.06.14 PJ - call to mysql_get_subinfo now requirese that encryption
 %                 key information be passed along
+% 2010.06.18 FB - now accepts inData={'task','return_outdir'}, for
+%                   ensemble_jobman_parallel
 
 if( isstr( indata ) && strcmp( indata, 'getDefaultParams' ) )
 	result.ensemble.experiment_title = 'use local settings';
@@ -46,6 +48,13 @@ if( isstr( indata ) && strcmp( indata, 'getDefaultParams' ) )
 	return;
 end
 
+if (iscell(indata) && ~isempty(indata) && isfield(indata{1},'task') && ...
+        ~isempty(strmatch('return_outdir',indata{1}.task))) || ...
+        (isstruct(indata) && isfield(indata,'task') && ...
+        ~isempty(strmatch('return_outdir',indata.task)))
+    result = '';
+    return
+end
 
 % Initialize the output data struct
 result = ensemble_init_data_struct;
