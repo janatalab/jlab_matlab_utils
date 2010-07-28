@@ -49,6 +49,12 @@ if isempty(filt)
   return
 end
 
+% hack to accomodate ensemble_jobman_parallel_wrapper passing in the hash
+% fb 2010.06.19
+if isfield(filt,'hash')
+  filt = rmfield(filt,'hash');
+end
+
 if isempty(data_st)
   fprintf('%s: empty data struct\n', mfilename);
   return

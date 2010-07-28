@@ -34,7 +34,7 @@ end
 tonregval = cell(nids,1);
 
 % are we segregating regressors?
-if isfield(minfo,'tonreg')
+if isfield(minfo,'tonreg') && ~isempty(minfo.tonreg)
   % segregation params
   tregp = minfo.tonreg;
   segnames = tregp.seg_names;
