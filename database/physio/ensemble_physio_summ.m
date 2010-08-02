@@ -624,7 +624,8 @@ if EXTRACT_DATA
           %%%% find ends of epochs
           if isnumeric(epoch_end) && length(epoch_end) == 1
             % epoch time provided, assumed in seconds
-            etime = epoch_end;
+            eetimes = estimes + epoch_end;
+            ne = length(eetimes);
           elseif isnumeric(epoch_end) && length(epoch_end) > 1
             % epoch end times provided in a vector, assumed in seconds
             % will later be compared to epoch start times
@@ -746,17 +747,20 @@ if EXTRACT_DATA
 
               % subtract baseline for each epoch
               for iep=1:ns
-                mbase = mean(epochs(1:(baseline*EEG.srate),iep));
-                pksig = epochs(:,iep) - mbase;
-                
-                if ~keep_baseline && baseline
-                  pksig(1:baseline*EEG.srate) = [];
+                if baseline
+                  mbase = mean(epochs(1:(baseline*EEG.srate),iep));
+                  pksig = epochs(:,iep) - mbase;
+                  if ~keep_baseline
+                    pksig(1:baseline*EEG.srate) = [];
+                  end
+                else
+                  pksig = epochs(:,iep);
                 end
                 
                 % get peaks
                 [pidxs,heights,bidxs] = find_peaks(pksig,scr.pk);
 
-                if keep_baseline && baseline
+                if baseline && keep_baseline
                   % remove peaks whose troughs occur before 1 sec after
                   % stimulus onset
                   rmbase = bidxs < (baseline+1)*EEG.srate;
@@ -959,7 +963,7 @@ if EXTRACT_DATA
               hold off;
               lr = ur{ir};
               if isnumeric(lresp), lresp = num2str(lresp); end
-              title(sprintf('signal: %s, response: %s, %s',c,r,lr));
+              title(sprintf('signal: %s, response: %s, %s',c,rname,lr));
           
               if SAVE_EPOCHS, print(pargs{:},figfname); end
             end % for ir=1:length(ur
