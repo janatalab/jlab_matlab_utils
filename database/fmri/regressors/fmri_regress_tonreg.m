@@ -122,7 +122,10 @@ for ireg = 1:size(tonregmtx,2)
   vals(:,ireg) = convreg([0:(pinfo.scanner.actual_nvol-1)]*dt+1,ireg);
 end
 
-% scale to ~ -1:1
-vals = vals - mean(vals(:));
-vals = vals./max(max(vals(:)),abs(min(vals(:))));
-vals = vals - repmat(mean(vals),size(vals,1),1);
+% % scale to ~ -1:1
+% vals = vals - mean(vals(:));
+% vals = vals./max(max(vals(:)),abs(min(vals(:))));
+% vals = vals - repmat(mean(vals),size(vals,1),1);
+
+% zscore song timepoints
+vals(vals ~= 0) = zscore(vals(vals ~= 0));
