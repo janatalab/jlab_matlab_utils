@@ -181,7 +181,7 @@ for k=1:nmirfunc
 
     % search for matching file
     fpath = fullfile(stimulus_root,stim_paths{l},fname);
-    fdirs = dir(fullfile(fpath,sprintf('*%s*mat',fname)));
+    fdirs = dir(fullfile(fpath,sprintf('*%d_%s*mat',stim_id,fname)));
     
     match = 0;
     for m=1:length(fdirs)
