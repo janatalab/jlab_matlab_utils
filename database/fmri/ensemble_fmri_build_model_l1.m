@@ -393,6 +393,7 @@ for isub=1:nsub_proc
         presfilt.include.all.session = isess;
         lprespath = ensemble_filter(pres_paths,presfilt);
         pres_matfname = lprespath.data{prescol.path};
+        if iscell(pres_matfname), pres_matfname = pres_matfname{1}; end
       end
       
       if ~exist('pres_matfname','var') || ~exist(pres_matfname,'file')
@@ -725,7 +726,11 @@ elseif USE_SPM
   pinfo.scanner.TR = protocol.epi.tr;
   pinfo.scanner.orig_nslices = protocol.epi.nslices;
   pinfo.irun=runnum;
-  pinfo.resp_mapping = sess.resp_mapping;
+  if isfield(sess,'resp_mapping') && ~isempty(sess.resp_mapping)
+    pinfo.resp_mapping = sess.resp_mapping;
+  else
+    pinfo.resp_mapping = 1;
+  end
   pinfo.USE_SPM = 1;
   pinfo.mysql = defs.mysql;
   
@@ -1327,6 +1332,13 @@ if PERMUTE_MODEL && USE_SPM && BUILD_MODEL && ESTIMATE_MODEL
       stoprulefh = parse_fh(pp.stopping_rule_fun);
     else
       stoprulefh = '';
+    end
+    
+    % add presentation info
+    if isfield(pp,'permute_sets') && isfield(pp.permute_sets,'ref_present')
+      pfilt = struct();
+      pfilt.include.all.SUB_ID = {subid};
+      pp.pres_info = ensemble_filter(pres_info,pfilt);
     end
     
     % load estimated model

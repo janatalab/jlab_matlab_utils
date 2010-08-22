@@ -255,7 +255,7 @@ for isub=1:nsub_proc
 
     % Swap dimensions on hires images if necessary and if a swap sequence
     % is specified
-    if CORRECT_HIRES && ~isempty(protocol.hires.swapseq)
+    if CORRECT_HIRES
         
         %%%%% CORRECT HIRES
         % swap dimensions
@@ -316,13 +316,20 @@ for isub=1:nsub_proc
             r = update_report(r,msg);
             delete(outfname);
           end
-          swap_seq = protocol.hires.swapseq;
-          status = fsl_swapdims(infname,swap_seq,outfname, VERBOSE);
-          if status
-            msg = sprintf('WARNING: Failed to swap dimensions on hires image\n');
-            r = update_report(r,msg);
-          end
 
+          if ~isempty(protocol.hires.swapseq)
+            swap_seq = protocol.hires.swapseq;
+            status = fsl_swapdims(infname,swap_seq,outfname, VERBOSE);
+            if status
+              msg = sprintf('WARNING: Failed to swap dimensions on hires image\n');
+              r = update_report(r,msg);
+            end
+          else
+            if copyfile(infname,outfname)
+              error('error copying %s to %s',infname,outfname);
+            end
+          end
+          
           % add hires info to the hires struct
           outdata.data{hires_idx} = ensemble_add_data_struct_row(...
               outdata.data{hires_idx},'subject_id',subid,'session',...

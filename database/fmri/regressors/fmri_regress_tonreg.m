@@ -14,7 +14,7 @@ vals = [];
 regid = pinfo.regid;
 m = pinfo.mysql;
 gendefs = minfo.ipem;
-gendefs.ensemble.conn_id = mysql_make_conn(m.host,m.database,m.conn_id);
+gendefs.ensemble.conn_id = mysql_make_conn(m);
 gendefs.scanner = pinfo.scanner;
 
 % Get a list of the IDs to process

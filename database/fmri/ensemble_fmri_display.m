@@ -603,7 +603,7 @@ for iplot = 1:nplots
 	          outstr = [outstr '_' model_proto_name];
             end
 	        figdir = fullfile(rootpath,'figures',model_proto_name,outstr);
-            check_dir(fileparts(figdir));
+            check_dir(fileparts(figdir),0,1);
             if PERM
               figdir = [figdir '_perm'];
             end
@@ -620,7 +620,7 @@ for iplot = 1:nplots
                 outstr = sprintf('%s_%s_%s',subid,model_proto_name,xfm_type);
             end
 	        figdir = fullfile(rootpath,'figures',model_proto_name,outstr);
-            check_dir(fileparts(figdir));
+            check_dir(fileparts(figdir),0,1);
 
             if USE_PERMUTATION
               figdir = [figdir '_perm'];
@@ -844,7 +844,6 @@ for iplot = 1:nplots
         fstub = sprintf('group_%s_%s_%s',model_proto_name,conj_name,...
             tp.transform_types{tp.transform_idx});
         figdir = fullfile(conj_dir,fstub);
-        check_dir(fileparts(figdir));
       elseif ~isempty(strmatch(plot,'meanhires','exact'))
         fstub = sprintf('mean_hires_%s',tp.transform_types{tp.transform_idx});
         figdir = fullfile(rootpath,'figures',fstub);
@@ -852,8 +851,8 @@ for iplot = 1:nplots
         fstub = sprintf('group_%s_%s',model_proto_name,...
             tp.transform_types{tp.transform_idx});
         figdir = fullfile(rootpath,'figures',model_proto_name,fstub);
-        check_dir(fileparts(figdir));
       end
+      check_dir(fileparts(figdir),0,1);
       if iplot == 1, append = 0; else append = 1; end
       if PERM
         figdir = [figdir '_perm'];
