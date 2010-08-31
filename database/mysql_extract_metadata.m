@@ -39,7 +39,7 @@ function tableStruct = mysql_extract_metadata(varargin)
 % 05/01/07 PJ - enable passing in of host and database arguments for
 %               establishing connections to databases other than the
 %               default database
-% 06/15/10 PK - added script enforcing of conn_id
+% 06/15/10 PJ - added script enforcing of conn_id
 
 
 extractDataArgs = {};

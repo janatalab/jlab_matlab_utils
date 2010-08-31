@@ -14,7 +14,7 @@ function an_st = ensemble_data_by_question(data_st,params)
 
 % 02/04/07 Petr Janata
 % 10/07/08 PJ - generalized to handle other databases
-
+% 22/07/10 PJ - fixed conn_id handling
 
 an_st = ensemble_init_data_struct;
 an_st.type = 'data_by_compqid'; 
@@ -23,14 +23,21 @@ an_st.type = 'data_by_compqid';
 incol = set_var_col_const(data_st.vars);
 
 % Make sure that we have either compqid or question and subquestion ID information
-if ~isfield(incol,'compqid') & ~all(isfield(incol,{'question_id','subquestion'}))
+if ~isfield(incol,'compqid') && ~all(isfield(incol,{'question_id','subquestion'}))
   fprintf(['Did not find necessary question and subquestion or composite question ID' ...
 	' information in the input data']);
   return
 end
 
-% Extract info regarding the database we should be talking to
-try database = params.ensemble.database; catch database = 'ensemble_main'; end
+% Extract info regarding the database and connection ID we should be talking to
+param_fld_names = {'ensemble','mysql'};
+idxs = find(isfield(params,param_fld_names));
+if isempty(idxs)
+  error('%s: Do not have sufficient database connection information', mfilename)
+else
+  database = params.(param_fld_names{idxs(1)}).database;
+  conn_id = params.(param_fld_names{idxs(1)}).conn_id;
+end
 
 % Apply any specified filtering to the input data
 if isfield(params,'filt')
@@ -67,8 +74,8 @@ end
 nqid = length(compqids);
 
 % Extract the question info and attach it to the output metadata
-qinfo = mysql_extract_metadata('database', database, 'table','question', ...
-    'question_id',unique(fix(compqids)));
+qinfo = mysql_extract_metadata('table','question', ...
+    'question_id',unique(fix(compqids)),'conn_id',conn_id);
 qinfo = qinfo(ismember([qinfo.compqid],compqids));
 an_st.meta.question = qinfo;
 

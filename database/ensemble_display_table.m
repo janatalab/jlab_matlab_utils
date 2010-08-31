@@ -38,7 +38,7 @@ fid = ensemble_init_fid(params);
 % Print some header information
 try add_datestamp = params.add_datestamp; catch add_datestamp = false; end
 if add_datestamp
-  fprintf(fid,'\nTable generated on: %s\n\n', datestr(datenum(now),0));
+  fprintf(fid,'\nTable generated on: %s\n\n', datestr(now,0));
 end
 
 % Print the column names

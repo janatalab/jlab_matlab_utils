@@ -12,6 +12,7 @@ function [form_id_const, form_name_id_const_map, form_name_list] = make_form_nam
 % params is a structure with fields
 %  .ensemble - structure containing information for connecting to database.
 %              See mysql_make_conn()
+%  .mysql - same as .ensemble
 %  .write2file - whether mappings should be written to a file name
 %                form_name_defs.m
 
@@ -25,31 +26,34 @@ function [form_id_const, form_name_id_const_map, form_name_list] = make_form_nam
 %                        the ID wasn't passed into the function
 %                        (otherwise, this is a conn that we may want to use later)
 % 06/15/10 PJ - sanitized mysql_make_conn
+% 08/31/10 PJ - cleaned up handling of ensemble/mysql structures and
+%               associated connection formation
 
 close_conn = 0;
 
-if nargin && isfield(params,'ensemble')
-  try CONN_ID = params.ensemble.conn_id; catch CONN_ID = 0; close_conn = 1; end
-  try DATABASE_SCRIPT_PATH = params.paths.project_root; 
-  catch DATABASE_SCRIPT_PATH = '.'; 
-  end
-  
-  try write2file = params.write2file; catch write2file = 0; end
-  
-else
-  CONN_ID = 0;
-  DATABASE_SCRIPT_PATH = './';
-  write2file = 0;
-  close_conn = 1;
+if nargin < 1
+  error('Must pass in params structure with database information')
 end
 
-param_fld_names = {'ensemble','mysql'};
-idxs = find(isfield(params,param_fld_names));
-if isempty(idxs)
-  error('%s: Do not have sufficient database connection information', mfilename)
-else
-  CONN_ID = mysql_make_conn(params.(param_fld_names{idxs(1)}));
+params_struct_names = {'ensemble','mysql'};
+params_struct_idx = find(isfield(params,params_struct_names));
+if isempty(params_struct_idx)
+  error('%s: Do not have sufficient database connection information', mfilename);
+elseif length(params_struct_idx > 1)
+  fprintf('WARNING %s: both ensemble and mysql structures present. Using %s\n', mfilename, params_struct_names{params_struct_idx(1)});
 end
+
+try 
+  CONN_ID = params.(params_struct_names{params_struct_idx}).conn_id; 
+catch
+  CONN_ID = 0; 
+  params.(params_struct_names{params_struct_idx}).conn_id = CONN_ID;
+  close_conn = 1; 
+end
+try DATABASE_SCRIPT_PATH = params.paths.project_root; catch DATABASE_SCRIPT_PATH = '.'; end
+try write2file = params.write2file; catch write2file = 0; end
+  
+CONN_ID = mysql_make_conn(params.(params_struct_names{params_struct_idx(1)}));
 
 mysql_str = sprintf('SELECT form_name, form_id FROM form');
 [names, ids] = mysql(CONN_ID, mysql_str);

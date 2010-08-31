@@ -12,9 +12,8 @@ function [conn_id, mysql_info] = mysql_make_conn(mysql_info,database,conn_id)
 % mysql_info.user - user who to connect to the database with
 % mysql_info.passwd - the database password for the specific user
 %
-% The mysql_info structure can be obtained by calling either
-% mysql_researcher_login() or mysql_subject_login() solely with the host
-% and database information.
+% The mysql_info structure can be obtained by calling
+% mysql_login() solely with the host and database information.
 %
 % If no connection ID is given, a default ID of zero is used, and a conn_id
 % field is attached to mysql_info and returned as an optional 2nd output argument.
@@ -25,7 +24,7 @@ function [conn_id, mysql_info] = mysql_make_conn(mysql_info,database,conn_id)
 % establish a connection.  Failure to pass in any of this information will
 % no longer result in utilization of default values.
 %
-% See also: mysql_researcher_login, msyql_subject_login
+% See also: mysql_login
 
 % 01/04/07 PJ Modified to return conn_id
 % 12/19/07 PJ added checking for open connection
