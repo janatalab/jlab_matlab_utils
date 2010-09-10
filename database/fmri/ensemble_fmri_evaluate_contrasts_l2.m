@@ -41,9 +41,7 @@ end
 try curr_model = defs.model;
     model_id = curr_model.model_id;
 catch
-    msg = sprintf('Couldn''t load model from defs.model, aborting\n');
-    r = update_report(r,msg);
-    return
+    error('Couldn''t load model from defs.model, aborting');
 end
 
 try USE_SPM = defs.evaluate_contrasts_l2.USE_SPM; catch USE_SPM = 0; end
@@ -51,11 +49,9 @@ try USE_FSL = defs.evaluate_contrasts_l2.USE_FSL; catch USE_FSL = 0; end
 
 if USE_FSL && ~USE_SPM
   error('FSL not supported yet ...\n');
-  return
 elseif ~USE_FSL && ~USE_SPM
   error(['\t\tyou must specify either SPM or FSL to carry out '...
       'the analyses\n']);
-  return
 end
 
 % Set stuff up for specifying an SPM job.  Specify jobs on a subject level

@@ -79,9 +79,7 @@ end
 try curr_model = defs.model;
     model_id = curr_model.model_id;
 catch
-    msg = sprintf('Couldn''t load model from defs.model, aborting\n');
-    r = update_report(r,msg);
-    return
+    error('Couldn''t load model from defs.model, aborting');
 end
 
 % get flags

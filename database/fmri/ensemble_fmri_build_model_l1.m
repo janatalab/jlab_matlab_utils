@@ -140,9 +140,7 @@ end
 try curr_model = defs.model;
     model_id = curr_model.model_id;
 catch
-    msg = sprintf('Couldn''t load model from defs.model, aborting\n');
-    r = update_report(r,msg);
-    return
+    error('Couldn''t load model from defs.model');
 end
 
 % get flags
@@ -164,21 +162,15 @@ try intensity_cutoff = params.build_model_l1.intensity_cutoff; catch intensity_c
 
 % check flags/vars
 if ~BUILD_MODEL && ~exist('modelspec','var')
-    msg = sprintf('BUILD_MODEL not selected, but no model was specified');
-    r = update_report(r,msg);
-    return
+    error('BUILD_MODEL not selected, but no model was specified');
 end
 
 if SLICE_BASED && (~USE_FSL || USE_SPM)
-    msg = sprintf(['FSL is currently the only package supporting slice-'...
+    error(['FSL is currently the only package supporting slice-'...
         'based modeling.']);
-    r = update_report(r,msg);
-    return
 elseif SLICE_BASED
-    msg = sprintf(['Slice-based modeling is not yet supported in this '...
+    error(['Slice-based modeling is not yet supported in this '...
         'script.']);
-    r = update_report(r,msg);
-    return
 end
 
 if isfield(curr_model,'combine_runs') && isnumeric(curr_model.combine_runs)...
@@ -189,10 +181,8 @@ else
 end
 
 if (~USE_FSL && ~USE_SPM) || (USE_FSL && USE_SPM)
-  msg = sprintf(['\t\tyou must specify either SPM or FSL to carry out '...
+  error(['\t\tyou must specify either SPM or FSL to carry out '...
       'the analyses\n']);
-  r = update_report(r,msg);
-  return
 end
 
 if ESTIMATE_MODEL && ~BUILD_MODEL && USE_FSL && ~combine_runs
