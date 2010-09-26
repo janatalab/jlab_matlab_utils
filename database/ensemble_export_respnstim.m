@@ -148,7 +148,7 @@ end;
 % % check for export criteria
 if ~isfield(params,'export')
     % if no export criteria are provided, we can not process export data
-    warninig('no export params specified');
+    warning('no export params specified');
     return
 end
 
@@ -534,7 +534,10 @@ if isfield(params.export,'by_stimulus')
     end
 
     % add vars/init data cells
-    qStructs = make_valid_struct_key(num2cell(qnums));
+    %num2cell didn't seem to be appropriate here, since qnums is actually
+    % a cell array of strings. Each string is a compqid - S.T.
+    %qStructs = make_valid_struct_key(num2cell(qnums));
+    qStructs = make_valid_struct_key(qnums);
     numconst = length(outData.vars);
     for iadvar = numconst+1:numconst+length(qnums)
         outData.data{iadvar} = [];
