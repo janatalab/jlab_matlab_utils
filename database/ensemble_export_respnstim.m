@@ -133,6 +133,7 @@ function outData = ensemble_export_respnstim(inData,params)
 % given session/subject/stimulus/trial. In this way, if you sort your data
 % by stimulus, or any other variable, you can later retrieve the order of
 % presentation of stimuli by sorting by response_order.
+% PJ 24/09/10 - fixed passing of qnums to make_valid_struct_key
 
 % % initialize output data struct
 outData = ensemble_init_data_struct;
@@ -534,10 +535,12 @@ if isfield(params.export,'by_stimulus')
     end
 
     % add vars/init data cells
-    %num2cell didn't seem to be appropriate here, since qnums is actually
-    % a cell array of strings. Each string is a compqid - S.T.
-    %qStructs = make_valid_struct_key(num2cell(qnums));
-    qStructs = make_valid_struct_key(qnums);
+    if iscell(qnums)
+      tmp_qnums = qnums;
+    else
+      tmp_qnums = num2cell(qnums);
+    end
+    qStructs = make_valid_struct_key(tmp_qnums);
     numconst = length(outData.vars);
     for iadvar = numconst+1:numconst+length(qnums)
         outData.data{iadvar} = [];
