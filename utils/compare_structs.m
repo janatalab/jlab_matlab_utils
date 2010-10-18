@@ -84,17 +84,27 @@ intersect_nFields = length(fieldNames_intersect);
 %the structs must have all fieldnames in common
 if(checkSubstruct)
   if(struct1_nFields ~= intersect_nFields)
-    firstViolation = setdiff(struct1_fieldNames,struct2_fieldNames);
-    violationReason = 'missing_fields_struct2';
-    structsAreEqual = 0;
-    return
+    fieldNames_diff = setdiff(struct1_fieldNames,struct2_fieldNames);
+    for k=1:length(fieldNames_diff)
+      if isempty(strmatch(fieldNames_diff{k},ignore_fieldnames))
+        firstViolation = fieldNames_diff{k};
+        violationReason = 'missing_fields_struct2';
+        structsAreEqual = 0;
+        return
+      end
+    end
   end
 else
   if(struct1_nFields ~= intersect_nFields || struct2_nFields ~= intersect_nFields)
-    firstViolation = setxor(struct1_fieldNames,struct2_fieldNames);
-    violationReason = 'missing_fields_either_struct';
-    structsAreEqual = 0;
-    return
+    fieldNames_xor = setxor(struct1_fieldNames,struct2_fieldNames);
+    for k=1:length(fieldNames_xor)
+      if isempty(strmatch(fieldNames_xor{k},ignore_fieldnames))
+        firstViolation = fieldNames_xor{k};
+        violationReason = 'missing_fields_either_struct';
+        structsAreEqual = 0;
+        return
+      end
+    end
   end
 end
 

@@ -127,6 +127,12 @@ for isub=1:nsub_proc
   msg = sprintf('\t\tPROCESSING SUBJECT (%d/%d): %s\n', isub, nsub_proc,subid);
   r = update_report(r,msg);
 
+  if isempty([sinfo(isub).sessinfo.use_epi_runs]) || ~any([sinfo(isub).sessinfo.use_session])
+    msg = sprintf('no good runs for subject %d (%s), SKIPPING',isub,subid);
+    r = update_report(r,msg);
+    continue;
+  end
+  
   % Here we need to set up output variables and file names that have to do
   % with subject specific things but which have to accommodate multiple sessions.
   if USE_SPM
@@ -152,6 +158,12 @@ for isub=1:nsub_proc
       continue
     end
 
+    if isempty(sess.use_epi_runs)
+      msg = sprintf('\t\t\tno good runs, skipping session %d\n',isess);
+      r = update_report(r,msg);
+      continue
+    end
+    
     % Figure out which version of the experiment applies
     exp_id = sess.exp_id;
     expidx = strmatch(exp_id,{defs.expinfo.id},'exact');

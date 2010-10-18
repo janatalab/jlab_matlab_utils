@@ -298,11 +298,19 @@ outdata.data{fig_idx}.data{fcols.path} = {};
 % 
 % BEGIN SUBJECT LOOP
 % 
-
 for isub=1:nsub_proc
   subid = sinfo(isub).id;
   msg = sprintf('\t\tPROCESSING SUBJECT (%d/%d): %s\n', isub, nsub_proc,subid);
   r = update_report(r,msg);
+  
+  % sanity check
+  if ~any([sinfo(isub).sessinfo.use_session]) || ...
+          isempty([sinfo(isub).sessinfo.use_epi_runs])
+    msg = sprintf('No good runs or sessions for subject (%d/%d): %s',...
+        isub,nsub_proc,subid);
+    r = update_report(r,msg);
+    error(msg);
+  end
   
   % get paths
   spfilt.include.all.subject_id = {subid};
@@ -343,7 +351,7 @@ for isub=1:nsub_proc
   for isess = 1:nsess
     sess = sinfo(isub).sessinfo(isess);
     
-    if ~sess.use_session
+    if ~sess.use_session || isempty(sess.use_epi_runs)
       msg = sprintf('\t\t\tSkipping session %d\n', isess);
       r = update_report(r,msg);
       continue
@@ -397,10 +405,10 @@ for isub=1:nsub_proc
         r = update_report(r,msg);
       else
         % no presentation data found, skip this session
-        msg = sprintf(['presentation .mat file (%s) not found ... skipping '...
+        msg = sprintf(['presentation .mat file (%s) not found '...
             '%s session %d\n'],pres_matfname,subid,isess);
         r = update_report(r,msg);
-        continue
+        error(msg);
       end
       PL = set_pres_col_const(pres_info.vars);
 
@@ -422,10 +430,6 @@ for isub=1:nsub_proc
         % Modify values accordingly
         fmri_spec.timing.RT = protocol.epi.tr;
 	
-        % Directory to output SPM.mat file to, Delete the contents of this directory
-        unix_str = sprintf('rm %s', fullfile(model_outdir,'*'));
-        status = unix(unix_str);
-
         fmri_spec.dir = {model_outdir};
 
         % Specify a mask file
@@ -472,11 +476,6 @@ for isub=1:nsub_proc
         nruns = 0;
       end
 
-      if USE_FSL && combine_runs
-        % create cell to hold fsf structs
-        fsf_structs = cell(nruns,1);
-      end
-      
       nvols = [];
       for irun = 1:nruns
         runnum = urun(irun);
@@ -485,6 +484,8 @@ for isub=1:nsub_proc
         flist = sessdata.data{epicol.path}(lmask);
         
         % get presentation data for this run
+        % presfilt includes .subject_id and .session which are not in
+        % pres_info,but they are in physio_paths,card_epochs and gsr_epochs
         presfilt.include.all.RUN=runnum;
         pinfo = ensemble_filter(pres_info,presfilt);
         
@@ -720,6 +721,7 @@ elseif USE_SPM
     pinfo.resp_mapping = sess.resp_mapping;
   else
     pinfo.resp_mapping = 1;
+    sess.resp_mapping = 1;
   end
   pinfo.USE_SPM = 1;
   pinfo.mysql = defs.mysql;

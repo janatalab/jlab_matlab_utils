@@ -150,6 +150,12 @@ for is=1:nsub_proc
   sess = lsinfo.sessinfo;
   nsess = length(sess);
 
+  if isempty([sess.use_epi_runs]) || ~any([sess.use_session])
+    msg = sprintf('no good runs for subject %d (%s), SKIPPING',isub,subid);
+    r = update_report(r,msg);
+    continue;
+  end
+  
   % get paths
   spfilt.include.all.subject_id = {subid};
   spfilt.exclude.all.run = 0;
@@ -195,6 +201,12 @@ for is=1:nsub_proc
       r = update_report(r,msg);
     end
 
+    if isempty(sess(isess).use_epi_runs)
+      msg = sprintf('\t\t\tno good runs, skipping session %d\n',isess);
+      r = update_report(r,msg);
+      continue
+    end
+    
     % set filt criteria
     filt = spfilt;
     filt.include.all.session = isess;

@@ -19,6 +19,11 @@ function outdata = ensemble_fmri_permute_sum(indata,params)
 % models, this function will generate separate summary images for separate
 % models.
 % 
+% NOTE: make sure you've masked your permprob images with a contrast, if
+% this is in your processing stream. The permprob images output by
+% ensemble_fmri_build_model_l1 aren't necessarily masked with contrasts, as
+% these contrasts are often evalated in a later step.
+% 
 % REQUIRES
 %   indata
 %       permprob - permutation probability maps output by

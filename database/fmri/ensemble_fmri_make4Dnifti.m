@@ -261,6 +261,12 @@ for isub=1:nsub_proc
   msg = sprintf('\t\tPROCESSING SUBJECT (%d/%d): %s\n', isub, nsub_proc,subid);
   r = update_report(r,msg);
 
+  if isempty([sinfo(isub).sessinfo.use_epi_runs]) || ~any([sinfo(isub).sessinfo.use_session])
+    msg = sprintf('no good runs for subject %d (%s), SKIPPING\n',isub,subid);
+    r = update_report(r,msg);
+    continue
+  end
+  
   % get subject epis
   sfilt.include.all.subject_id = {subid};
   sdata = ensemble_filter(epidata,sfilt);

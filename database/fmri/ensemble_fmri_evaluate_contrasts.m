@@ -182,6 +182,9 @@ for isub=1:nsub_proc
         nstat = nstat+1;
         continfo = curr_model.continfo{1};
         jobs{njob}.stats{nstat}.con = add_con_job(model_fname, continfo);
+        if isempty(jobs{njob}.stats{nstat}.con.consess)
+          error('no contrasts specified! check your parameters!');
+        end
       elseif USE_FSL
         if ~exist(model_fname,'file')
           warning(['model file %s not found for subject %s, session %d, '...
