@@ -610,7 +610,7 @@ if isfield(params.export,'by_stimulus')
           if ~nUt, nUt = 1; end
           
           for in=1:nUt
-            if any(nTrials)
+            if nUt > 1
               tFilt.include.all.trial_id = uTrials(in);
               stmData = ensemble_filter(stmDataT,tFilt);
             else
