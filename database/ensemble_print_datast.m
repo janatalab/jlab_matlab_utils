@@ -55,7 +55,7 @@ function outdata = ensemble_print_datast(indata,defs)
 %% set variables
 outdata = indata;
 ic = set_var_col_const(indata.vars);
-nc = length(ic);
+nc = length(fieldnames(ic));
 
 try delim = defs.delim; catch delim = ','; end
 try print2screen = defs.print2screen; catch print2screen = 1; end
@@ -72,15 +72,14 @@ if ~isempty(name) && isfield(indata,'parent_name')
   name = sprintf('%s.%s',indata.parent_name,name);
 end
 
+parent = 0;
+fid = 0;
 if isfield(defs,'fid')
   fid = defs.fid;
-  parent = 0;
 elseif isfield(defs,'export')
   fid = ensemble_init_fid(defs.export);
   defs.fid = fid;
   parent = 1;
-else
-  fid = 0;
 end
 
 if ~fid && ~print2screen, error('no output specified'); end
@@ -113,53 +112,44 @@ if any(nested) && ~all(nested)
   msg = sprintf('%s, SKIPPING non-nested structures',msg);
   warning(msg);
   return
+elseif all(nested)
+  return
 end
 
 %% non-nested data structure, so print it out
-
-% generate output format string
-fmt = cell(nc,1);
-for k=1:nc
-  if isnumeric(indata.data{k})
-    fmt{k} = '\d';
-  else
-    fmt{k} = '\s';
-  end
-end % for k=1:nc
-fmtstr = sprintf('%s\n',cell2str(fmt,delim));
-
 % print header lines
 if ~isempty(name)
-  namestr = sprintf('----------\nSource: %s\n----------\n\n',name); end
-  if print2screen, fprintf(1,namestr); end
-  if fid, fprintf(fid,namestr); end
+  if print2screen, fprintf(1,'----------\nSource: %s\n----------\n\n',name); end
+  if fid, fprintf(fid,'----------\nSource: %s\n----------\n\n',name); end
 end
 
-varstr = sprintf('%s\n',cell2str(indata.vars,delim));
-if print2screen, fprintf(1,varstr); end
-if fid, fprintf(fid,varstr); end
+% print variable names
+varstr = cell2str(indata.vars,delim);
+if print2screen, fprintf(1,'%s\n',varstr); end
+if fid, fprintf(fid,'%s\n',varstr); end
 
 % iterate over rows, print data
 for k=1:length(indata.data{1})
   % generate data string for the given row
-  input = cell(nc,1);
+  inputstr = '';
   for l=1:nc
     data = indata.data{l}(k);
-    if isnumeric
-      input = data;
+    if isnumeric(data)
+      data = num2str(data);
     elseif iscell(data)
       if iscell(data{1})
-        input = sprintf('%dx%d cell',size(data,1),size(data,2));
+        data = sprintf('%dx%d cell',size(data,1),size(data,2));
       else
-        input = data{1};
+        data = data{1};
       end
     end
+    if l > 1, inputstr = [inputstr delim]; end
+    inputstr = [inputstr data];
   end
-  inputstr = cell2str(input,delim);
 
   % print to screen and/or file
-  if print2screen, fprintf(1,fmtstr,inputstr); end
-  if fid, fprintf(fid,fmtstr,inputstr); end
+  if print2screen, fprintf(1,'%s\n',inputstr); end
+  if fid, fprintf(fid,'%s\n',inputstr); end
 end % for k=1:length(indata.data{1
 
 %% clean up?
