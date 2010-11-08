@@ -3,6 +3,13 @@
 % FB 2008.08.29 - adapted from PJ/autobio_fmri version
 % adding directories generated to outdata.data{paths_idx}
 % FB 2009.03.11 - using ensemble_add_data_struct_row
+% PJ 2010.11.08 - added pathspecversion option
+
+try
+	pathspecversion = defs.paths.pathspecversion;
+catch
+	pathspecversion = 'v1';
+end
 
 %
 % Deal with directory paths
@@ -110,7 +117,12 @@ else
   % For the EPI files
   % Here I have to do something a bit cludgy, because my original and
   % analyzed data branch at the session level.
-  epi_indir = fullfile(sess_indir, 'orig');
+	switch pathspecversion
+		case 'v1'
+			epi_indir = fullfile(sess_indir, 'orig');
+		case 'v2'
+			epi_indir = fullfile(sess_indir, 'orig','epi');
+	end
   check_dir(epi_indir,1);
 
   if exist('paths_idx','var')

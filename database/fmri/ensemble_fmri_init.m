@@ -145,55 +145,49 @@ outdata.data{paths_idx}.data{4} = {};
 outdata.data{paths_idx}.data{5} = {};
 pathcol = set_var_col_const(outdata.data{paths_idx}.vars);
 
-if CORRECT_HIRES
-	% % hires output data structure
-	% holds paths to all hires images created by this instance of this job
-	outdata.vars = [outdata.vars 'hires'];
-	hires_idx = length(outdata.vars);
-	outdata.data{hires_idx} = ensemble_init_data_struct();
-	outdata.data{hires_idx}.type='hires';
-	outdata.data{hires_idx}.vars = {'subject_id','session',...
-		'ensemble_id','path'};
-	outdata.data{hires_idx}.data{1} = {};
-	outdata.data{hires_idx}.data{2} = [];
-	outdata.data{hires_idx}.data{3} = [];
-	outdata.data{hires_idx}.data{4} = {};
-	hscol = set_var_col_const(outdata.data{hires_idx}.vars);
-end
+% % hires output data structure
+% holds paths to all hires images created by this instance of this job
+outdata.vars = [outdata.vars 'hires'];
+hires_idx = length(outdata.vars);
+outdata.data{hires_idx} = ensemble_init_data_struct();
+outdata.data{hires_idx}.type='hires';
+outdata.data{hires_idx}.vars = {'subject_id','session',...
+	'ensemble_id','path'};
+outdata.data{hires_idx}.data{1} = {};
+outdata.data{hires_idx}.data{2} = [];
+outdata.data{hires_idx}.data{3} = [];
+outdata.data{hires_idx}.data{4} = {};
+hscol = set_var_col_const(outdata.data{hires_idx}.vars);
 
-if SYMLINK_COPLANARS
-	% % coplanar output data structure
-	% holds paths to all coplanar images symlinked by this instance of this job
-	outdata.vars = [outdata.vars 'coplanar'];
-	cop_idx = length(outdata.vars);
-	outdata.data{cop_idx} = ensemble_init_data_struct();
-	outdata.data{cop_idx}.type='coplanar';
-	outdata.data{cop_idx}.vars = {'subject_id','session',...
-		'ensemble_id','path'};
-	outdata.data{cop_idx}.data{1} = {};
-	outdata.data{cop_idx}.data{2} = [];
-	outdata.data{cop_idx}.data{3} = [];
-	outdata.data{cop_idx}.data{4} = {};
-	cocol = set_var_col_const(outdata.data{cop_idx}.vars);
-end
+% % coplanar output data structure
+% holds paths to all coplanar images symlinked by this instance of this job
+outdata.vars = [outdata.vars 'coplanar'];
+cop_idx = length(outdata.vars);
+outdata.data{cop_idx} = ensemble_init_data_struct();
+outdata.data{cop_idx}.type='coplanar';
+outdata.data{cop_idx}.vars = {'subject_id','session',...
+	'ensemble_id','path'};
+outdata.data{cop_idx}.data{1} = {};
+outdata.data{cop_idx}.data{2} = [];
+outdata.data{cop_idx}.data{3} = [];
+outdata.data{cop_idx}.data{4} = {};
+cocol = set_var_col_const(outdata.data{cop_idx}.vars);
 
-if SYMLINK_EPIS
-	% % epi output data structure
-	% holds paths to all epi images created or symlinked by this instance of
-	% this job
-	outdata.vars = [outdata.vars 'epi'];
-	epi_idx = length(outdata.vars);
-	outdata.data{epi_idx} = ensemble_init_data_struct();
-	outdata.data{epi_idx}.type='epi';
-	outdata.data{epi_idx}.vars = {'subject_id','session',...
-		'ensemble_id','run','path'};
-	outdata.data{epi_idx}.data{1} = {};
-	outdata.data{epi_idx}.data{2} = [];
-	outdata.data{epi_idx}.data{3} = [];
-	outdata.data{epi_idx}.data{4} = [];
-	outdata.data{epi_idx}.data{5} = {};
-	epcol = set_var_col_const(outdata.data{epi_idx}.vars);
-end
+% % epi output data structure
+% holds paths to all epi images created or symlinked by this instance of
+% this job
+outdata.vars = [outdata.vars 'epi'];
+epi_idx = length(outdata.vars);
+outdata.data{epi_idx} = ensemble_init_data_struct();
+outdata.data{epi_idx}.type='epi';
+outdata.data{epi_idx}.vars = {'subject_id','session',...
+	'ensemble_id','run','path'};
+outdata.data{epi_idx}.data{1} = {};
+outdata.data{epi_idx}.data{2} = [];
+outdata.data{epi_idx}.data{3} = [];
+outdata.data{epi_idx}.data{4} = [];
+outdata.data{epi_idx}.data{5} = {};
+epcol = set_var_col_const(outdata.data{epi_idx}.vars);
 
 outcols = set_var_col_const(outdata.vars);
 
@@ -236,6 +230,10 @@ for isub=1:nsub_proc
 			msg = sprintf('\t\t\tSkipping session %d\n', isess);
 			r = update_report(r,msg);
 			continue
+		end
+		
+		if ~isfield(sess,'ensemble_id')
+			sess.ensemble_id = [];
 		end
 		
 		session_stub = sess.id;
@@ -350,20 +348,82 @@ for isub=1:nsub_proc
 			
 			for icop = 1:ncop
 				coplanar_type = sess.series_mappings{series_map_idx(icop),2}{1};
-				switch coplanar_type
-					case 'coplanar_T1'
-						dirstub = protocol.coplanar_T1.dirstub;
-					case 'coplanar_T2'
-						dirstub = protocol.coplanar_T2.dirstub;
-					otherwise
-						dirstub = '';
+				try 
+					dirstub = protocol.(coplanar_type).dirstub;
+				catch
+					dirstub = '';
 				end
-				coplanar_indir = fullfile(anat_indir,sprintf('%s_%s', ...
-					sess.series_mappings{series_map_idx(icop),1}{1}, ...
-					dirstub));
-				infstub = fullfile(coplanar_indir,protocol.hires.fstub);
-				outfstub = fullfile(anat_outdir, sprintf('%s_%s', subid, coplanar_type));
+											
+				% Handle flexible coplanar directory naming scheme
+				try
+					fmt_srcs = protocol.(coplanar_type).dirstubfmt_srcs;
+				catch
+					fmt_srcs = {'series','dirstub'};
+				end
 				
+				fmtarg = {};
+				fmtpos = [];
+				for isrc = 1:length(fmt_srcs)
+					fmtpos.(fmt_srcs{isrc}) = isrc;
+					switch fmt_srcs{isrc}
+						case 'subject'
+							fmtarg{isrc} = subid;
+						case 'series'
+							fmtarg{isrc} = sess.series_mappings{series_map_idx(icop),1}{1};
+						case 'dirstub'
+							fmtarg{isrc} = dirstub;
+						otherwise
+							fmtarg{isrc} = fmt_srcs{isrc};
+					end
+				end
+
+				coplanar_indir = fullfile(anat_indir, ...
+					sprintf(protocol.(coplanar_type).dirstubfmt, fmtarg{:}));
+
+				% Handle flexible coplanar input file naming scheme
+				types = {'in','out'};
+				for itype = 1:length(types)
+					if strcmp(types{itype}, 'in')
+						try
+							fmt_srcs = protocol.(coplanar_type).inimgstubfmt_srcs;
+						catch
+							fmt_srcs = {'subject','coplanar_type'};
+						end
+					else
+						try
+							fmt_srcs = protocol.(coplanar_type).outimgstubfmt_srcs;
+						catch
+							fmt_srcs = {'subject','coplanar_type'};
+						end
+					end
+				
+					fmtarg = {};
+					fmtpos = [];
+					for isrc = 1:length(fmt_srcs)
+						fmtpos.(fmt_srcs{isrc}) = isrc;
+						switch fmt_srcs{isrc}
+							case 'subject'
+								fmtarg{isrc} = subid;
+							case 'series'
+								fmtarg{isrc} = sess.series_mappings{series_map_idx(icop),1}{1};
+							case 'session'
+								fmtarg{isrc} = session_stub;
+							case 'coplanar_type'
+								fmtarg{isrc} = coplanar_type;
+							otherwise
+								fmtarg{isrc} = fmt_srcs{isrc};
+						end
+					end
+				
+					if strcmp(types{itype}, 'in')
+						infstub = fullfile(coplanar_indir, ...
+							sprintf(protocol.(coplanar_type).inimgstubfmt, fmtarg{:}));
+					else
+						outfstub = fullfile(anat_outdir, ...
+							sprintf(protocol.(coplanar_type).outimgstubfmt, fmtarg{:}));
+					end
+				end % handling of input and output naming
+			
 				link_file = sprintf('%s.img', outfstub);
 				if exist(link_file,'file')
 					if CLOBBER
@@ -391,7 +451,7 @@ for isub=1:nsub_proc
 					r = update_report(r,msg);
 					continue
 				else
-					% add hires info to the hires struct
+					% add coplanar info to the hires struct
 					outdata.data{cop_idx} = ensemble_add_data_struct_row(...
 						outdata.data{cop_idx},'subject_id',subid,'session',...
 						isess,'ensemble_id',...
@@ -431,21 +491,34 @@ for isub=1:nsub_proc
 			% Run stubs will vary because in the original directories, they have
 			% series numbers attached.
 			runidx = sess.use_epi_runs(irun);
-			
-			% Handle flexible epi file naming scheme
-			try 
-				fmt_srcs = protocol.epi.fmt_srcs; 
-			catch
-				fmt_srcs = {'subject','epi','runidx','imgnum','ext'};
-			end
-			
+						
 			% Figure out where the source EPI images are only if we have
 			% specified actions that require them
 			if SYMLINK_EPIS
 				if ~USE_SCANNER_MOCO
-					run_stub = sprintf('%s_%s',...
-						sess.series_mappings{series_map_idx,1}{runidx},...
-						protocol.epi.dirstub);
+					if isfield(protocol.epi,'runstubfmt')
+						fmt_srcs = protocol.epi.runstubfmt_srcs;
+						fmtarg = {};
+						fmtpos = struct;
+						for isrc = 1:length(fmt_srcs)
+							fmtpos.(fmt_srcs{isrc}) = isrc;
+							switch fmt_srcs{isrc}
+								case 'subject'
+									fmtarg{isrc} = subid;
+								case 'session'
+									fmtarg{isrc} = session_stub;
+								case 'runidx'
+									fmtarg{isrc} = runidx;
+								otherwise
+									fmtarg{isrc} = fmt_srcs{isrc};
+							end
+						end
+						run_stub = sprintf(protocol.epi.runstubfmt, fmtarg{:});
+					else
+						run_stub = sprintf('%s_%s',...
+							sess.series_mappings{series_map_idx,1}{runidx},...
+							protocol.epi.dirstub);
+					end
 				else
 					run_stub = '';
 					msg = sprintf('Have not handled this option yet\n');
@@ -495,8 +568,81 @@ for isub=1:nsub_proc
 				outdata.data{paths_idx},'subject_id',subid,'session',isess,...
 				'run', runidx ,'path_type','run_outdir','path',run_outdir);
 			
-			epifstubfmt = protocol.epi.fstubfmt;
+			if ~any(ismember(fieldnames(protocol.epi),{'epifstubfmt','infstubfmt','outfstubfmt'}))
+				error('No EPI file stub format specified. Please use .infstubfmt and .outfstubfmt')
+			end
+				
+			try
+				epifstubfmt = protocol.epi.fstubfmt;
+			catch
+				epifstubfmt = '';
+			end
 			
+			if ~isfield(protocol.epi,'infstubfmt')
+				protocol.epi.infstubfmt = epifstubfmt;
+			end
+			
+			if ~isfield(protocol.epi,'outfstubfmt')
+				protocol.epi.outfstubfmt = epifstubfmt;
+			end
+			
+			clear epifstubfmt % force use of protocol.epi.infstubfmt below
+			
+			% Handle flexible epi file naming scheme
+			try 
+				infmt_srcs = protocol.epi.infmt_srcs; 
+			catch
+				infmt_srcs = {'subject','epi','runidx','imgnum','ext'};
+			end
+
+			try
+				outfmt_srcs = protocol.epi.outfmt_srcs;
+			catch
+				outfmt_srcs = {'subject','epi','runidx','imgnum'};
+			end
+			
+			infmtarg = {};
+			infmtpos = struct;
+			outfmtarg = {};
+			outfmtpos = struct;
+									
+			types = {'in','out'};
+			for itype = 1:length(types)
+				curr_type = types{itype};
+				if strcmp(curr_type,'in')
+					fmt_srcs = infmt_srcs;
+				else
+					fmt_srcs = outfmt_srcs;
+				end
+				
+				for isrc = 1:length(fmt_srcs)
+					fmtpos.(fmt_srcs{isrc}) = isrc;
+					switch fmt_srcs{isrc}
+						case 'subject'
+							fmtarg{isrc} = subid;
+						case 'session'
+							fmtarg{isrc} = session_stub;
+						case 'runidx'
+							fmtarg{isrc} = runidx;
+						case 'imgnum'
+							fmtarg{isrc} = '';
+						case 'ext'
+							fmtarg{isrc} = 'img';
+						otherwise
+							fmtarg{isrc} = fmt_srcs{isrc};
+					end
+				end
+				
+				if strcmp(curr_type,'in')
+					infmtarg = fmtarg;
+					infmtpos = fmtpos;
+				else
+					outfmtarg = fmtarg;
+					outfmtpos = fmtpos;
+				end
+				
+			end
+
 			% Only execute analyses if this run exists or if we are dealing with a
 			% model that is using residuals from a previous model, rather than the
 			% EPI data
@@ -511,10 +657,13 @@ for isub=1:nsub_proc
 					
 					ftypes = {'img','hdr'};
 					for itype = 1:length(ftypes)
-						flist = dir(fullfile(run_indir,sprintf('*.%s',ftypes{itype})));
+						outfmtarg{outfmtpos.ext} = ftypes{itype};
+						infmtarg{infmtpos.ext} = ftypes{itype};
+						flist = dir(fullfile(run_indir,sprintf(protocol.epi.infstubfmt,infmtarg{:})));
 						for ifile = 1:length(flist)
 							targ_file = fullfile(run_indir,flist(ifile).name);
-							outfname = sprintf(epifstubfmt,subid,runidx,ifile,ftypes{itype});
+							outfmtarg{outfmtpos.imgnum} = ifile;
+							outfname = sprintf(protocol.epi.outfstubfmt,outfmtarg{:});
 							link_file = fullfile(run_outdir, outfname);
 							msg = '';
 							if exist(link_file)
@@ -721,9 +870,9 @@ for isub=1:nsub_proc
 						
 						fmtarg = {};
 						fmtpos = [];
-						for isrc = 1:length(fmt_srcs)
-							fmtpos.(fmt_srcs{isrc}) = isrc;
-							switch fmt_srcs{isrc}
+						for isrc = 1:length(protocol.epi.badfmt_srcs)
+							fmtpos.(protocol.epi.ibadfmt_srcs{isrc}) = isrc;
+							switch infmt_srcs{isrc}
 								case 'subject'
 									fmtarg{isrc} = subid;
 								case 'session'
@@ -735,16 +884,16 @@ for isub=1:nsub_proc
 								case 'ext'
 									fmtarg{isrc} = 'img';
 								otherwise
-									fmtarg{isrc} = fmt_srcs{isrc};
+									fmtarg{isrc} = protocol.epi.badfmt_srcs{isrc};
 							end
 						end
 						
-						badfname = fullfile(run_outdir,sprintf(epifstubfmt,fmtarg{:}));
+						badfname = fullfile(run_outdir,sprintf(protocol.epi.badfstubfmt,fmtarg{:}));
 						% resolve any splats
 						badfname = ls(badfname);
 						
 						% Copy the original bad file
-						unix_str = sprintf('cp %s %s/%s', badfname, orig_dir, sprintf(epifstubfmt,fmtarg{:}));
+						unix_str = sprintf('cp %s %s/%s', badfname, orig_dir, sprintf(protocol.epi.badfstubfmt,fmtarg{:}));
 						unix(unix_str);
 						
 						ngood = length(goodvol_idxs);
@@ -752,7 +901,7 @@ for isub=1:nsub_proc
 						for igood = 1:ngood
 							fmtarg{fmtpos.imgnum} = goodvol_idxs(igood);
 							goodflist{igood} = ls(fullfile(run_outdir,sprintf(...
-								epifstubfmt,fmtarg{:}))); % use ls to take care of splats
+								protocol.epi.badfstubfmt,fmtarg{:}))); % use ls to take care of splats
 						end
 						
 						% Read in the header info for the good data
