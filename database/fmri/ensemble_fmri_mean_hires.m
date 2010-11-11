@@ -108,6 +108,12 @@ for isub=1:nsub_proc
     hfilt.include.all.subject_id = {subid};
     hfilt.include.all.session = isess;
     hdata = ensemble_filter(hires,hfilt);
+    if isempty(hdata.data{hicol.path}) || ...
+            ~exist(hdata.data{hicol.path}{1},'file')
+      msg = sprintf('\t\t\tno hires found for %s, SKIPPING\n',subid);
+      r = update_report(r,msg);
+      continue
+    end
     hpath = hdata.data{hicol.path}{1};
     fprintf('\t\tLoading hires image for session (%d/%d): %s\n',isess,...
         nsess,hpath);

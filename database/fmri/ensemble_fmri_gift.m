@@ -18,7 +18,9 @@ function outdata = ensemble_fmri_gift_init(indata,params)
 %   params.fmri.spm.opts.spmopts.normalise_ropts
 %   params.model
 %       .name
-%       .ncomp
+%       .ncomp - if not specified, icatb_estimate_dimension will be used to
+%           estimate ncomp. Note: this might result in a very large # of
+%           components NOTE: coded, but not tested
 %       .algorithm( must specify either a number or a name; see also
 %           icatb_icaAlgorithm)
 %       a number of parameters may be specified to override defaults for
@@ -42,9 +44,15 @@ function outdata = ensemble_fmri_gift_init(indata,params)
 % 
 % FB 2010.07.06
 
+global defaults r
+
 %% init data structs
 outdata = [];
 
+r = init_results_struct;
+
+r.type = 'fmri_anal';  % Identify the type of this reporting instance
+r.report_on_fly = 1;
 fprintf(1,'initializing data structures\n');
 
 % parse input data
@@ -144,7 +152,6 @@ try pcaType = m.pcaType; catch pcaType = 'standard'; end
 try pcaOpts = m.pcaOpts; end
 try backReconType = m.backReconType; catch backReconType = 'gica3'; end
 try scaleType = m.scaleType; catch scaleType = 2; end
-try ncomp = m.ncomp; catch error('ESTIMATE NCOMP'); end
 try spmMatFlag = m.spmMatFlag;
 catch
   if exist('modelspec','var')
@@ -152,6 +159,10 @@ catch
   else
     spmMatFlag = 'no';
   end
+end
+try ncomp = m.ncomp; end
+if ~exist('ncomp','var') || isempty(ncomp)
+  ncomp=ceil(icatb_estimate_dimension(char(epidata.data{epicol.path})));
 end
 
 switch m.algorithm

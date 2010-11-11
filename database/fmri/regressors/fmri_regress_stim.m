@@ -9,7 +9,12 @@ function [names,vals] = fmri_regress_stim(pinfo,minfo,sess)
 % also handles limits based on timespan judgments
 % NOTE: need to add a little of 
 % 
-% REQUIRES
+% REQUIRES (incomplete list)
+%   pinfo
+%   minfo
+%       .stim
+%           .(regid)
+%   sess
 % 
 % RETURNS
 %   names = cell array of six regressor names
@@ -53,6 +58,37 @@ if ~isempty(strfind(regid,'timespan'))
   [onsets,durs,resp_params] = ...
       fmri_regress_timespan(pinfo,minfo,onsets,durs,resp_params);
 end % if ~isempty(strfind(regid,'timespan
+
+% special instructions for this regid?
+if isfield(minfo,'stim') && isfield(minfo.stim,regid)
+  rinfo = minfo.stim.(regid);
+  
+  % generate dummy regressors for different levels of this stim?
+  if isfield(rinfo,'dummy_regs')
+    %%% THIS CONDITIONAL RETURNS, IF SET, NOTHING AFTER THIS WILL BE RUN 
+    sv = rinfo.dummy_regs.seg_vals;
+    ns = length(sv);
+    if isfield(rinfo.dummy_regs,'seg_names')
+      sn = rinfo.dummy_regs.seg_names;
+    else
+      sn = {};
+      for k=1:ns, sn{k} = sprintf('%s_%d',regid,k); end
+    end
+    vals = [];
+    names = {};
+    for k=1:length(sv)
+      li = ismember(resp_params,sv{k});
+      if isempty(li), continue, end
+      lval = fmri_convolve_regress(onsets(li),durs(li),ones(length(li),1),...
+          pinfo.scanner.TR,pinfo.scanner.dt,pinfo.scanner.actual_nvol);
+      vals = [vals lval];
+      names = [names sn{k}];
+    end % for k=1:length(sv)
+    
+    %%%% return!!!
+    return
+  end % if isfield(rinfo,'dummy_regs
+end % if isfield(minfo,'stim') && isfield(minfo.stim,regid
 
 % Now build the regressor
 vals = fmri_convolve_regress(onsets,durs,resp_params,pinfo.scanner.TR,...

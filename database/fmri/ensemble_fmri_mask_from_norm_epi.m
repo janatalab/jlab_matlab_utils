@@ -148,7 +148,7 @@ for isub=1:nsub_proc
   for isess = 1:nsess
     sess = sinfo(isub).sessinfo(isess);
     
-    if ~sess.use_session
+    if ~sess.use_session || isempty(sess.use_epi_runs)
       msg = sprintf('\t\t\tSkipping session %d\n', isess);
       r = update_report(r,msg);
       continue

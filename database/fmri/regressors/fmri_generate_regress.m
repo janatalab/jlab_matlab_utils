@@ -242,7 +242,7 @@ elseif USE_SPM
       condstruct(ic).name = cnames{ic};
       condstruct(ic).onset = consets{ic};
       condstruct(ic).duration = durations{ic};
-      condstruct(ic).pmod = pmods{ic};
+      if exist('pmods','var'), condstruct(ic).pmod = pmods{ic}; end
     end
     [condstruct(1:end).tmod] = deal(0);
     out.cond = condstruct;
