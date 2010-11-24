@@ -148,7 +148,23 @@ end
 % get number of subjects
 subids = unique(epidata.data{epicol.subject_id});
 nsub = length(subids);
-nsess = 1; % FIXME: parse out sessions (runs) in some way?
+
+% Figure out how many sessions we have per subject
+numsess_per_sub = nan(nsub,1);
+session_ids = cell(nsub,1);
+for isub = 1:nsub
+	submask = ismember(epidata.data{epicol.subject_id}, subids{isub});
+	session_ids{isub} = unique(epidata.data{epicol.session}(submask));
+	numsess_per_sub(isub) = length(session_ids{isub});
+end
+	
+nsess = unique(numsess_per_sub);
+if length(nsess) > 1
+	fprintf('Found variable numbers of sessions per subjects: %s\n', sprintf('%d ', nsess));
+	fprintf('Please resolve this somehow before continuing ...\n');
+	return
+end
+
 nimg = length(epidata.data{1});
 
 % analysis root
@@ -190,8 +206,7 @@ icaOpts = icatb_icaOptions([ncomp nimg],algo,'off');
 switch nreduc
   case 3
     numOfPC = repmat(ncomp,1,3);
-    numOfGs = [nsub*nsess 1 1];
-    error('need to think about num of groups 2');
+    numOfGs = [nsub*nsess nsub 1];
   case 2
     numOfPC = [ncomp ncomp 0];
     numOfGs = [nsub*nsess 1 0];
@@ -242,18 +257,29 @@ sesInfo.userInput = struct(...
 
 % files
 fprintf(1,'adding files\n');
-for k=1:nsub
-  sfilt.include.all.subject_id = subids(k);
-  sdata = ensemble_filter(epidata,sfilt);
-  sesInfo.userInput.files(k).name = char(sdata.data{epicol.path});
+k = 0;
+for isub=1:nsub
+  sfilt.include.all.subject_id = subids(isub);
+	
+	for isess = 1:nsess
+		k = k+1;
+		
+		if isnumeric(session_ids{isub})
+			sfilt.include.all.session = session_ids{isub}(isess);
+		else
+			sfilt.include.all.session = session_ids{isub}{isess};
+		end
+		sdata = ensemble_filter(epidata,sfilt);
+		
+		sesInfo.userInput.files(k).name = char(sdata.data{epicol.path});
+    sesInfo.userInput.diffTimePoints(k) = length(sdata.data{epicol.path});
   
-  sesInfo.userInput.diffTimePoints(k) = length(sdata.data{epicol.path});
-  
-  % design matrices?
-  if exist('modelspec','var')
-    mdata = ensemble_filter(modelspec,sfilt);
-    sesInfo.userInput.designMatrix(k).name = mdata.data{mcols.path}{1};
-  end % if exist('modelspec','var
+		% design matrices?
+		if exist('modelspec','var')
+			mdata = ensemble_filter(modelspec,sfilt);
+			sesInfo.userInput.designMatrix(k).name = mdata.data{mcols.path}{1};
+		end % if exist('modelspec','var
+	end % for isess
 end % for k=1:nsub
 
 fprintf(1,'other options\n');
