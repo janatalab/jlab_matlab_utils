@@ -51,8 +51,12 @@ end
 
 % hack to accomodate ensemble_jobman_parallel_wrapper passing in the hash
 % fb 2010.06.19
-if isfield(filt,'hash')
-  filt = rmfield(filt,'hash');
+% pj 2010.11.16 - extended to remove other bad variables
+bad_fields = {'hash','ensemble_jobman_interactive'};
+for ibad = 1:length(bad_fields)
+	if isfield(filt,bad_fields{ibad})
+		filt = rmfield(filt,bad_fields{ibad});
+	end
 end
 
 if isempty(data_st)

@@ -55,6 +55,11 @@ r.type = 'fmri_anal';  % Identify the type of this reporting instance
 r.report_on_fly = 1;
 fprintf(1,'initializing data structures\n');
 
+% convert to cell if necessary
+if isstruct(indata)
+	indata = {indata};
+end
+
 % parse input data
 for idata = 1:length(indata)
   if isfield(indata{idata},'type')
@@ -131,7 +136,14 @@ sesInfo = struct('userInput',struct(),'isInitialized',0);
 fprintf(1,'initializing variables\n');
 
 % model information
-m = params.model;
+if isfield(params.model, 'gift')
+	m = params.model.gift;
+	m.name = params.model.name;
+	m.model_id = params.model.model_id;
+else
+	warning('PUT YOUR GIFT PARAMETERS IN model.gift DAMMIT!')
+	m = params.model;
+end
 
 % get number of subjects
 subids = unique(epidata.data{epicol.subject_id});
@@ -233,7 +245,7 @@ fprintf(1,'adding files\n');
 for k=1:nsub
   sfilt.include.all.subject_id = subids(k);
   sdata = ensemble_filter(epidata,sfilt);
-  sesInfo.userInput.files(k).name = cell2mat(sdata.data{epicol.path});
+  sesInfo.userInput.files(k).name = char(sdata.data{epicol.path});
   
   sesInfo.userInput.diffTimePoints(k) = length(sdata.data{epicol.path});
   
@@ -255,8 +267,10 @@ end
 
 % HInfo - header for first image file, serves as mask
 V = spm_vol(epidata.data{epicol.path}{1});
-sesInfo.userInput.HInfo = struct('DIM',V.dim,'V',V,...
-    'VOX',params.fmri.spm.opts.spmopts.normalise_ropts);
+voxdims = diag(V.mat);  % potentially need to deal with issue of first voxdim, x=-1
+%sesInfo.userInput.HInfo = struct('DIM',V.dim,'V',V,...
+%    'VOX',params.fmri.spm.opts.spmopts.normalise_ropts);  % PJ - isn't this a bit dangerous? Why not pull VOX info from the volume information?
+sesInfo.userInput.HInfo = struct('DIM',V.dim,'V',V,'VOX',voxdims(1:3)); 
 
 % indices of masked-in voxels
 Y = spm_read_vols(V);

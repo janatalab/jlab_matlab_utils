@@ -244,8 +244,10 @@ for isub=1:nsub_proc
         if RESAMP
           nnorm = nnorm+1;
       
-          % Add the parameter file
-          matfname =  fullfile(anat_dir, sprintf('%s_hires_sn.mat', subid));
+          % Add the parameter file. Base the filename on the name of the
+          % hires image, assuming that _sn has been added
+					[p,f,e] = fileparts(hires_img);
+          matfname =  fullfile(anat_dir, sprintf('%s_sn.mat', f));
           jobs{njob}.spatial{nspat}.normalise{nnorm}.write.subj.matname = {matfname};
       
           % Add the name of the original hires image

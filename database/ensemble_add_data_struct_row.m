@@ -18,6 +18,9 @@ function indata = ensemble_add_data_struct_row(indata,varargin)
 % be a variable name in an ensemble data struct...
 % 
 % FB 2009.03.09
+% PJ 2010.11.08 - fixed handling of single items in that were not cell arrays and
+%                 which generated an excess number of rows by virtue of
+%                 their length.
 
 if ~is_ensemble_datastruct(indata)
   error('indata is not a valid ensemble data structure\n');
@@ -48,7 +51,10 @@ for iv = 1:2:nargin-1
 end % for ivar =
 
 % find maximum column length
-maxn = max(cellfun(@length,indata.data));
+%maxn = max(cellfun(@length,indata.data));
+dims = cellfun(@size,indata.data,'UniformOutput',false);
+dims = cat(1,dims{:});
+maxn = max(dims(:,1));
 
 % fill out short columns
 for id = 1:length(indata.data)

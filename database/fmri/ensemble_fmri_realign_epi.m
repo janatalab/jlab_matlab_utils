@@ -265,8 +265,8 @@ for is=1:nsub_proc
         jobs{njob}.spatial{1}.realign{realign_est_idx}.estimate.data{irun} = ...
           cellstr(flist);
         if RESLICE_EPI
-	      nf = size(flist,1);
-	      jobs{njob}.spatial{realign_idx}.realign{realign_wrt_idx...
+					nf = size(flist,1);
+					jobs{njob}.spatial{realign_idx}.realign{realign_wrt_idx...
             }.write.data(end+1:end+nf) = cellstr(flist);
         end
         
@@ -308,15 +308,16 @@ for is=1:nsub_proc
 
         % Format the FSL command string
         fsl_str = sprintf(['mcflirt -in %s -out %s -plots -rmsrel '...
-            '-rmsabs -report'],infname,outfname);
-	    msg = sprintf('%s\n', fsl_str);
-	    status = unix(fsl_str);  % execute the command
-	    if status
-	      msg = sprintf('UNIX command failed!!\n\n');
-	      r = update_report(r,msg);
-	      continue
-        end
-        
+					'-rmsabs -report'],infname,outfname);
+				msg = sprintf('%s\n', fsl_str);
+					
+					status = unix(fsl_str);  % execute the command
+					if status
+						msg = sprintf('UNIX command failed!!\n\n');
+						r = update_report(r,msg);
+						continue
+					end
+       
         % add flist contents to outdata
         outdata.data{epi_idx} = ensemble_add_data_struct_row(...
             outdata.data{epi_idx},'subject_id',subid,...
@@ -328,7 +329,7 @@ for is=1:nsub_proc
   end % for isess
 end % for is
 
-% Submit the SPM job stack
+% Submit the SPM job stack if we want to clobber the images
 if USE_SPM && RUN_SPM && ~isempty(jobs)
   % Save the job file so the we have a record of what we did
   tstamp = datenum(now);

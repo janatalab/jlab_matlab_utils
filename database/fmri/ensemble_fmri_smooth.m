@@ -224,13 +224,15 @@ for isub=1:nsub_proc
             outdata.data{epi_idx} = ensemble_add_data_struct_row(...
                 outdata.data{epi_idx},'subject_id',subid,'session',isess,...
                 'ensemble_id',sess.ensemble_id,'run',irun,'path',sfname);
-          end
+					end
 
-	      % Delete any previous smoothed images for good measure
-          srcdir = fileparts(flist{1});
-	      unix_str = sprintf('rm %s/sw%s*.??? >> /dev/null', srcdir, subid);
-	      unix(unix_str);
-          jobs{njob}.spatial{smooth_idx}.smooth.data = smooth_flist;
+					% Delete any previous smoothed images for good measure
+					if RUN_SPM
+						srcdir = fileparts(flist{1});
+						unix_str = sprintf('rm %s/sw%s*.??? >> /dev/null', srcdir, subid);
+						unix(unix_str);
+					end
+					jobs{njob}.spatial{smooth_idx}.smooth.data = smooth_flist;
         end % if USE_SPM
       end % if exist_epi
     end % for irun=

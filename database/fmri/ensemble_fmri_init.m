@@ -31,9 +31,20 @@ function outdata = ensemble_fmri_init(indata,defs)
 %             be used. 'subject' and 'session' can be used in isolation or
 %             chained together.
 %
+% NOTE: Nov. 9, 2011. This file is a total mess and really needs to be
+% cleaned up.  The main things that need improvement: 
+% 1) generalization of the flexible file name mapping scheme. The same
+% basic scheme could be implemented across image types and encapsulated in
+% a function rather than repeating large chunks of code.
+% 2) This function is relied on to both perform basic manipulations on raw
+% data files as well as generate file mappings for further analyses. Right
+% now, generating a basic file mapping will clobber existing headers
+%
 % 2008/08/11 FB - adapted from proc_nostalgia_fmri_fmri
 % 2010/10/27 PJ - added flexibility in run name handling, removed exp_id
 %             code that didn't do anything
+% 2010/11/08 PJ - further extensive changes to flexible naming of
+%            coplanars, epis
 
 outdata = ensemble_init_data_struct();
 
@@ -63,10 +74,14 @@ exp_inroot = defs.paths.inroot;
 exp_outroot = defs.paths.outroot;
 check_dir(exp_outroot);
 
+try RESET_HEADERS = defs.init.RESET_HEADERS; 
+catch RESET_HEADERS = 1; end
 try CORRECT_HIRES = defs.init.CORRECT_HIRES;
 catch CORRECT_HIRES = 1; end
 try SYMLINK_COPLANARS = defs.init.SYMLINK_COPLANARS;
 catch SYMLINK_COPLANARS = 1; end
+try WORRY_ABOUT_MULTIPLE_EPI_SERIES = defs.init.WORRY_ABOUT_MULTIPLE_EPI_SERIES; 
+catch WORRY_ABOUT_MULTIPLE_EPI_SERIES = 0; end
 try SYMLINK_EPIS = defs.init.SYMLINK_EPIS;
 catch SYMLINK_EPIS = 1; end
 try VOL_CHECK = defs.init.VOL_CHECK;
@@ -118,7 +133,7 @@ if (iscell(indata) && ~isempty(indata) && isfield(indata{1},'task') && ...
 end
 
 %
-% initialize output data structures
+%% initialize output data structures
 %
 
 % % subject info output data structure
@@ -192,7 +207,7 @@ epcol = set_var_col_const(outdata.data{epi_idx}.vars);
 outcols = set_var_col_const(outdata.vars);
 
 %
-% START OF THE SUBJECT LOOP
+%% START OF THE SUBJECT LOOP
 %
 
 for isub=1:nsub_proc
@@ -220,7 +235,7 @@ for isub=1:nsub_proc
 	nsess = length(sinfo(isub).sessinfo);
 	
 	%
-	% START OF THE SESSION LOOP
+	%% START OF THE SESSION LOOP
 	%
 	
 	for isess = 1:nsess
@@ -252,113 +267,244 @@ for isub=1:nsub_proc
 		
 		% Swap dimensions on hires images if necessary and if a swap sequence
 		% is specified
-		if CORRECT_HIRES
-			
-			%%%%% CORRECT HIRES
-			% swap dimensions
-			% concatenate slices, if not a 3d image
-			
-			msg = sprintf('\t\t\tSwapping dimensions on hires image\n');
+		
+		%% HIRES handling
+		
+		% Figure out whether we acquired a hires for this session
+		series_map_idx = strmatch('hires',[sess.series_mappings{:,2}],'exact');
+		if isempty(series_map_idx)
+			msg = sprintf('Did not find hires for this session\n');
 			r = update_report(r,msg);
+			have_src_hires = 0;
+		else
+			have_src_hires = 1;
+		end
+
+		% Deal with output file naming
+		if ~isfield(protocol.hires,'outfstubfmt')
+			protocol.hires.outfstubfmt = '%s_%s';
+			protocol.hires.outfstub_srcs = {'series','dirstub'};
+		end
+		fmtsrc = {};
+		for isrc = 1:length(protocol.hires.outfstubfmt_srcs)
+			switch protocol.hires.outfstubfmt_srcs{isrc}
+				case 'dirstub'
+					fmtsrc{isrc} = protocol.hires.dirstub;
+				case 'series'
+					if ~have_src_hires
+						error('Lacking series info about source hires. Naming fails')
+					end
+					fmtsrc{isrc} = sess.series_mappings{series_map_idx,1}{1};
+				case 'session'
+					fmtsrc{isrc} = session_stub;
+				case 'subject'
+					fmtsrc{isrc} = subid;
+			end
+		end
+		
+		outfstub = sprintf(protocol.hires.outfstubfmt, fmtsrc{:});
+		outfname = fullfile(anat_outdir,sprintf('%s.img', outfstub));
 			
-			series_map_idx = strmatch('hires',[sess.series_mappings{:,2}],'exact');
-			if isempty(series_map_idx)
-				msg = sprintf('Did not find hires for this session\n');
+		if have_src_hires
+			% Deal with directory naming
+			if ~isfield(protocol.hires,'dirstubfmt')
+				protocol.hires.dirstubfmt = '%s_%s';
+				protocol.hires.dirstub_srcs = {'series','dirstub'};
+			end
+			
+			fmtsrc = {};
+			for isrc = 1:length(protocol.hires.dirstubfmt_srcs)
+				curr_src = protocol.hires.dirstubfmt_srcs{isrc};
+				switch curr_src
+					case 'dirstub'
+						fmtsrc{isrc} = protocol.hires.dirstub;
+					case 'series'
+						if ~have_src_hires
+							error('Lacking series info about source hires. Naming fails')
+						end
+						fmtsrc{isrc} = sess.series_mappings{series_map_idx,1}{1};
+					case 'session'
+						fmtsrc{isrc} = session_stub;
+					case 'subject'
+						fmtsrc{isrc} = subid;
+				end
+			end
+			hires_indir = fullfile(anat_indir,sprintf(protocol.hires.dirstubfmt,fmtsrc{:}));
+
+			% Deal with input file
+			if ~isfield(protocol.hires,'infstubfmt')
+				protocol.hires.infstubfmt = '%s_%s';
+				protocol.hires.infstub_srcs = {'series','dirstub'};
+			end
+			fmtsrc = {};
+			for isrc = 1:length(protocol.hires.infstubfmt_srcs)
+				switch protocol.hires.infstubfmt_srcs{isrc}
+					case 'dirstub'
+						fmtsrc{isrc} = protocol.hires.dirstub;
+					case 'series'
+						fmtsrc{isrc} = sess.series_mappings{series_map_idx,1}{1};
+					case 'session'
+						fmtsrc{isrc} = session_stub;
+					case 'subject'
+						fmtsrc{isrc} = subid;
+				end
+			end
+			
+			infstub = sprintf(protocol.hires.infstubfmt, fmtsrc{:});
+			infname = fullfile(hires_indir,sprintf('%s.img', infstub));
+			
+			% Handle the situation where the hires file wasn't necessarily
+			% created, but instead I have a bunch of slices
+			if ~exist(infname)
+				msg = sprintf('Could not find %s\n', infname);
 				r = update_report(r,msg);
+				msg = sprintf('Checking for presence of individual slices ...\n');
+				r = update_report(r,msg);
+				dirlist = dir(fullfile(hires_indir,'0*.img'));
+				nfiles = length(dirlist);
+				if nfiles
+					msg = sprintf('Found %d files.  Concatenating into single volume...\n', nfiles);
+					r = update_report(r,msg);
+					curr_dir = pwd;
+					cd(hires_indir)
+					
+					% merge the slices into the volume
+					fsl_str = 'fslmerge -a volume 0*.img';
+					msg = sprintf('%s\n', fsl_str);
+					r = update_report(r,msg);
+					unix(fsl_str);
+					
+					% convert filetype to NIFTI_PAIR
+					fsl_str = 'fslchfiletype NIFTI_PAIR volume';
+					msg = sprintf('%s\n', fsl_str);
+					r = update_report(r,msg);
+					unix(fsl_str);
+					
+					cd(curr_dir);
+				else
+					msg = sprintf('No hires found for subject %s, session %s', subid, session_stub);
+					r = update_report(r,msg);
+					error(msg);
+				end % if nfiles
+			end % if ~exist(infname)
+			
+			if exist(outfname)
+				msg = sprintf(['existing hires in anat_outdir for subject %s, session %s ... '...
+					'clobbering\n'],subid, session_stub);
+				r = update_report(r,msg);
+				delete(outfname);
+			end
+			
+			if CORRECT_HIRES && ~isempty(protocol.hires.swapseq)
+				msg = sprintf('\t\t\tSwapping dimensions on hires image\n');
+				r = update_report(r,msg);
+				
+				swap_seq = protocol.hires.swapseq;
+				status = fsl_swapdims(infname,swap_seq,outfname, VERBOSE);
+				if status
+					msg = sprintf('WARNING: Failed to swap dimensions on hires image\n');
+					r = update_report(r,msg);
+				end
 			else
-				hires_indir = fullfile(anat_indir,sprintf('%s_%s', ...
-					sess.series_mappings{series_map_idx,1}{1}, ...
-					protocol.hires.dirstub));
-				infname = fullfile(hires_indir,[protocol.hires.fstub '.img']);
 				
-				% Handle the situation where the hires file wasn't necessarily
-				% created, but instead I have a bunch of slices
-				if ~exist(infname)
-					msg = sprintf('Could not find %s.img\n', protocol.hires.fstub);
+				unix_str = sprintf('ln -s %s %s', infname, outfname);
+				status = unix(unix_str);
+				if status
+					msg = sprintf('WARNING: Problem linking hires\n');
 					r = update_report(r,msg);
-					msg = sprintf('Checking for presence of individual slices ...\n');
-					r = update_report(r,msg);
-					dirlist = dir(fullfile(hires_indir,'0*.img'));
-					nfiles = length(dirlist);
-					if nfiles
-						msg = sprintf('Found %d files.  Concatenating into single volume...\n', nfiles);
-						r = update_report(r,msg);
-						curr_dir = pwd;
-						cd(hires_indir)
-						
-						% merge the slices into the volume
-						fsl_str = 'fslmerge -a volume 0*.img';
-						msg = sprintf('%s\n', fsl_str);
-						r = update_report(r,msg);
-						unix(fsl_str);
-						
-						% convert filetype to NIFTI_PAIR
-						fsl_str = 'fslchfiletype NIFTI_PAIR volume';
-						msg = sprintf('%s\n', fsl_str);
-						r = update_report(r,msg);
-						unix(fsl_str);
-						
-						cd(curr_dir);
-					else
-						msg = sprintf('No hires found for %s',subid);
-						r = update_report(r,msg);
-						error(msg);
-					end % if nfiles
-				end % if ~exist(infname)
-				
-				outfname = fullfile(anat_outdir,sprintf('%s_hires.img', subid));
-				if exist(outfname)
-					msg = sprintf(['existing hires in anat_outdir for subject %s, '...
-						'clobbering'],subid);
-					r = update_report(r,msg);
-					delete(outfname);
+					continue
 				end
 				
-				if ~isempty(protocol.hires.swapseq)
-					swap_seq = protocol.hires.swapseq;
-					status = fsl_swapdims(infname,swap_seq,outfname, VERBOSE);
+				if RESET_HEADERS
+					unix_str = sprintf('cp %s.hdr %s.hdr', ...
+						fullfile(hires_indir, infstub), ...
+						fullfile(anat_outdir, outfstub));
+					status = unix(unix_str);
 					if status
-						msg = sprintf('WARNING: Failed to swap dimensions on hires image\n');
+						msg = sprintf('WARNING: Problem copying hires header\n');
 						r = update_report(r,msg);
+						continue
+					end
+				end
+			end
+		end % if isempty(series_map_idx)
+		
+		% If outfname is empty, e.g. because there was no original hires
+		% collected in this session, check to see if there is nonetheless a
+		% file, e.g. symlink to hires from another session, that matches the
+		% constructor spec, so that we can populate the path
+		%		if isempty(outfname)
+		%			outfstub = sprintf(protocol.hires.outfstubfmt, fmtsrc{:});
+		%			outfname = fullfile(anat_outdir,sprintf('%s.img', outfstub));
+		%		end
+		
+		% If we're pointing to an invalid file, disregard the output filename
+		if ~isempty(outfname) && ~exist(outfname)
+			outfname = '';
+		end
+		
+		% add hires info to the hires struct
+		outdata.data{hires_idx} = ensemble_add_data_struct_row(...
+			outdata.data{hires_idx},'subject_id',subid,'session',...
+			isess,'ensemble_id',sess.ensemble_id,'path',outfname);
+		
+		%%%%% END CORRECT HIRES
+		
+		%% COPLANAR HANDLING
+		% symlink coplanar .img files from orig/ if desired
+		
+		series_map_idx = strmatch('coplanar',[sess.series_mappings{:,2}]);
+		ncop = length(series_map_idx);
+		
+		for icop = 1:ncop
+			coplanar_type = sess.series_mappings{series_map_idx(icop),2}{1};
+			try
+				dirstub = protocol.(coplanar_type).dirstub;
+			catch
+				dirstub = '';
+			end
+			
+			% Handle flexible coplanar directory naming scheme
+			try
+				fmt_srcs = protocol.(coplanar_type).dirstubfmt_srcs;
+			catch
+				fmt_srcs = {'series','dirstub'};
+			end
+			
+			fmtarg = {};
+			fmtpos = [];
+			for isrc = 1:length(fmt_srcs)
+				fmtpos.(fmt_srcs{isrc}) = isrc;
+				switch fmt_srcs{isrc}
+					case 'subject'
+						fmtarg{isrc} = subid;
+					case 'series'
+						fmtarg{isrc} = sess.series_mappings{series_map_idx(icop),1}{1};
+					case 'dirstub'
+						fmtarg{isrc} = dirstub;
+					otherwise
+						fmtarg{isrc} = fmt_srcs{isrc};
+				end
+			end
+			
+			coplanar_indir = fullfile(anat_indir, ...
+				sprintf(protocol.(coplanar_type).dirstubfmt, fmtarg{:}));
+			
+			% Handle flexible coplanar input file naming scheme
+			types = {'in','out'};
+			for itype = 1:length(types)
+				if strcmp(types{itype}, 'in')
+					try
+						fmt_srcs = protocol.(coplanar_type).inimgstubfmt_srcs;
+					catch
+						fmt_srcs = {'subject','coplanar_type'};
 					end
 				else
-					if copyfile(infname,outfname)
-						error('error copying %s to %s',infname,outfname);
+					try
+						fmt_srcs = protocol.(coplanar_type).outimgstubfmt_srcs;
+					catch
+						fmt_srcs = {'subject','coplanar_type'};
 					end
-				end
-				
-				% add hires info to the hires struct
-				outdata.data{hires_idx} = ensemble_add_data_struct_row(...
-					outdata.data{hires_idx},'subject_id',subid,'session',...
-					isess,'ensemble_id',sess.ensemble_id,'path',outfname);
-				
-			end % if isempty(series_map_idx)
-			
-			%%%%% END CORRECT HIRES
-			
-		end % if CORRECT_HIRES
-		
-		if SYMLINK_COPLANARS
-			
-			%%%%% SYMLINK_COPLANARS
-			% symlink coplanar .img files from orig/
-			
-			series_map_idx = strmatch('coplanar',[sess.series_mappings{:,2}]);
-			ncop = length(series_map_idx);
-			
-			for icop = 1:ncop
-				coplanar_type = sess.series_mappings{series_map_idx(icop),2}{1};
-				try 
-					dirstub = protocol.(coplanar_type).dirstub;
-				catch
-					dirstub = '';
-				end
-											
-				% Handle flexible coplanar directory naming scheme
-				try
-					fmt_srcs = protocol.(coplanar_type).dirstubfmt_srcs;
-				catch
-					fmt_srcs = {'series','dirstub'};
 				end
 				
 				fmtarg = {};
@@ -370,70 +516,31 @@ for isub=1:nsub_proc
 							fmtarg{isrc} = subid;
 						case 'series'
 							fmtarg{isrc} = sess.series_mappings{series_map_idx(icop),1}{1};
-						case 'dirstub'
-							fmtarg{isrc} = dirstub;
+						case 'session'
+							fmtarg{isrc} = session_stub;
+						case 'coplanar_type'
+							fmtarg{isrc} = coplanar_type;
 						otherwise
 							fmtarg{isrc} = fmt_srcs{isrc};
 					end
 				end
-
-				coplanar_indir = fullfile(anat_indir, ...
-					sprintf(protocol.(coplanar_type).dirstubfmt, fmtarg{:}));
-
-				% Handle flexible coplanar input file naming scheme
-				types = {'in','out'};
-				for itype = 1:length(types)
-					if strcmp(types{itype}, 'in')
-						try
-							fmt_srcs = protocol.(coplanar_type).inimgstubfmt_srcs;
-						catch
-							fmt_srcs = {'subject','coplanar_type'};
-						end
-					else
-						try
-							fmt_srcs = protocol.(coplanar_type).outimgstubfmt_srcs;
-						catch
-							fmt_srcs = {'subject','coplanar_type'};
-						end
-					end
 				
-					fmtarg = {};
-					fmtpos = [];
-					for isrc = 1:length(fmt_srcs)
-						fmtpos.(fmt_srcs{isrc}) = isrc;
-						switch fmt_srcs{isrc}
-							case 'subject'
-								fmtarg{isrc} = subid;
-							case 'series'
-								fmtarg{isrc} = sess.series_mappings{series_map_idx(icop),1}{1};
-							case 'session'
-								fmtarg{isrc} = session_stub;
-							case 'coplanar_type'
-								fmtarg{isrc} = coplanar_type;
-							otherwise
-								fmtarg{isrc} = fmt_srcs{isrc};
-						end
-					end
-				
-					if strcmp(types{itype}, 'in')
-						infstub = fullfile(coplanar_indir, ...
-							sprintf(protocol.(coplanar_type).inimgstubfmt, fmtarg{:}));
-					else
-						outfstub = fullfile(anat_outdir, ...
-							sprintf(protocol.(coplanar_type).outimgstubfmt, fmtarg{:}));
-					end
-				end % handling of input and output naming
+				if strcmp(types{itype}, 'in')
+					infstub = fullfile(coplanar_indir, ...
+						sprintf(protocol.(coplanar_type).inimgstubfmt, fmtarg{:}));
+				else
+					outfstub = fullfile(anat_outdir, ...
+						sprintf(protocol.(coplanar_type).outimgstubfmt, fmtarg{:}));
+				end
+			end % handling of input and output naming
 			
-				link_file = sprintf('%s.img', outfstub);
+			link_file = sprintf('%s.img', outfstub);
+			
+			if SYMLINK_COPLANARS
 				if exist(link_file,'file')
-					if CLOBBER
-						fprintf('Removing existing link ...\n');
-						unix_str = sprintf('rm %s', link_file);
-						unix(unix_str);
-					else
-						warning('link file %s exists, not clobbering',link_file);
-						continue
-					end
+					fprintf('Removing existing link for coplanar...\n');
+					unix_str = sprintf('rm %s', link_file);
+					unix(unix_str);
 				end
 				
 				unix_str = sprintf('ln -s %s.img %s', infstub, link_file);
@@ -441,7 +548,6 @@ for isub=1:nsub_proc
 				if status
 					msg = sprintf('WARNING: Problem linking coplanar\n');
 					r = update_report(r,msg);
-					continue
 				end
 				
 				unix_str = sprintf('cp %s.hdr %s.hdr', infstub, outfstub);
@@ -450,18 +556,17 @@ for isub=1:nsub_proc
 					msg = sprintf('WARNING: Problem copying coplanar header\n');
 					r = update_report(r,msg);
 					continue
-				else
-					% add coplanar info to the hires struct
-					outdata.data{cop_idx} = ensemble_add_data_struct_row(...
-						outdata.data{cop_idx},'subject_id',subid,'session',...
-						isess,'ensemble_id',...
-						sess.ensemble_id,'path',sprintf('%s.img',outfstub));
 				end
-				
-			end % for icop
-			%%%%% END SYMLINK_COPLANARS
+			end % if SYMLINK_COPLANARS
 			
-		end % if SYMLINK_COPLANARS
+			% add coplanar info to the hires struct
+			outdata.data{cop_idx} = ensemble_add_data_struct_row(...
+				outdata.data{cop_idx},'subject_id',subid,'session',...
+				isess,'ensemble_id',...
+				sess.ensemble_id,'path',sprintf('%s.img',outfstub));
+			
+		end % for icop
+		%%%%% END COPLANAR HANDLING
 		
 		% Figure out which EPI series we are dealing with
 		if USE_SCANNER_MOCO
@@ -474,7 +579,7 @@ for isub=1:nsub_proc
 			msg = sprintf('Did not find EPI directory mapping\n');
 			r = update_report(r,msg);
 			continue
-		elseif length(series_map_idx) > 1
+		elseif length(series_map_idx) > 1 && WORRY_ABOUT_MULTIPLE_EPI_SERIES
 			msg = sprintf(['Found multiple EPI series mappings (%s). Please be more' ...
 				' specific\n'], ...
 				cell2str([sess.series_mappings{series_map_idx,2}],','));
@@ -565,7 +670,7 @@ for isub=1:nsub_proc
 			check_dir(run_outdir,1);
 						
 			outdata.data{paths_idx} = ensemble_add_data_struct_row(...
-				outdata.data{paths_idx},'subject_id',subid,'session',isess,...
+				outdata.data{paths_idx},'subject_id',subid,'session', isess,...
 				'run', runidx ,'path_type','run_outdir','path',run_outdir);
 			
 			if ~any(ismember(fieldnames(protocol.epi),{'epifstubfmt','infstubfmt','outfstubfmt'}))
@@ -830,12 +935,29 @@ for isub=1:nsub_proc
 					%%%%% END VOL_CHECK
 				end % if VOL_CHECK
 				
-				% Get file lists
-				srcdir = run_outdir;  % need to use this if doing anything with
+				%% Get file lists
+				% need to use this if doing anything with
 				% SPM
-				srcstub = sprintf('%s*.img',subid);
-				flist = get_spm_flist(srcdir,srcstub);
+				if USE_SPM
+					srcdir = run_outdir;
+					if ~isfield(protocol.epi, 'outfstubfmt_short')
+						srcstub = sprintf('%s*.img',subid);
+					else
+						fmtarg = {};
+						for iarg = 1:length(protocol.epi.outfstubfmt_short_srcs)
+							switch protocol.epi.outfstubfmt_short_srcs{iarg}
+								case 'session'
+									fmtarg{iarg} = session_stub;
+								case 'subject'
+									fmtarg{iarg} = subid;
+							end
+						end
+						srcstub = sprintf(protocol.epi.outfstubfmt_short, fmtarg{:});
+					end
+					flist = get_spm_flist(srcdir,srcstub);
+				end
 				
+				%% TOUCH_HEADERS
 				if TOUCH_HEADERS
 					%%%%% TOUCH_HEADERS
 					
@@ -851,8 +973,8 @@ for isub=1:nsub_proc
 					%%%%% END TOUCH_HEADERS
 				end % if TOUCH_HEADERS
 				
-				infost = sess;
-				
+				%% REPLACE_BAD_VOLS
+				infost = sess;				
 				if REPLACE_BAD_VOLS && isfield(infost,'badvols') && ...
 						length(infost.badvols) >= runidx && ...
 						~isempty(infost.badvols{runidx})
@@ -930,6 +1052,7 @@ for isub=1:nsub_proc
 					%%%%% END REPLACE_BAD_VOLS
 				end % if REPLACE_BAD_VOLS
 				
+				%% ROATE_EPI
 				if ROTATE_EPI
 					%%%%% ROTATE_EPI
 					
@@ -1012,5 +1135,10 @@ for isub=1:nsub_proc
 				
 			end % if exist_epi
 		end % for irun
+		
+		%% Final check of paths
+		% Make sure we pick up coplanar and hires images if they are to be
+		% found, but if they weren't processed in this particular run
+		
 	end % for isess
 end % for isub=
