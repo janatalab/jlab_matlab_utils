@@ -159,10 +159,17 @@ for isub = 1:nsub
 end
 	
 nsess = unique(numsess_per_sub);
+treatMultipleSessionsAsOne = 0;
 if length(nsess) > 1
 	fprintf('Found variable numbers of sessions per subjects: %s\n', sprintf('%d ', nsess));
-	fprintf('Please resolve this somehow before continuing ...\n');
-	return
+	if isfield(m, 'treatMultipleSessionsAsOne') && m.treatMultipleSessionsAsOne
+		treatMultipleSessionsAsOne = 1;
+		nsess = 1;
+	else
+		fprintf('Please resolve this somehow before continuing ...\n');
+		fprintf('For example, set treatMultipleSessionsAsOne in model_spec to 1\n');
+		return
+	end
 end
 
 nimg = length(epidata.data{1});
@@ -291,16 +298,68 @@ else
   sesInfo.userInput.pca_opts = icatb_pca_options(pcaType,pcaOpts,'off');
 end
 
-% HInfo - header for first image file, serves as mask
+% Get image volume info. Just base this on the first file.
 V = spm_vol(epidata.data{epicol.path}{1});
+vol_dims = V.dim;
+
 voxdims = diag(V.mat);  % potentially need to deal with issue of first voxdim, x=-1
 %sesInfo.userInput.HInfo = struct('DIM',V.dim,'V',V,...
 %    'VOX',params.fmri.spm.opts.spmopts.normalise_ropts);  % PJ - isn't this a bit dangerous? Why not pull VOX info from the volume information?
-sesInfo.userInput.HInfo = struct('DIM',V.dim,'V',V,'VOX',voxdims(1:3)); 
+sesInfo.userInput.HInfo = struct('DIM',V.dim,'V',V,'VOX',voxdims(1:3));
+	
+% Deal with mask file
+if isfield(m,'maskFile') && ~isempty(m.maskFile)
+	sesInfo.userInput.maskFile = m.maskFile;
+	V = spm_vol(sesInfo.userInput.maskFile);
+	Y = spm_read_vols(V);
+	sesInfo.userInput.mask_ind = find(Y);
+else
+	fprintf('Constructing EPI mask files');
+	
+	clear sfilt
+	k = 0;
+	Ymask_all = nan([vol_dims nsub]);
+	for isub = 1:nsub
+		sfilt.include.all.subject_id = subids(isub);
+	
+		Ymask_sub = nan([vol_dims nsess]);
+		for isess = 1:nsess		
+			if isnumeric(session_ids{isub})
+				sfilt.include.all.session = session_ids{isub}(isess);
+			else
+				sfilt.include.all.session = session_ids{isub}{isess};
+			end
+			sdata = ensemble_filter(epidata,sfilt);
 
-% indices of masked-in voxels
-Y = spm_read_vols(V);
-sesInfo.userInput.mask_ind = find(Y(:) > mean(Y(:)));
+			% Get file information for this subject/session
+			V = spm_vol(char(sdata.data{epicol.path}));
+			
+			% Load the files
+			Y = spm_read_vols(V);
+			
+			% Calculate the mean
+			meanY = mean(Y(:));
+
+			thresh = meanY;  % mean/8 is SPM default
+			
+			% Create a masked volume
+			Ymask = all(Y >= thresh,4); % see which voxels are above threshold for all volumes
+			
+			% Add it to an overall stack
+			Ymask_sub(:,:,:,isess) = Ymask;
+			
+			% Save the masked volume to a file if desired
+			
+		end % for isess
+		Ymask_all(:,:,:,isub) = all(Ymask_sub,4);
+		
+	end % for isub
+	
+	% Get the global list of indices
+	sesInfo.userInput.mask_ind = find(all(Ymask_all,4));
+	
+	% Save the global mask if desired
+end
 
 % ICASSO options?
 if isfield(m,'icasso')
