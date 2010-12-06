@@ -81,11 +81,17 @@ for ia = idxs
       anSearchCrit.name = requiredData.name;
       anListIdx = ensemble_find_analysis_struct(analysis_list,anSearchCrit);
       if(isempty(anListIdx))
-	error(sprintf('Analysis %s specifies a non-existent required analysis %s',...
-		      analysis_list{ia}.name,anSearchCrit.name));
-      end
+				error(sprintf('Analysis %s specifies a non-existent required analysis %s',...
+					analysis_list{ia}.name,anSearchCrit.name));
+			end
 	
-      if(isfield(analysis_list{anListIdx},'results') )
+			numIdx = length(anListIdx);
+			if numIdx > 1
+				error('Found %d analysis structs (%s) that matched the name of the required structure: %s', ...
+					numIdx, sprintf('%d ', anListIdx), anSearchCrit.name)
+			end
+			
+			if(isfield(analysis_list{anListIdx},'results') )
 	%search for the required data type
 
 	dataList = analysis_list{anListIdx}.results;

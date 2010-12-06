@@ -54,6 +54,10 @@ r = init_results_struct;
 r.type = 'fmri_anal';  % Identify the type of this reporting instance
 r.report_on_fly = 1;
 
+if ~iscell(indata)
+	indata = {indata};
+end
+
 % Parse out the input data
 for idata = 1:length(indata)
   if isfield(indata{idata},'type')
@@ -395,7 +399,7 @@ for isub=1:nsub_proc
       end
       
       if ~exist('pres_matfname','var') || ~exist(pres_matfname,'file')
-        pres_matfname = fullfile(behav_indir,sprintf('%s_sess%d_present.mat', subid, isess));
+        pres_matfname = fullfile(behav_indir,sprintf('%s_%s_present.mat', subid, sess.id));
       end
       
       if exist(pres_matfname,'file')
@@ -546,7 +550,11 @@ for isub=1:nsub_proc
           end
 
           % Copy some scanning parameters to the run info structure
-          epifstubfmt = defs.fmri.protocol(expidx).epi.fstubfmt;
+					if isfield(defs.fmri.protocol(expidx).epi, 'infstubfmt')
+						epifstubfmt = defs.fmri.protocol(expidx).epi.infstubfmt;
+					elseif isfield(defs.fmri.protocol(expidx).epi, 'fstubfmt')
+						epifstubfmt = defs.fmri.protocol(expidx).epi.fstubfmt;
+					end
 
 % Add run specific stuff to the model structures
 if USE_FSL
@@ -620,8 +628,26 @@ if USE_FSL
     pinfo.motionparam_fname = fullfile(fp,...
         sprintf('%s_%d_run%dmc.par',subid,sess.ensemble_id,runnum));
   elseif USE_SPM_MOTPARAMS
-    pinfo.motionparam_fname = fullfile(fp,...
-        sprintf('rp_%s',sprintf(epifstubfmt,subid,runnum,1,'txt')));
+		if all(isfield(defs.fmri.protocol(expidx).epi, {'outfstubfmt','outfmt_srcs'}))
+			args = {};
+			for iarg = 1:length(defs.fmri.protocol(expidx).epi.outfmt_srcs)
+				curr_src = defs.fmri.protocol(expidx).epi.outfmt_srcs{iarg};
+				switch curr_src 
+					case 'session'
+						args{iarg} = sess.id;
+					case 'runidx'
+						args{iarg} = runnum;
+					case 'imgnum'
+						args{iarg} = 1;
+					case 'ext'
+						args{iarg} = 'txt';
+				end
+			end
+			epifstub = sprintf(defs.fmri.protocol(expidx).epi.outfstubfmt, args{:});
+		else
+			epifstub = sprintf(epifstubfmt,subid,runnum,1,'txt');
+		end
+    pinfo.motionparam_fname = fullfile(fp, sprintf('rp_%s',epifstub));
   end
   
   % fsf.ev = fmri_fsl_generate_evs(pinfo,curr_model,sess);
@@ -728,13 +754,35 @@ elseif USE_SPM
   
   ppath = fileparts(flist{1});
   if USE_SPM_MOTPARAMS
-    pinfo.motionparam_fname = fullfile(ppath,...
-        sprintf('rp_%s',sprintf(epifstubfmt,subid,runnum,1,'txt')));
+		if all(isfield(defs.fmri.protocol(expidx).epi, {'outfstubfmt','outfmt_srcs'}))
+			args = {};
+			for iarg = 1:length(defs.fmri.protocol(expidx).epi.outfmt_srcs)
+				curr_src = defs.fmri.protocol(expidx).epi.outfmt_srcs{iarg};
+				switch curr_src 
+					case 'session'
+						args{iarg} = sess.id;
+					case 'runidx'
+						args{iarg} = runnum;
+					case 'imgnum'
+						args{iarg} = 1;
+					case 'ext'
+						args{iarg} = 'txt';
+				end
+			end
+			epifstub = sprintf(defs.fmri.protocol(expidx).epi.outfstubfmt, args{:});
+		else
+			epifstub = sprintf(epifstubfmt,subid,runnum,1,'txt');
+		end
+    pinfo.motionparam_fname = fullfile(ppath, sprintf('rp_%s',epifstub));
+
   elseif USE_FSL_MOTPARAMS
     pinfo.motionparam_fname = fullfile(ppath,...
         sprintf('%s_%d_run%dmc.par',subid,sess.ensemble_id,runnum));
-  end
-  pinfo.presfname = sess.pres.logfiles{runnum,1};
+	end
+	
+	% 06Dec2010 PJ - If we've already forced loading of pinfo prior to this,
+	% do we really need to be forcing loading of the logfile name here?
+  % pinfo.presfname = sess.pres.logfiles{runnum,1};
 
   % if there is physio data for this subject/run, and if there is a physio
   % data struct that has been provided as input for this job, then extract
@@ -979,13 +1027,14 @@ end % if USE_FSL / elseif USE_SPM
         jobs{njob}.stats{stat_idx}.fmri_spec.sess = cs;
 
         % save residual file name
-        resid_fname =  fullfile(jobs{njob}.stats{stat_idx}.fmri_spec.dir{1},...
-            'ResMS.hdr');
-
-        outdata.data{res_idx} = ensemble_add_data_struct_row(outdata.data{res_idx},...
-            'subject_id',subid,'session',isess,'model_id',model_id,'run',irun,...
-            'path',resid_fname);
-        
+				if ESTIMATE_MODEL
+					resid_fname =  fullfile(jobs{njob}.stats{stat_idx}.fmri_spec.dir{1},...
+						'ResMS.hdr');
+					
+					outdata.data{res_idx} = ensemble_add_data_struct_row(outdata.data{res_idx},...
+						'subject_id',subid,'session',isess,'model_id',model_id,'run',irun,...
+						'path',resid_fname);
+				end
       elseif USE_FSL
 
         % use first run's fsf struct as template

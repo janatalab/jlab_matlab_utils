@@ -159,7 +159,7 @@ for irun = 1:nrun
   
   % Check to see if we should discard events that occur after some time from
   % run onsets
-  if ~isempty(p.max_run_dur)
+  if isfield(p,'max_run_dur') && ~isempty(p.max_run_dur)
     ri(irun).pos_events(ri(irun).pos_events > p.max_run_dur) = [];
     ri(irun).neg_events(ri(irun).neg_events > p.max_run_dur) = [];
     ri(irun).key_events(ri(irun).key_events > p.max_run_dur) = [];

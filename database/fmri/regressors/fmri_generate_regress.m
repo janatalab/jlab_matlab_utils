@@ -56,7 +56,7 @@ if isfield(minfo,'condlist') && isstruct(minfo.condlist)
 
     [lons,ldurs] = cfun(pinfo,minfo,sess);
 
-    if isempty(lons) || isempty(lons) || (length(lons) ~= length(ldurs))
+    if isempty(lons) || isempty(ldurs) || (length(lons) ~= length(ldurs))
       warning('no regressors generated for regressor %s',cond);
       continue
     end

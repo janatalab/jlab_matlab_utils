@@ -229,10 +229,13 @@ for isub=1:nsub_proc
     if ~isempty(sdata.data{1})
       outdata.data{pdata_idx}.data{pdcol.subject_id} = [...
           outdata.data{pdata_idx}.data{pdcol.subject_id}; subid];
+				
       outdata.data{pdata_idx}.data{pdcol.session} = [...
           outdata.data{pdata_idx}.data{pdcol.session}; isess];
+				
       outdata.data{pdata_idx}.data{pdcol.ensemble_id} = [...
           outdata.data{pdata_idx}.data{pdcol.ensemble_id}; sess.ensemble_id];
+				
       if isempty(outdata.data{pdata_idx}.data{pdcol.presdata}.vars)
         outdata.data{pdata_idx}.data{pdcol.presdata}.vars = sdata.vars;
         for iv = 1:length(sdata.vars)

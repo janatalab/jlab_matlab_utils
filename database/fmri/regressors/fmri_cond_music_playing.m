@@ -25,6 +25,12 @@ sids = sinfo.data{sc.EVENT_CODE};
 if isfield(minfo,'music_dur')
   % Durations are constant
   durs = ones(size(ons))*minfo.music_dur;
+elseif isfield(minfo, 'condparams') && ...
+		isfield(minfo.condparams, 'music_playing') && ...
+		isfield(minfo.condparams.music_playing, 'music_dur') ...
+		
+	durs = ones(size(ons))*minfo.condparams.music_playing.music_dur;
+	
 elseif isfield(minfo,'music_dur_db') && minfo.music_dur_db
   durs = fmri_stim_duration(pinfo,minfo,sids);
 end
