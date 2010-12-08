@@ -59,7 +59,7 @@ outdata.vars = {'subject_id','session',...
 epiCols = set_var_col_const(outdata.vars);
 
 outdata.data{epiCols.subject_id} = {};
-outdata.data{epiCols.session} = [];
+outdata.data{epiCols.session} = {};
 outdata.data{epiCols.ensemble_id} = [];
 outdata.data{epiCols.run} = [];
 outdata.data{epiCols.path} = {};
@@ -76,8 +76,9 @@ end
 nsess = length(sessidx);
 for isess = 1:nsess
 	idx = sessidx(isess);
-	sesspath = fullfile(defs.paths.outroot, subid, sinfo.sessinfo(idx).id);
-	
+	sessid = sinfo.sessinfo(idx).id;
+	sesspath = fullfile(defs.paths.outroot, subid, sessid);
+
 	try load_runs = defs.load_runs; catch load_runs = []; end
 	if isempty(load_runs)
 		load_runs = sinfo.sessinfo(idx).use_runs;
@@ -94,7 +95,7 @@ for isess = 1:nsess
 		for ifl=1:size(flist,1)
 			outdata = ensemble_add_data_struct_row(...
 				outdata,'subject_id',subid,...
-				'session',idx,...
+				'session', sessid,...
 				'ensemble_id', sinfo.sessinfo(idx).ensemble_id,...
 				'run',runidx,...
 				'path',flist(ifl,:));

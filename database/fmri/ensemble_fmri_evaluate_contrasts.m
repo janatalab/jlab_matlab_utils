@@ -150,13 +150,14 @@ for isub=1:nsub_proc
   
   for isess = 1:nsess
     sess = sinfo(isub).sessinfo(isess);
+		sessid = sess.id;
     
     if ~sess.use_session
-      msg = sprintf('\t\t\tSkipping session %d\n', isess);
+      msg = sprintf('\t\t\tSkipping session %d/%d (%s)\n', isess, nsess, sessid);
       r = update_report(r,msg);
       continue
     else
-      msg = sprintf('\n\nprocessing session %d\n\n',isess);
+      msg = sprintf('\n\nprocessing session %d/%d (%s)\n\n',isess, nsess, sessid);
       r = update_report(r,msg);
     end
     
@@ -170,7 +171,7 @@ for isub=1:nsub_proc
     end
 
     mfilt.include.all.subject_id = {subid};
-    mfilt.include.all.session = isess;
+    mfilt.include.all.session = {sessid};
     mfilt.include.all.model_id = model_id;
     mdata = ensemble_filter(modelspec,mfilt);
     
@@ -180,23 +181,27 @@ for isub=1:nsub_proc
       if USE_SPM
         spmopts = defs.fmri.spm.opts(expidx).spmopts;
         nstat = nstat+1;
-        continfo = curr_model.continfo{1};
+				if iscell(curr_model.continfo)
+					continfo = curr_model.continfo{1};
+				else
+					continfo = curr_model.continfo;
+				end
         jobs{njob}.stats{nstat}.con = add_con_job(model_fname, continfo);
         if isempty(jobs{njob}.stats{nstat}.con.consess)
           error('no contrasts specified! check your parameters!');
         end
       elseif USE_FSL
         if ~exist(model_fname,'file')
-          warning(['model file %s not found for subject %s, session %d, '...
-              'SKIPPING'],model_fname,subid,isess);
+          warning(['model file %s not found for subject %s, session %s, '...
+              'SKIPPING'],model_fname,subid, sessid);
           continue
         end
       
         model_dir = fileparts(model_fname);
         lstatsdir = fullfile(model_dir,statsdir);
         if ~exist(lstatsdir,'dir')
-          warning(['stats dir %s not found for subject %s, session %d, '...
-              'SKIPPING'],lstatsdir,subid,isess);
+          warning(['stats dir %s not found for subject %s, session %s, '...
+              'SKIPPING'],lstatsdir,subid,sessid);
           continue
         end
       
@@ -205,8 +210,8 @@ for isub=1:nsub_proc
         fslstr = 'contrast_mgr ./stats design.con';
         status = unix(fslstr);
         if status
-          warning('error evaluating contrasts for subject %s, session %d',...
-              subid,isess);
+          warning('error evaluating contrasts for subject %s, session %s',...
+              subid,sessid);
         end
       
         cd(start_dir);
@@ -214,7 +219,7 @@ for isub=1:nsub_proc
       end % if USE_SPM
       
       outdata.data{mod_idx} = ensemble_add_data_struct_row(...
-          outdata.data{mod_idx},'subject_id',subid,'session',isess,...
+          outdata.data{mod_idx},'subject_id',subid,'session',sessid,...
           'model_id',model_id,'path',model_fname);
     end % for imod=1:length(
   end % for isess

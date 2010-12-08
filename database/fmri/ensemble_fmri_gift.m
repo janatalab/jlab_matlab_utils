@@ -278,6 +278,12 @@ for isub=1:nsub
 		end
 		sdata = ensemble_filter(epidata,sfilt);
 		
+		% Handle case where we want to restrict the timepoints that are being
+		% entered into the model
+		if isfield(m, 'epoch')
+			
+		end % if isfield(m, 'epoch')
+		
 		sesInfo.userInput.files(k).name = char(sdata.data{epicol.path});
     sesInfo.userInput.diffTimePoints(k) = length(sdata.data{epicol.path});
   
