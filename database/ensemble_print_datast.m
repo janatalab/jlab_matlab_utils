@@ -134,15 +134,14 @@ for k=1:length(indata.data{1})
   inputstr = '';
   for l=1:nc
     data = indata.data{l}(k);
-    if isnumeric(data)
-      data = num2str(data);
-    elseif iscell(data)
+    if iscell(data)
       if iscell(data{1})
         data = sprintf('%dx%d cell',size(data,1),size(data,2));
       else
         data = data{1};
       end
     end
+    if isnumeric(data), data = num2str(data); end
     if l > 1, inputstr = [inputstr delim]; end
     inputstr = [inputstr data];
   end
