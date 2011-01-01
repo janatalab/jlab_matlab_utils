@@ -25,8 +25,19 @@ if ~isfield(params,'stats')
   return
 end
 
-% Extract info regarding the database we should be talking to
-try database = params.ensemble.database; catch database = 'ensemble_main'; end
+% Make sure we have a database connection
+try 
+  conn_id = params.mysql.conn_id;
+catch
+  try 
+    conn_id = params.ensemble.conn_id;
+  catch
+    conn_id = [];
+  end
+end
+if isempty(conn_id)
+  error('%s: Need to have a valid database connection ID', mfilename)
+end
 
 % Make sure we have a compqid variable
 data_st = ensemble_check_compqid(data_st);
@@ -50,7 +61,9 @@ end
 % Get a list of unique composite question IDs
 qids = fix(unique(data_st.data{incol.compqid}));
 
-qinfo = mysql_extract_metadata('database', database, 'table','question','question_id',qids);
+qinfo = mysql_extract_metadata('conn_id', conn_id, ...
+  'table','question',...
+  'question_id',qids);
 
 % Figure out which of the questions in the qinfo structure are enums and remove
 % those that are not

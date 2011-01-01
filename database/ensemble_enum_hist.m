@@ -29,6 +29,7 @@ an_st = {};
 na = 0;
 
 try conn_id = params.ensemble.conn_id; catch conn_id = []; end
+try conn_id = params.mysql.conn_id; catch conn_id = []; end
 
 % Deal with some ambiguity in how reporting structures are defined
 if isfield(params,'display') && isfield(params,'report')

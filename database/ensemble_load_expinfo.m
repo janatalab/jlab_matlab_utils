@@ -58,6 +58,7 @@ end
 
 % Initialize the output data struct
 result = ensemble_init_data_struct;
+result.type = 'experiment_info';
 
 try
   conn_id = params.ensemble.conn_id;

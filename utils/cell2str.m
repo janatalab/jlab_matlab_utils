@@ -9,6 +9,7 @@ function [s] = cell2str(cs,delim)
 %
 
 % 4/23/03 Petr Janata
+% 10/23/10 PJ - added handling of empty cell array
 
 if nargin < 2
   delim = '';
@@ -16,6 +17,10 @@ end
 
 s = '';
 nelem = length(cs);
+
+if nelem == 0
+  return
+end
 
 for ic = 1:(nelem-1)
   s = eval(['sprintf(''%s%s' delim ''',s,cs{ic})']);

@@ -42,17 +42,20 @@ end
 narg = length(inputargs);
 for iarg = 1:2:narg
   switch inputargs{iarg}
-    case 'params'
+    case {'params'}
       params = inputargs{iarg+1};
-
+      
+    case 'mysql'
+      params.mysql = inputargs{iarg+1};
+      
     case 'conn_id'
-      params.conn_id = inputargs{iarg+1};
+      params.mysql.conn_id = inputargs{iarg+1};
       
     case 'host'
-      params.host = inputargs{iarg+1};
+      params.mysql.host = inputargs{iarg+1};
     
     case 'database'
-      params.database = inputargs{iarg+1};
+      params.mysql.database = inputargs{iarg+1};
       
     case {'name','attrib_name'}
       params.attrib_names = check_cell(inputargs{iarg+1});
@@ -81,7 +84,7 @@ catch
 end
 
 if mysql_check_conn(conn_id)
-  params.conn_id = mysql_make_conn(params);
+  params.mysql.conn_id = mysql_make_conn(params.mysql);
 end
 
 % Form the SQL query
