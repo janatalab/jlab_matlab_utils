@@ -87,7 +87,8 @@ if ~type_as_var
 else
   % Get a list of unique datastruct types
   struct_types = cellfun(@getfield,data_st, ...
-      repmat({'name'},size(data_st)),'UniformOutput',false);
+      ... %repmat({'name'},size(data_st)),'UniformOutput',false); % PJ 07Dec2010 - I think this is supposed to be type instead of name
+			repmat({'type'},size(data_st)),'UniformOutput',false);
   
   unique_types = unique(struct_types);
   num_types = length(unique_types);
