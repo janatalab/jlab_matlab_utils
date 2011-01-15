@@ -41,6 +41,7 @@ if isempty(params_struct_idx)
   error('%s: Do not have sufficient database connection information', mfilename);
 elseif length(params_struct_idx > 1)
   fprintf('WARNING %s: both ensemble and mysql structures present. Using %s\n', mfilename, params_struct_names{params_struct_idx(1)});
+  params_struct_idx = params_struct_idx(1);
 end
 
 try 
