@@ -55,7 +55,7 @@ function outdata = ensemble_print_datast(indata,defs)
 %% set variables
 outdata = indata;
 ic = set_var_col_const(indata.vars);
-nc = length(fieldnames(ic));
+nc = length(indata.vars);
 
 try delim = defs.delim; catch delim = ','; end
 try print2screen = defs.print2screen; catch print2screen = 1; end
