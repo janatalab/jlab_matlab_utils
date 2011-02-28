@@ -24,12 +24,15 @@ function an_st = ensemble_enum_hist(data_st,params)
 % 04/17/09 PJ - added output of plotted data to comma-separated files.
 % 05/11/10 PJ - Fixed bug where enum_mask was being checked instead of
 %               qinfo_enum_mask, leading to erroneous question skipping.
+% 02/15/11 PJ - Fixed conn_id checking
 
 an_st = {};
 na = 0;
 
 try conn_id = params.ensemble.conn_id; catch conn_id = []; end
-try conn_id = params.mysql.conn_id; catch conn_id = []; end
+if isempty(conn_id)
+  try conn_id = params.mysql.conn_id; catch conn_id = []; end
+end
 
 % Deal with some ambiguity in how reporting structures are defined
 if isfield(params,'display') && isfield(params,'report')
