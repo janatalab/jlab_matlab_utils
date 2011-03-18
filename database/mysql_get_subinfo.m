@@ -36,23 +36,37 @@ for iarg = 1:2:narg
   end
 end
 
-if ~exist('params','var') || ~isfield(params,'conn_id') || ...
-        ~isfield(params,'user') || ~isfield(params,'passwd') || ...
-        ~isfield(params,'host') || ~isfield(params,'database')
-  error('%s: Insufficient information for establishing database connection', mfilename)
+try
+	conn_id = params.conn_id;
+catch ME
+	conn_id = [];
+end
+
+try 
+	enc_key = params.enc_key;
+catch ME
+	enc_key = '';
 end
 
 % Try to get encryption key if this hasn't been obtained yet
-params.login_type = 'researcher';
-params = mysql_login(params);
-
-% Check for connection to database
-tmp_conn_id = false;
-if mysql(params.conn_id,'status')
-  tmp_conn_id = true;
+if isempty(conn_id) || isempty(enc_key)
+	if ~exist('params','var') || ~isfield(params,'conn_id') || ...
+			~isfield(params,'user') || ~isfield(params,'passwd') || ...
+			~isfield(params,'host') || ~isfield(params,'database')
+		error('%s: Insufficient information for establishing database connection', mfilename)
+	end
+	
+	params.login_type = 'researcher';
+	params = mysql_login(params);
+	
+	% Check for connection to database
+	tmp_conn_id = false;
+	if mysql(params.conn_id,'status')
+		tmp_conn_id = true;
+	end
+	
+	conn_id = mysql_make_conn(params);
 end
-
-conn_id = mysql_make_conn(params);
 
 subinfo.type = 'subject_info';
 
@@ -66,7 +80,7 @@ enc_fields = encrypted_fields.subject;
   'conn_id',conn_id);
 
 % Close the database connection if it was temporary
-if tmp_conn_id
+if exist('tmp_conn_id','var')
   mysql(conn_id,'close');
 end
 

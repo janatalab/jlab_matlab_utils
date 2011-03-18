@@ -70,6 +70,11 @@ for ipage = 1:numPages
 		try SO.cbar = imgInfo(pageImgIdxs(iplot)).cbar; catch SO.cbar = []; end
 		try SO.contours = imgInfo(pageImgIdxs(iplot)).contours; catch SO.contours = []; end
 		try SO.ticks = imgInfo(pageImgIdxs(iplot)).ticks; catch SO.ticks.show = 0; end		
+    try SO.white_background = imgInfo(pageImgIdxs(iplot)).white_background; catch SO.white_background = 0; end
+   
+    if SO.white_background
+      SO.labels.colour = [0 0 0];
+    end
     
 		% Specify the plot area
 		rowidx = ceil(iplot/numCol);

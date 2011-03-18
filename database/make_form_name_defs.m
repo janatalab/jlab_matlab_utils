@@ -35,7 +35,7 @@ if nargin < 1
   error('Must pass in params structure with database information')
 end
 
-params_struct_names = {'ensemble','mysql'};
+params_struct_names = {'mysql','ensemble'};
 params_struct_idx = find(isfield(params,params_struct_names));
 if isempty(params_struct_idx)
   error('%s: Do not have sufficient database connection information', mfilename);

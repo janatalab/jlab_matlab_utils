@@ -9,6 +9,7 @@ na = length(an);
 names = cell(na,1);
 for ia = 1:na
 	names{ia} = an{ia}.name;
+	fprintf('%d: %s\n', ia, names{ia});
 end
 
 return

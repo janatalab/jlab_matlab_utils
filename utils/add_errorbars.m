@@ -11,6 +11,7 @@ function add_errorbars(h,errordata,linecolor,orientation)
 % 11/03/06 PJ -- Added handling of Matlab 7 barseries (hggroup) objects
 % 11/11/06 PJ -- Fixed handling of single barseries object
 % 05/06/07 PJ -- Added support for horizontal bargraphs
+% 03/09/11 PJ -- added auto-dection of bar orientation
 
 ncond = length(h);
 
@@ -20,6 +21,9 @@ end
 
 if nargin < 4
   orientation = 'vertical';
+	if strcmp(get(h(1),'Horizontal'),'on')
+		orientation = 'horizontal';
+	end
 end
 
 obj_type =  get(h(1),'Type');

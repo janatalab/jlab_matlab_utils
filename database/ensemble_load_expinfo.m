@@ -42,9 +42,9 @@ function result = ensemble_load_expinfo(indata,params)
 
 if( isstr( indata ) && strcmp( indata, 'getDefaultParams' ) )
 	result.ensemble.experiment_title = 'use local settings';
-	result.ensemble.host = 'use local settings';
-	result.ensemble.database = 'use local settings';
-	result.ensemble.conn_id = -1;
+	result.mysql.host = 'use local settings';
+	result.mysql.database = 'use local settings';
+	result.mysql.conn_id = -1;
 	return;
 end
 
@@ -60,15 +60,11 @@ end
 result = ensemble_init_data_struct;
 result.type = 'experiment_info';
 
-try
-  conn_id = params.ensemble.conn_id;
-catch
-  params.ensemble.conn_id = 1;
-  tmp_conn_id = 1;
-end
-
 % Check to see if we have a valid connection
-conn_id = mysql_make_conn(params.ensemble);
+if ~isfield(params,'mysql')
+	params.mysql = params.ensemble;
+end
+conn_id = mysql_make_conn(params.mysql);
 
 expname = params.ensemble.experiment_title;
 
@@ -186,8 +182,21 @@ result.data{end+1} = sessInfo;
 % Pull the subject information for all of the subjects
 fprintf('Loading subject information ...\n');
 if ~isfield(params.ensemble,'enc_key')
-  params.ensemble.enc_key = '';
+	if isfield(params, 'mysql') && isfield(params.mysql, 'enc_key')
+		params.ensemble.enc_key = params.mysql.enc_key;
+	else
+		params.ensemble.enc_key = '';
+	end
 end
+
+if ~isfield(params.ensemble, 'conn_id') || isempty(params.ensemble.conn_id)
+	try 
+		params.ensemble.conn_id = params.mysql.conn_id;
+	catch ME
+		fprintf('Failed to locate connection ID');
+	end
+end
+
 subInfo = mysql_get_subinfo('subject_id', sessInfo.data{sess_colNames.subject_id}, ...
   'ensemble', params.ensemble);
 subInfo.name = 'subject_info';
@@ -215,6 +224,4 @@ catch
   warning('Unable to run ensemble_summary_subject_stats');
 end
 
-if(exist('tmp_conn_id','var'))
-  mysql(conn_id,'close');
-end
+
