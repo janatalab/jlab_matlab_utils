@@ -93,11 +93,11 @@ outdata.data{pdata_idx} = ensemble_init_data_struct();
 outdata.data{pdata_idx}.type = 'presentation_data';
 outdata.data{pdata_idx}.vars = {'subject_id','session',...
     'ensemble_id','presdata'};
-outdata.data{pdata_idx}.data{1} = {};
-outdata.data{pdata_idx}.data{2} = [];
-outdata.data{pdata_idx}.data{3} = [];
-outdata.data{pdata_idx}.data{4} = ensemble_init_data_struct();
 pdcol = set_var_col_const(outdata.data{pdata_idx}.vars);
+outdata.data{pdata_idx}.data{pdcol.subject_id} = {};
+outdata.data{pdata_idx}.data{pdcol.session} = {};
+outdata.data{pdata_idx}.data{pdcol.ensemble_id} = [];
+outdata.data{pdata_idx}.data{pdcol.presdata} = ensemble_init_data_struct();
 
 if WRITE2FILE
   outdata.vars = [outdata.vars 'pres_paths'];
@@ -106,11 +106,11 @@ if WRITE2FILE
   outdata.data{ppaths_idx}.type='pres_paths';
   outdata.data{ppaths_idx}.vars = {'subject_id','session',...
       'ensemble_id','path'};
-  outdata.data{ppaths_idx}.data{1} = {};
-  outdata.data{ppaths_idx}.data{2} = [];
-  outdata.data{ppaths_idx}.data{3} = [];
-  outdata.data{ppaths_idx}.data{4} = {};
   ppcol = set_var_col_const(outdata.data{ppaths_idx}.vars);
+  outdata.data{ppaths_idx}.data{ppcol.subject_id} = {};
+  outdata.data{ppaths_idx}.data{ppcol.session} = {};
+  outdata.data{ppaths_idx}.data{ppcol.ensemble_id} = [];
+  outdata.data{ppaths_idx}.data{ppcol.path} = {};
 end
 
 ecdparams.outDataName = 'presentation_data';
@@ -136,12 +136,12 @@ for isub=1:nsub_proc
     sess = sinfo(isub).sessinfo(isess);
     
     if isfield(sess,'use_session') && ~sess.use_session
-      msg = sprintf('\t\t\tSkipping session %d\n', isess);
+      msg = sprintf('\t\t\tSkipping %s\n',sess.id);
       r = update_report(r,msg);
       continue
     elseif ~isfield(sess,'pres') || ~isstruct(sess.pres)
-      msg = sprintf(['\t\t\tNo Presentation sinfo for session %d, '...
-          'SKIPPING!\n'],isess);
+      msg = sprintf(['\t\t\tNo Presentation sinfo for %s, '...
+          'SKIPPING!\n'],sess.id);
       r = update_report(r,msg);
       continue
     end
@@ -156,7 +156,7 @@ for isub=1:nsub_proc
     % get behav_indir/outdir
     sfilt = struct();
     sfilt.include.all.subject_id = {subid};
-    sfilt.include.all.session = isess;
+    sfilt.include.all.session = {sess.id};
     spaths = ensemble_filter(pathdata,sfilt);
     
     indx = strmatch('behav_indir',spaths.data{pcol.path_type});
@@ -227,11 +227,12 @@ for isub=1:nsub_proc
     
     % concatenate sdata with outdata
     if ~isempty(sdata.data{1})
+      
       outdata.data{pdata_idx}.data{pdcol.subject_id} = [...
           outdata.data{pdata_idx}.data{pdcol.subject_id}; subid];
 				
       outdata.data{pdata_idx}.data{pdcol.session} = [...
-          outdata.data{pdata_idx}.data{pdcol.session}; isess];
+          outdata.data{pdata_idx}.data{pdcol.session}; sess.id];
 				
       outdata.data{pdata_idx}.data{pdcol.ensemble_id} = [...
           outdata.data{pdata_idx}.data{pdcol.ensemble_id}; sess.ensemble_id];
@@ -254,23 +255,19 @@ for isub=1:nsub_proc
     
     % write out sdata
     if WRITE2FILE
-      mat_fname = fullfile(behav_outdir,sprintf('%s_sess%d_present.mat',...
-          subid,isess));
+      mat_fname = fullfile(behav_outdir,sprintf('%s_%s_present.mat',...
+          subid,sess.id));
       save(mat_fname,'-struct','sdata');
-      outdata.data{ppaths_idx}.data{ppcol.subject_id} = [...
-          outdata.data{ppaths_idx}.data{ppcol.subject_id}; subid];
-      outdata.data{ppaths_idx}.data{ppcol.session} = [...
-          outdata.data{ppaths_idx}.data{ppcol.session}; isess];
-      outdata.data{ppaths_idx}.data{ppcol.ensemble_id} = [...
-          outdata.data{ppaths_idx}.data{ppcol.ensemble_id}; sess.ensemble_id];
-      outdata.data{ppaths_idx}.data{ppcol.path} = [...
-          outdata.data{ppaths_idx}.data{ppcol.path}; mat_fname];
+      
+      outdata.data{ppaths_idx} = ensemble_add_data_struct_row(...
+          outdata.data{ppaths_idx},'subject_id',subid,'session',sess.id,...
+          'ensemble_id',sess.ensemble_id,'path',mat_fname);
       
       xdefs = defs.present.export_params;
       xdefs.export.fname = fullfile(anal_outdir,...
-          sprintf('%s_sess%d_present.csv',subid,isess));
+          sprintf('%s_%s_present.csv',subid,sess.id));
       xdefs.sas.fname = fullfile(anal_outdir,...
-          sprintf('%s_sess%d_present.sas',subid,isess));
+          sprintf('%s_%s_present.sas',subid,sess.id));
       
       ensemble_export_sastxt(sdata,xdefs);
     end

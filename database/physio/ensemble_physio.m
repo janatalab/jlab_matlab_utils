@@ -114,7 +114,7 @@ outdata.data{ppaths_idx}.type='physio_paths';
 outdata.data{ppaths_idx}.vars = {'subject_id','session',...
     'ensemble_id','run','path','preprocessed'};
 outdata.data{ppaths_idx}.data{1} = {};
-outdata.data{ppaths_idx}.data{2} = [];
+outdata.data{ppaths_idx}.data{2} = {};
 outdata.data{ppaths_idx}.data{3} = [];
 outdata.data{ppaths_idx}.data{4} = [];
 outdata.data{ppaths_idx}.data{5} = {};
@@ -149,18 +149,17 @@ for isub=1:nsub_proc
     sess = sinfo(isub).sessinfo(isess);
     
     if isfield(sess,'use_session') && ~sess.use_session
-      msg = sprintf('\t\t\tSkipping session %d\n', isess);
+      msg = sprintf('\t\t\tSkipping session %s\n',sess.id);
       r = update_report(r,msg);
       continue
     elseif ~isfield(sess,'physio') || ~isstruct(sess.physio)
-      msg = sprintf(['\t\t\tNo Physio sinfo for session %d, '...
-          'SKIPPING!\n'],isess);
+      msg = sprintf(['\t\t\tNo Physio sinfo for session %s, '...
+          'SKIPPING!\n'],sess.id);
       r = update_report(r,msg);
       continue
     end
     
-    session_stub = sess.id;
-    r = update_report(r,sprintf('\t\t\t%s\n', session_stub));
+    r = update_report(r,sprintf('\t\t\t%s\n', sess.id));
     
     % init session vars
     physio = sinfo(isub).sessinfo(isess).physio;
@@ -186,7 +185,7 @@ for isub=1:nsub_proc
     % get physio_indir/outdir, behav_outdir
     sfilt = struct();
     sfilt.include.all.subject_id = {subid};
-    sfilt.include.all.session = isess;
+    sfilt.include.all.session = {sess.id};
     spaths = ensemble_filter(pathdata,sfilt);
     
     indx = strmatch('physio_indir',spaths.data{pcol.path_type});
@@ -241,7 +240,7 @@ for isub=1:nsub_proc
         lparams.run=irun;
         lparams.link2pres = rparams.link2pres;
         lparams.link2pres.presfname = fullfile(behav_outdir,...
-            sprintf('%s_sess%d_present.mat',subid,isess));
+            sprintf('%s_%s_present.mat',subid,sess.id));
         lparams.link2pres.filt.include.any.RUN = irun;
       end
       if isfield(rparams,'signal_bounds')
@@ -275,12 +274,12 @@ for isub=1:nsub_proc
           ri.meta.srate,'subject',subid,'session',sess.ensemble_id,...
           'chanlocs',chanlocs,'nbchan',nchans,'pnts',npts,'xmin',xmin);
       
-      set_fname = sprintf('%s_sess%d_run%d_physio.set',subid,isess,irun);
+      set_fname = sprintf('%s_%s_run%d_physio.set',subid,sess.id,irun);
       pop_saveset(EEG,'filename',set_fname,'filepath',physio_outdir);
       set_fpn = fullfile(physio_outdir,set_fname);
 
       outdata.data{ppaths_idx} = ensemble_add_data_struct_row(...
-          outdata.data{ppaths_idx},'subject_id',subid,'session',isess,...
+          outdata.data{ppaths_idx},'subject_id',subid,'session',sess.id,...
           'ensemble_id',sess.ensemble_id,'run',irun,'path',set_fpn,...
           'preprocessed',0);
       
@@ -297,7 +296,7 @@ for isub=1:nsub_proc
         if isfield(defs,'figs') && isfield(defs.figs,'write2file') && ...
                 defs.figs.write2file
             figfname = fullfile(physio_outdir,sprintf(...
-                '%s_sess%d_run%d_physioSigCheck.ps',subid,isess,irun));
+                '%s_%s_run%d_physioSigCheck.ps',subid,sess.id,irun));
             print(figfname,defs.figs.printargs{:});
         end
       end % if SIG_CHECK
@@ -342,12 +341,12 @@ for isub=1:nsub_proc
           end % if isfield(lparams.channels(ic
         end % for ic=1:length(lparams.ch
 
-        set_fname = sprintf('%s_sess%d_run%d_physio_filtered.set',subid,isess,irun);
+        set_fname = sprintf('%s_%s_run%d_physio_filtered.set',subid,sess.id,irun);
         pop_saveset(EEGf,'filename',set_fname,'filepath',physio_outdir);
         set_fpn = fullfile(physio_outdir,set_fname);
 
         outdata.data{ppaths_idx} = ensemble_add_data_struct_row(...
-            outdata.data{ppaths_idx},'subject_id',subid,'session',isess,...
+            outdata.data{ppaths_idx},'subject_id',subid,'session',sess.id,...
             'ensemble_id',sess.ensemble_id,'run',irun,'path',set_fpn,...
             'preprocessed',1);
         
@@ -364,7 +363,7 @@ for isub=1:nsub_proc
           if isfield(defs,'figs') && isfield(defs.figs,'write2file') && ...
                   defs.figs.write2file
               figfname = fullfile(physio_outdir,sprintf(...
-                  '%s_sess%d_run%d_physioFilteredSigCheck.ps',subid,isess,irun));
+                  '%s_%s_run%d_physioFilteredSigCheck.ps',subid,sess.id,irun));
               print(figfname,defs.figs.printargs{:});
           end
         end % if SIG_CHECK

@@ -524,24 +524,24 @@ if EXTRACT_DATA
       sess = sinfo(isub).sessinfo(isess);
     
       if isfield(sess,'use_session') && ~sess.use_session
-        msg = sprintf('\t\t\tSkipping session %d\n', isess);
+        msg = sprintf('\t\t\tSkipping session %s\n',sess.id);
         r = update_report(r,msg);
         continue
       elseif ~isfield(sess,'physio') || ~isstruct(sess.physio)
-        msg = sprintf(['\t\t\tNo Physio sinfo for session %d, '...
-            'SKIPPING!\n'],isess);
+        msg = sprintf(['\t\t\tNo Physio sinfo for session %s, '...
+            'SKIPPING!\n'],sess.id);
         r = update_report(r,msg);
         continue
       end
 
       pfilt.include.all.subject_id = {subid};
-      pfilt.include.all.session = isess;
+      pfilt.include.all.session = {sess.id};
       pdata = ensemble_filter(pres_paths,pfilt);
     
       if isempty(pdata.data{prescol.path}) || ...
               ~exist(pdata.data{prescol.path}{1},'file')
-        error('can not find presentation data for subject %s, session %d',...
-            subid,isess);
+        error('can not find presentation data for subject %s, session %s',...
+            subid,sess.id);
       else
         presdata = load(pdata.data{prescol.path}{1});
         presdcol = set_var_col_const(presdata.vars);
@@ -582,8 +582,8 @@ if EXTRACT_DATA
         lphys = ensemble_filter(physio_paths,lphysfilt);
         if isempty(lphys.data{physcol.path}) || ...
                 ~exist(lphys.data{physcol.path}{1},'file')
-          warning('no physio file found for %s, sess %d, run %d\n',...
-              subid,isess,rnum);
+          warning('no physio file found for %s, %s, run %d\n',...
+              subid,sess.id,rnum);
           continue
         end
       
@@ -610,14 +610,14 @@ if EXTRACT_DATA
             esdata = ensemble_filter(lpres,esf);
             if isempty(esdata.data{presdcol.EVENT_TYPE})
               warning(['epoch start data missing, subject %s, session '...
-                  '%d, run %d\n'],subid,isess,rnum);
+                  '%s, run %d\n'],subid,sess.id,rnum);
               continue
             end
             estimes = esdata.data{presdcol.RUN_REL_TIME}/1000;
             ns = length(estimes);
           else
             warning(['no epoch start information, skipping run %d, sub '...
-                '%s, session %d\n'],rnum,subid,isess);
+                '%s, session %s\n'],rnum,subid,sess.id);
             continue
           end
         
@@ -638,15 +638,15 @@ if EXTRACT_DATA
             eedata = ensemble_filter(lpres,eef);
             if isempty(eedata.data{presdcol.EVENT_TYPE})
               warning(['epoch end data missing, subject %s, session '...
-                  '%d, run %d\n'],subid,isess,rnum);
+                  '%s, run %d\n'],subid,sess.id,rnum);
               continue
             end
             eetimes = eedata.data{presdcol.RUN_REL_TIME}/1000;
             ne = length(eetimes);
           else
             warning(['no epoch end information provided for sub %s, sess '...
-                '%d, run %d, calculating as minimum distance between '...
-                'epoch onsets\n'],subid,isess,rnum);
+                '%s, run %d, calculating as minimum distance between '...
+                'epoch onsets\n'],subid,sess.id,rnum);
             etime = min(diff(estimes));
           end
           
@@ -657,7 +657,7 @@ if EXTRACT_DATA
           if ~exist('etime','var') && ne ~= ns || any (estimes > eetimes)
             % end time not specified, 
             warning(['outlier starting or ending events, or events not '...
-                'aligned, sub %s, session %d, run %d\n'],subid,isess,rnum);
+                'aligned, sub %s, session %s, run %d\n'],subid,sess.id,rnum);
             continue
             % FIXME: should have some logic here to at least attempt to
             % reconcile estimes and eetimes ... rules such as "no end time
@@ -703,8 +703,8 @@ if EXTRACT_DATA
           EEG = pop_epoch(EEG,[],[-baseline etime],'eventindices',1:ns);
 
           if EEG.trials ~= ns
-            error('one or more epochs was lost, sub %s, sess %d, run %d\n',...
-                subid,isess,rnum);
+            error('one or more epochs was lost, sub %s, %s, run %d\n',...
+                subid,sess.id,rnum);
           end
           
         else
@@ -729,7 +729,7 @@ if EXTRACT_DATA
           cidx = strmatch(c,{EEG.chanlocs.labels});
           if isempty(cidx)
             warning(['no channel label found for %s, skipping for '...
-                'sub %s, session %d, run %d'],c,subid,isess,rnum);
+                'sub %s, session %s, run %d'],c,subid,sess.id,rnum);
             continue
           end
 
@@ -775,8 +775,8 @@ if EXTRACT_DATA
                   if m == 0, figure(); end
                   subplot(ep_per_fig,1,m+1);
                   plot(pksig);
-                  title(sprintf(['%s, sess %d, run %d, signal %s, epoch'...
-                      ' %d'],subid,isess,rnum,c,iep));
+                  title(sprintf(['%s, %s, run %d, signal %s, epoch'...
+                      ' %d'],subid,sess.id,rnum,c,iep));
                   hold on;
                   for ipk = 1:length(pidxs)
                     plot(pidxs(ipk),pksig(pidxs(ipk)),'g*');
@@ -792,7 +792,7 @@ if EXTRACT_DATA
                 % save signal out to gsr_epochs
                 outdata.data{gsre_idx} = ensemble_add_data_struct_row(...
                     outdata.data{gsre_idx},'subject_id',subid,'session',...
-                    isess,'ensemble_id',sess.ensemble_id,'run',rnum,...
+                    sess.id,'ensemble_id',sess.ensemble_id,'run',rnum,...
                     'trial',iep,'signal',{pksig},'srate',EEG.srate,...
                     'peakidxs',pidxs);
               end % for iep=1:ns
@@ -813,7 +813,7 @@ if EXTRACT_DATA
                 % save signal out to cardiac_epochs
                 outdata.data{carde_idx} = ensemble_add_data_struct_row(...
                     outdata.data{carde_idx},'subject_id',subid,'session',...
-                    isess,'ensemble_id',sess.ensemble_id,'run',rnum,...
+                    sess.id,'ensemble_id',sess.ensemble_id,'run',rnum,...
                     'trial',iep,'signal',{pksig'},'srate',EEG.srate,...
                     'peakidxs',pidxs);
 
@@ -823,8 +823,8 @@ if EXTRACT_DATA
                   if m == 0, figure(); end
                   subplot(ep_per_fig,1,m+1);
                   plot(pksig);
-                  title(sprintf(['%s, sess %d, run %d, signal %s, epoch'...
-                      ' %d'],subid,isess,rnum,c,iep));
+                  title(sprintf(['%s, %s, run %d, signal %s, epoch'...
+                      ' %d'],subid,sess.id,rnum,c,iep));
                   hold on;
                   for ipk = 1:length(pidxs)
                     plot(pidxs(ipk),pksig(pidxs(ipk)),'g*');
