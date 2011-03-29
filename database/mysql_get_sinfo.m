@@ -30,7 +30,9 @@ function sinfo = mysql_get_sinfo(subid,params)
 % 06/15/10 PJ - mysql_make_conn
 % 02/17/11 FB - adapted for new mysql authentication scheme, using
 % mysql_login before this function to get login information for the
-% particular user that will be running this function. This will 
+% particular user that will be running this function. This will
+% 03/29/11 FB - if DOB is encrypted, datenum(sinfo.datenum) will fail. This
+% error is now being caught, so that mysql_get_sinfo can continue
 
 sinfo = [];
 
@@ -66,7 +68,8 @@ end
     mysql(params.conn_id, mysql_str);
 
 % Convert date string to datenum
-sinfo.datenum = datenum(sinfo.datenum);
+try sinfo.datenum = datenum(sinfo.datenum);
+catch sinfo.datenum = 'encrypted'; end
 
 %
 % Determine which experiments this subject has been in.  Do this on the basis
