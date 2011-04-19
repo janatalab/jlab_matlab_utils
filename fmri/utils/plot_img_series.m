@@ -1,8 +1,20 @@
 function plot_img_series(imgInfo,params)
-% plot_img_series
+% plot_img_series(imgInfo, params)
 %
 % Uses slice_overlay to plot multiple pages of slice data, with the
-% possibility of multiple data volumes per page
+% possibility of multiple data volumes per page.
+%
+% imgInfo is equivalent to the SO structure that is expected by
+% slice_overlay.
+%
+% Plotting parameters
+% params.maxImgPerPage - maximum number of images per page [default=4]
+%   .start_fignum - starting figure number [1]
+%   .numCol - number of columns [2]
+%   .rowTitleAreaHeight - proportion of row height devoted to plot titles [0.025]
+%   .SEPARATE_FIGS - place each page in its own figure window [0]
+%   .PRINT_FIGS - print the figure [0]
+%   .figfname - path to which to print the figure ['']
 
 % December 2010, Petr Janata
 

@@ -32,6 +32,7 @@ function analysis_list = ensemble_jobman(analysis_list,params)
 %            false. Reverted last version, since 'dbstop if error' didn't take
 %            you to the desired breakpoint
 % 06/15/10 - PJ cleaning mysql_make_conn support
+% 04/11/11 - PJ added alternative loading of results struct from file
 
 
 %if conn_id is set in params, then open a mysql connection
@@ -95,17 +96,28 @@ for ia = idxs
 	%search for the required data type
 
 	dataList = analysis_list{anListIdx}.results;
-
+  
+  % Handle the possibility that the results is simply a flag and that the
+  % results are stored to disk, e.g. if the analysis was run using
+  % ensemble_jobman_parallel.
+  if isnumeric(dataList) && dataList == 1 && ...
+      isfield(analysis_list{anListIdx},'path') && ~isempty(analysis_list{anListIdx}.path)
+    tmp = load(analysis_list{anListIdx}.path);
+    dataList = tmp.job_data.results;
+  end
+    
 	%see if 'vars' was specified, in which case we need to
         %search for the variable to return
 	if(isfield(requiredData,'vars') && ~isempty(requiredData.vars))
+
+    
 	  %find the index of the result we need
 	  dataListIdx = strmatch(requiredData.vars,dataList.vars);
 	  
 	  %if result data struct was found then assign to indata
 	  %otherwise, throw an error indicating the data is not there.
 	  if(~isempty(dataListIdx))
-	    indata{requiredIdx} = analysis_list{anListIdx}.results.data{dataListIdx};
+	    indata{requiredIdx} = dataList.data{dataListIdx};
 	  
 	  else
 	    error([sprintf('Analysis %s specifies a non-existent required',analysis_list{ia}.name)...
