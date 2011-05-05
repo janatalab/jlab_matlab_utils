@@ -1,4 +1,4 @@
-function PL = set_col_const(var_list);
+function PL = set_col_const(var_list)
 % Figures out which data columns in a Presentation logfile correspond to
 % different variables 
 %
@@ -16,10 +16,13 @@ function PL = set_col_const(var_list);
 % QUEST_ITER -- question iteration
 % RESP_ENUM -- response value
 % RESP_TXT -- response text
+% STIM_TYPE -- stimulus type
+% PAIR_IDX -- pair index
 % 
 
 % 04/11/05  Petr Janata - adapted from the set_col_const.m script I wrote for
 %                         database stuff
+% 05/03/11 - FB - added STIM_TYPE, PAIR_IDX (new output vars)
 
 % The mappings variable has structure field names in the 1st column and
 % variable names in the 2nd column.  Abandon the mappings approach for the time being.
@@ -44,7 +47,9 @@ PL = struct('SUB_ID',[], ...
     'RESP_CODE',[], ...
     'RESP_TIME',[], ...
     'RUN',[], ...
-    'STIM_ID',[] ...
+    'STIM_ID',[], ...
+    'STIM_TYPE',[], ...
+    'PAIR_IDX',[] ...
     );
 
 nvars = length(var_list);
@@ -68,6 +73,12 @@ for ivar = 1:nvars
     case {'TTime','EVENT_TTIME'}
       PL.EVENT_TTIME = ivar;  % time in trial - 10^-4
 
+    case {'Stim Type','STIM_TYPE'}
+      PL.STIM_TYPE = ivar;
+      
+    case {'Pair Index','PAIR_IDX'}
+      PL.PAIR_IDX = ivar;
+          
     case 'Uncertainty'
       switch var_list{ivar-1}
 	case {'TTime','TTIME_UNC'}

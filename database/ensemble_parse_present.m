@@ -28,7 +28,16 @@ r.type = 'presentation';  % Identify the type of this reporting instance
 r.report_on_fly = 1;
 
 %%% INITIALIZE VARIABLES
-try WRITE2FILE = defs.present.WRITE2FILE; catch WRITE2FILE = 1; end
+try WRITE2FILE = defs.present.WRITE2FILE;
+catch
+  if isfield(defs,'present') && isfield(defs.present,'export_params')
+    WRITE2FILE = 1;
+  else
+    WRITE2FILE = 0;
+  end
+end
+
+if isstruct(indata), indata = {indata}; end
 
 % Parse out the input data
 for idata = 1:length(indata)
@@ -44,6 +53,12 @@ for idata = 1:length(indata)
         nsub_proc = length(proc_subs);
     end
   end
+end
+
+if isfield(defs,'sinfo') && ~exist('sinfo','var')
+  sinfo = defs.sinfo;
+  proc_subs = {sinfo(:).id};
+  nsub_proc = length(proc_subs);
 end
 
 % check for required vars
