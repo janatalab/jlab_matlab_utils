@@ -22,13 +22,14 @@ function [jobs] = fd_t1
 %          \-dir ............... <UNDEFINED>
 % -jobs 
 %    \-stats 
-jobs{1}.stats{1}.factorial_design.des.t1.scans = char([
-                                                        '<UNDEFINED>'
-                                                        ]);
+jobs{1}.stats{1}.factorial_design.des.t1.scans = ...
+	char('<UNDEFINED>');
+
 jobs{1}.stats{1}.factorial_design.cov = struct([]);
-jobs{1}.stats{1}.factorial_design.masking.tm.tm_none = reshape(double([
-                                                                        []
-                                                                        ]),[0,0]);
+
+jobs{1}.stats{1}.factorial_design.masking.tm.tm_none = ...
+	reshape(double([]),[0,0]);
+
 jobs{1}.stats{1}.factorial_design.masking.im = reshape(double([
                                                                 1
                                                                 ]),[1,1]);
