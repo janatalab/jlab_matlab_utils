@@ -112,7 +112,7 @@ pdcol = set_var_col_const(outdata.data{pdata_idx}.vars);
 outdata.data{pdata_idx}.data{pdcol.subject_id} = {};
 outdata.data{pdata_idx}.data{pdcol.session} = {};
 outdata.data{pdata_idx}.data{pdcol.ensemble_id} = [];
-outdata.data{pdata_idx}.data{pdcol.presdata} = ensemble_init_data_struct();
+outdata.data{pdata_idx}.data{pdcol.presdata} = {};
 
 if WRITE2FILE
   outdata.vars = [outdata.vars 'pres_paths'];
@@ -241,32 +241,9 @@ for isub=1:nsub_proc
     end % for irun
     
     % concatenate sdata with outdata
-    if ~isempty(sdata.data{1})
-      
-      outdata.data{pdata_idx}.data{pdcol.subject_id} = [...
-          outdata.data{pdata_idx}.data{pdcol.subject_id}; subid];
-				
-      outdata.data{pdata_idx}.data{pdcol.session} = [...
-          outdata.data{pdata_idx}.data{pdcol.session}; sess.id];
-				
-      outdata.data{pdata_idx}.data{pdcol.ensemble_id} = [...
-          outdata.data{pdata_idx}.data{pdcol.ensemble_id}; sess.ensemble_id];
-				
-      if isempty(outdata.data{pdata_idx}.data{pdcol.presdata}.vars)
-        outdata.data{pdata_idx}.data{pdcol.presdata}.vars = sdata.vars;
-        for iv = 1:length(sdata.vars)
-          if ischar(sdata.data{iv})
-            outdata.data{pdata_idx}.data{pdcol.presdata}.data{iv} = {};
-          else
-            outdata.data{pdata_idx}.data{pdcol.presdata}.data{iv} = [];
-          end
-        end
-        outdata.data{pdata_idx}.data{pdcol.presdata}.data = ...
-            ensemble_concat_datastruct(...
-            {sdata,outdata.data{pdata_idx}.data{pdcol.presdata}},...
-            ecdparams);
-      end
-    end
+    outdata.data{pdata_idx} = ensemble_add_data_struct_row(...
+        outdata.data{pdata_idx},'subject_id',subid,'session',sess.id,...
+        'ensemble_id',sess.ensemble_id,'presdata',sdata);
     
     % write out sdata
     if WRITE2FILE
