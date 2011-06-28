@@ -83,7 +83,7 @@ for sessIdx = 1:length(sessionIDs)
   %if params.parse_audio was set, then audio parsing will be
   %performed. params.parse_audio serves as the param struct for the
   %audio parser
-  if(isfield(params,'parse_audio_stims'))
+  if isfield(params,'parse_audio_stims') && ~isempty(params.parse_audio_stims)
   
     parseAudioParams = params.parse_audio_stims;
     parseAudioParams.filename = ...
@@ -123,7 +123,7 @@ for sessIdx = 1:length(sessionIDs)
   
   end
   
-  if(isfield(params,'parse_midi_resps'))
+  if isfield(params,'parse_midi_resps') && ~isempty(params.parse_midi_resps)
     
     parseMidiRespsParams = params.parse_midi_resps;
     parseMidiRespsParams.filename = replaceFilenameTags(parseMidiRespsParams.filename,sessInfo);

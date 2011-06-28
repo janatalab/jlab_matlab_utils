@@ -823,8 +823,9 @@ if fid ~= 1
             end
             if isempty(row)
                 row = item;
-            else
-                row = sprintf('%s%s%s',row,dlm,item);
+						else
+							format_str = sprintf('%%s%s%%s',dlm);
+                row = sprintf(format_str,row,item);
             end
         end
         fprintf(fid,'%s\n',row);
@@ -861,7 +862,7 @@ if fid ~= 1
         end
         fclose(sid);
     end
-end
+end % if fid ~=1
 
 % % % % functions
 % % sanitize_cell_value
