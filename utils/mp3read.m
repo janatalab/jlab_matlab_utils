@@ -16,6 +16,8 @@ function [Y,FS,NBITS,OPTS] = mp3read(FILE,N,MONO,DOWNSAMP)
 % 2005-04-11 added -r m for report of median VBR in mp3info (thx Merrie Morris)
 % 2006-01-09 Petr Janata - fixed argument list to mpg123 (see below).  Allowed
 %            passing N = [];
+% 2011-07-01 PJ - mpg123 would sometimes return insufficient data when only
+%            a partial read was requested, so a bit extra is being requested now
 % $Header: /homes/dpwe/matlab/columbiafns/RCS/mp3read.m,v 1.7 2005/04/11 20:55:16 dpwe Exp $
 
 if nargin < 2
