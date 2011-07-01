@@ -1,14 +1,14 @@
 function sessData = ensemble_session_trial_info_without_trial_id(indata,params)
-% Extracts the trial and session IDs in order, for each given session.
-%
-% indata is a cell array of two data structures (response_data and
-% session_info), as returned from ensemble_load_expinfo
+% Extracts the response_order and stimulus IDs in order, for each given session.
 %
 % Adapted from ensemble_session_trial_info to accomodate data from
 % experiments for which trial IDs were not created
 %
+% indata is a cell array of two data structures (response_data and
+% session_info), as returned from ensemble_load_expinfo
+% 
 % This function looks at the response table (from ensemble_load_expinfo)
-% of an experiment to extract the response order and stimulus IDs for each 
+% of an experiment to extract the response_order and stimulus IDs for each 
 % session, in the order which they were presented. This info is stored 
 % in a 'trial info' structure that is tagged to the end of each session 
 % in the session structure (also retrieved from ensemble_load_expinfo). Optionally,
@@ -22,6 +22,12 @@ function sessData = ensemble_session_trial_info_without_trial_id(indata,params)
 % handles only single stimulus trials for now
 %
 %
+% main differences from ensemble_session_trial_info:
+%   - accomodates data with 'NULL' values under trial_id in response table
+%   - allows removal of practice trials not recorded in audio but recorded in response_table 
+%  
+%
+%
 % 29 June 2011 - BH
 %
 % **NOTE: This script is in progress and not yet intended for use. Bottom 
@@ -30,11 +36,22 @@ function sessData = ensemble_session_trial_info_without_trial_id(indata,params)
 
 % params.numPracticeTrials parameter is used for removing practice trials from the
 % parsed audio/ensemble response set. This is useful if practice
-% trials were recorded, but are not desired in the results
+% trials were recorded, but are not desired in the results. Note that this
+% should be used only if practice trials recorded in audio file.
 if(isfield(params,'numPracticeTrials')) %fix to handle scenario where practice trials not recorded in DP but exist in response table
   practiceTrialIdxs = 1:params.numPracticeTrials;
 else
-  practiceTrialIdxs = [];
+  practiceTrialIdxs = [];    
+end
+
+% params.num_practice_trials_database_only paramter is used to remove 
+% practice trials from ensemble response set only, and not audio. This is an
+% alternative to numPractice Trials and is usefule if practice trials were not
+% recorded in the audio files but exist in the response table
+if(isfield(params,'num_practice_trials_database_only'))
+    databasePracticeTrialIdxs = 1:params.num_practice_trials_database_only;
+else
+    databasePracticeTrialIdxs = [];
 end
 
 dataStructCrit.name = 'session_info';
@@ -82,6 +99,11 @@ for sessIdx = 1:length(sessionIDs)
   trialdiffIdx = [ 1 diff(trialInfoVector(:,1))'];
   trialInfoVector(trialdiffIdx == 0,:) = [];
   trialInfoVector( isnan(trialInfoVector(:,2)),: ) = [];
+  
+  % if databasePracticeTrialIdxs set remove those trials
+  if ~isempty(databasePracticeTrialIdxs)
+      trialInfoVector(databasePracticeTrialIdxs,:) = [];
+  end
   
   trialInfoCols = set_var_col_const(trialInfoStruct.vars);
   trialInfoStruct.data{trialInfoCols.response_order}=trialInfoVector(:,1);
