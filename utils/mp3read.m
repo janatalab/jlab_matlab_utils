@@ -147,7 +147,7 @@ else
   if length(N) > 1
     endfrm = N(2);
     if endfrm > sttfrm
-      decblk = ceil(endfrm*downsamp/smpspfrm) - skipblks;
+      decblk = ceil(endfrm*downsamp/smpspfrm) - skipblks + 1; % 01Jul2011 PJ - added 1 to ensure sufficient length read
       lenstr = [' -n ', num2str(decblk)];
     end
   end
