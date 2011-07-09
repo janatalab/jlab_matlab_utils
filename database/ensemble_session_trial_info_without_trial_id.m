@@ -30,9 +30,9 @@ function sessData = ensemble_session_trial_info_without_trial_id(indata,params)
 %
 % 29 June 2011 - BH
 %
-% **NOTE: This script is in progress and not yet intended for use. Bottom 
-% portion was copied directly from ensemble_session_trial_info and is in
-% the process of customization for the current function
+% **NOTE: This script is currently under development.
+
+
 
 % params.numPracticeTrials parameter is used for removing practice trials from the
 % parsed audio/ensemble response set. This is useful if practice
@@ -114,51 +114,55 @@ for sessIdx = 1:length(sessionIDs)
   %audio parser
   if isfield(params,'parse_audio_stims') && ~isempty(params.parse_audio_stims)
   
-    parseAudioParams = params.parse_audio_stims;
-    parseAudioParams.filename = ...
-	replaceFilenameTags(parseAudioParams.filename,sessInfo);
-    
-        
-    %if the recorded responses in Ensemble or audio recordings
-    %don't match, these parameters will ignore either Ensemble
-    %session info (ignoreMatchedEventForSub) or audio info
-    %(ignoreParsedStimAudioForSub)during matching
-    if(isfield(params,'ignoreMatchedEventForSub'))
-    
-      [hasEventExclusions,ignoreCellIdx] = ismember(sessInfo.subject_id,params.ignoreMatchedEventForSub{1});
-      if(ignoreCellIdx ~= 0)
-	parseAudioParams.ignoreEventIdxs = ...
-	    params.ignoreMatchedEventForSub{2}{ignoreCellIdx};
-	
-	
-	%if ensemble practice sessions are missing from database,
-        %then we might need to revise which practice trials to
-        %throw out.
-	practiceTrialIdxs = setdiff(practiceTrialIdxs,parseAudioParams.ignoreEventIdxs);
-	
+      parseAudioParams = params.parse_audio_stims;
+      parseAudioParams.filename = ...
+          replaceFilenameTags(parseAudioParams.filename,sessInfo);
+
+
+      %if the recorded responses in Ensemble or audio recordings
+      %don't match, these parameters will ignore either Ensemble
+      %session info (ignoreMatchedEventForSub) or audio info
+      %(ignoreParsedStimAudioForSub)during matching
+      if(isfield(params,'ignoreMatchedEventForSub'))
+          
+          [hasEventExclusions,ignoreCellIdx] = ismember(sessInfo.subject_id,params.ignoreMatchedEventForSub{1});
+          if(ignoreCellIdx ~= 0)
+              parseAudioParams.ignoreEventIdxs = ...
+                  params.ignoreMatchedEventForSub{2}{ignoreCellIdx};
+
+
+              %if ensemble practice sessions are missing from database,
+              %then we might need to revise which practice trials to
+              %throw out.
+              practiceTrialIdxs = setdiff(practiceTrialIdxs,parseAudioParams.ignoreEventIdxs);
+
+          end
       end
-    end
-    
-    if(isfield(params,'ignoreParsedStimAudioForSub'))
-      [hasStimAudioExclusions,ignoreCellIdx] = ...
-	  ismember(sessInfo.subject_id,params.ignoreParsedStimAudioForSub{1});
+        
+      if(isfield(params,'ignoreParsedStimAudioForSub'))
+          [hasStimAudioExclusions,ignoreCellIdx] = ...
+          ismember(sessInfo.subject_id,params.ignoreParsedStimAudioForSub{1});
+          
+          if(ignoreCellIdx ~= 0)
+              parseAudioParams.ignoreParsedAudioIdxs = params.ignoreParsedStimAudioForSub{2}{ignoreCellIdx};
+          end
+      end
       
-      if(ignoreCellIdx ~= 0)
-	parseAudioParams.ignoreParsedAudioIdxs = params.ignoreParsedStimAudioForSub{2}{ignoreCellIdx};
-      end 
-    end
-    
-    trialInfoStruct = parse_audio_clips(trialInfoStruct,parseAudioParams);
-  
-  end
+      trialInfoStruct = parse_audio_clips(trialInfoStruct,parseAudioParams);
+
+  end %parse audio
   
   if isfield(params,'parse_midi_resps') && ~isempty(params.parse_midi_resps)
     
     parseMidiRespsParams = params.parse_midi_resps;
     parseMidiRespsParams.filename = replaceFilenameTags(parseMidiRespsParams.filename,sessInfo);
-    trialInfoStruct = parse_midi_responses(trialInfoStruct,parseMidiRespsParams);
+    % create field for trial_id using response order (parse_midi_responses
+    % requires trial_id field for counting trials) This is a temporary, quick & dirty fix to conform
+    trialInfoStruct.vars{end+1} = 'trial_id';
+    trialInfoStruct.data{end+1} = trialInfoStruct.data{trialInfoCols.response_order};
+    trialInfoStruct = parse_midi_responses_single_track(trialInfoStruct,parseMidiRespsParams);
    
-  end
+  end %parse MIDI
   
   %throw out the practice trials if this was set
   allTrialIdxs = 1:length(trialInfoStruct.data{1});
@@ -169,7 +173,7 @@ for sessIdx = 1:length(sessionIDs)
   
   sessData.data{sessCols.trial_info}(sessIdx,1) = {trialInfoStruct};
   
-end
+end %sessIdx
 
 function message(messageString,verbose)
 
