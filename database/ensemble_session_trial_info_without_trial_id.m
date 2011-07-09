@@ -160,7 +160,7 @@ for sessIdx = 1:length(sessionIDs)
     % requires trial_id field for counting trials) This is a temporary, quick & dirty fix to conform
     trialInfoStruct.vars{end+1} = 'trial_id';
     trialInfoStruct.data{end+1} = trialInfoStruct.data{trialInfoCols.response_order};
-    trialInfoStruct = parse_midi_responses_single_track(trialInfoStruct,parseMidiRespsParams);
+    trialInfoStruct = parse_midi_slider_response(trialInfoStruct,parseMidiRespsParams);
    
   end %parse MIDI
   
