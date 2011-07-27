@@ -207,6 +207,13 @@ for isub=1:nsub_proc
       presfname = fullfile(behav_indir,pres.logfiles{runs(irun),1});
       targruns  = pres.logfiles{runs(irun),2};
 
+      if ~exist(presfname,'file') || exist(presfname,'dir')
+        msg = sprintf('Presentation file (%s) not found, SKIPPING!\n',...
+            presfname);
+        r = update_report(r,msg);
+        continue
+      end
+      
       pdata = presentation_parse(presfname,pres.params);
       if isempty(pdata)
         msg = sprintf('No Presentation Data Returned, SKIPPING\n');
