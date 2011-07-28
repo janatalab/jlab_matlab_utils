@@ -1,5 +1,7 @@
 function sessData = ensemble_session_trial_info_without_trial_id(indata,params)
-% Extracts the response_order and stimulus IDs in order, for each given session.
+% sessData = ensemble_session_trial_info_without_trial_id(indata,params)
+% 
+% Extracts the response_order and stimulus IDs for each given session.
 %
 % Adapted from ensemble_session_trial_info to accomodate data from
 % experiments for which trial IDs were not created
@@ -9,21 +11,24 @@ function sessData = ensemble_session_trial_info_without_trial_id(indata,params)
 % 
 % This function looks at the response table (from ensemble_load_expinfo)
 % of an experiment to extract the response_order and stimulus IDs for each 
-% session, in the order which they were presented. This info is stored 
+% session, in the order that they were presented. This info is stored 
 % in a 'trial info' structure that is tagged to the end of each session 
-% in the session structure (also retrieved from ensemble_load_expinfo). Optionally,
-% the audio corresponding to each trial can be parsed from a session recording
+% in the session structure (also retrieved from ensemble_load_expinfo). 
+%
+% Optionally,the audio corresponding to each trial can be parsed from a session recording
 % (e.g. from digital performer). The time offsets of each trial relative to
 % the beginning of the recording are then recorded. This information is then
-% used to parse MIDI responses corresponding to each trial (if MIDI data was
-% recorded along-side the audio recording. 
+% used to parse a continuously recorded MIDI time course into individual responses
+% corresponding to each trial (if MIDI data was recorded along-side the audio 
+% recording.)
 % 
 %
 % handles only single stimulus trials for now
 %
 %
 % main differences from ensemble_session_trial_info:
-%   - accomodates data with 'NULL' values under trial_id in response table
+%   - accomodates data with no trial_id values in response table
+%   - calls parse_midi_slider_response, which resamples midi responses into time courses of evenly spaced points
 %   - allows removal of practice trials not recorded in audio but recorded in response_table 
 %  
 %
@@ -156,10 +161,6 @@ for sessIdx = 1:length(sessionIDs)
     
     parseMidiRespsParams = params.parse_midi_resps;
     parseMidiRespsParams.filename = replaceFilenameTags(parseMidiRespsParams.filename,sessInfo);
-    % create field for trial_id using response order (parse_midi_responses
-    % requires trial_id field for counting trials) This is a temporary, quick & dirty fix to conform
-    trialInfoStruct.vars{end+1} = 'trial_id';
-    trialInfoStruct.data{end+1} = trialInfoStruct.data{trialInfoCols.response_order};
     trialInfoStruct = parse_midi_slider_response(trialInfoStruct,parseMidiRespsParams);
    
   end %parse MIDI
