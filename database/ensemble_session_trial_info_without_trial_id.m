@@ -34,8 +34,6 @@ function sessData = ensemble_session_trial_info_without_trial_id(indata,params)
 %
 %
 % 29 June 2011 - BH
-%
-% **NOTE: This script is currently under development.
 
 
 
