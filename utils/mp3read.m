@@ -62,6 +62,22 @@ cmd = [mp3info, ' -r m -p "%Q %u %r %v * %C %e %E %L %O %o %p" "', FILE,'"'];
 % Q = samprate, u = #frames, r = bitrate, v = mpeg version (1/2/2.5)
 % C = Copyright, e = emph, E = CRC, L = layer, O = orig, o = mono, p = pad
 w = mysystem(cmd);
+if isempty(w) & exist(FILE,'file')
+    trylim = 10;
+    tries = 0;
+    pauseval = 2;
+    fprintf(1,'mp3info error, retrying %d times\n',trylim);
+    while isempty(w)
+      tries = tries+1;
+      pause(pauseval);
+      fprintf(1,'attempt %d after %0.2fs pause\n',tries,pauseval);
+      w = mysystem(cmd);
+      if tries == trylim
+          error('%s found, but %s is not loading it',FILE,mp3info)
+      end
+    end % while isempty(W
+end % if isempty(w) & exist(FILE,'file
+    
 % Break into numerical and ascii parts by finding the delimiter we put in
 starpos = findstr(w,'*');
 nums = str2num(w(1:(starpos - 2)));

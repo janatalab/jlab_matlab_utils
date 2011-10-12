@@ -35,7 +35,7 @@ function sessData = ensemble_session_trial_info_without_trial_id(indata,params)
 %
 % 29 June 2011 - BH
 
-
+if ~isfield(params,'verbose'), params.verbose=0; end
 
 % params.numPracticeTrials parameter is used for removing practice trials from the
 % parsed audio/ensemble response set. This is useful if practice
@@ -80,8 +80,9 @@ for sessIdx = 1:length(sessionIDs)
   sessInfo.subject_id  = subjectIDs{sessIdx};
  
   message(['Sorting trial info for session # ' num2str(sessIdx) ...
-	   ', ID ' num2str(sessInfo.session_id)],params.verbose);
- 
+	   ', ID ' sessInfo.subject_id ...
+       ', Ensemble session # ' num2str(sessInfo.session_id)],...
+       params.verbose);
   
   filt.include.all.session_id = sessInfo.session_id;
   respThisSess = ensemble_filter(respData,filt);
@@ -152,7 +153,10 @@ for sessIdx = 1:length(sessionIDs)
       end
       
       trialInfoStruct = parse_audio_clips(trialInfoStruct,parseAudioParams);
-
+      if isempty(trialInfoStruct)
+          warning('no audio data for %s',sessInfo.subject_id);
+          continue
+      end
   end %parse audio
   
   if isfield(params,'parse_midi_resps') && ~isempty(params.parse_midi_resps)
