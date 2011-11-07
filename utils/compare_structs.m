@@ -46,7 +46,11 @@ function [structsAreEqual,firstViolation,violationReason] = compare_structs(stru
 % 02/24/2009 - Fred Barrett, switched cell checking to compare_cells.m,
 %   also added handling of struct arrays
 % 11/11/2009 - Fred Barrett, added 'ignore_fieldnames' option
-% 
+% 01Nov2011 - Petr Janata, added ability to specify those fieldnames for
+%             which specification of a subset of values is OK. Example: If
+%             an array of HalfDecayTimes is requested ([0.2 2]), an
+%             analysis would be deemed OK if it contained the desired
+%             HalfDecayTimes and any others, e.g. [0.2 2 4 8]
 
 numberTypes = {'int8','uint8','int16','uint16','int32','uint32','int64','uint64','double'};
 firstViolation = {};
@@ -62,7 +66,9 @@ if (nargin > 2)
      case 'types'
       checkTypes = varargin{iarg+1};
      case 'ignore_fieldnames'
-      ignore_fieldnames = varargin{iarg+1};
+			 ignore_fieldnames = varargin{iarg+1};
+			case 'subsetIsOK'
+				subsetIsOK = varargin{iarg+1};
     end
   end
 end
@@ -71,6 +77,7 @@ if ~exist('checkValues','var'), checkValues = true; end
 if ~exist('checkSubstruct','var'), checkSubstruct = true; end
 if ~exist('checkTypes','var'), checkTypes = true; end
 if ~exist('ignore_fieldnames','var'), ignore_fieldnames = {}; end
+if ~exist('subsetIsOK','var'), subsetIsOK = {}; end
 
 struct1_fieldNames = fieldnames(struct1)';
 struct2_fieldNames = fieldnames(struct2)';
@@ -174,7 +181,13 @@ for iField = 1:struct1_nFields
           fieldsAreEqual = all(struct1_val(:) == struct2_val(:));
         else
           fieldsAreEqual = 0; 
-        end
+				end
+				
+				if ~fieldsAreEqual && ismember(struct1_fieldName, subsetIsOK)
+					if all(ismember(struct1_val, struct2_val))
+						fieldsAreEqual = 1;
+					end
+				end
  
       case 'char' 
         fieldsAreEqual = strcmp(struct1_val,struct2_val);
@@ -183,7 +196,8 @@ for iField = 1:struct1_nFields
         [fieldsAreEqual,subFieldViolation,violationReason] = ...
             compare_structs(struct1_val,struct2_val,'values',checkValues,...
             'substruct',checkSubstruct,'types',checkTypes,...
-            'ignore_fieldnames',ignore_fieldnames);
+            'ignore_fieldnames',ignore_fieldnames, ...
+						'subsetIsOK', subsetIsOK);
 
       case 'cell'
         [fieldsAreEqual,subFieldViolation,violationReason] = ...
