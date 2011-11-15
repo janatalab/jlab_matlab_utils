@@ -59,6 +59,11 @@ vardata = data_st.data(srcIdxs);
 
 % Convert any numeric data to strings
 for ivar = 1:nvars
+	% If it is already in numeric format, but not in a cell, place in cell so
+	% that it can be converted properly to a string without whitespace
+	if isnumeric(vardata{ivar}) 
+		vardata{ivar} = num2cell(vardata{ivar});
+	end
 	if ~ischar(vardata{ivar}{1})
 		fprintf('Converting numeric values to cell array of strings for variable %s\n', xfmVars{ivar});
 		vardata{ivar} = cellfun(@num2str,vardata{ivar},'UniformOutput',false);
