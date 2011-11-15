@@ -37,6 +37,7 @@ function [data_st] = ensemble_filter(data_st,filt)
 % 02/08/07 Stefan Tomic - added 'exact' argument to strmatch
 % 03/15/07 S.T. - added support for using NaN as a filtering criteria
 % 09/25/07 PJ - returns if filt spec is empty
+% 11/14/11 Pj - added handling of scalar data embedded in cells
 
 %deal with the possibility that params struct was specified
 %directly rather than passing "params.filt"
@@ -151,10 +152,21 @@ for itype = 1:ntypes
 	
 	%if the crit_val is NaN, need to use isnan function,
         %otherwise we can use ismember
-	if(~iscell(crit_vals) && any(isnan(crit_vals)))
+	if ~iscell(crit_vals) && any(isnan(crit_vals))
 	  tmp = isnan(data_st.data{data_col});
-    else
-	  tmp = ismember(data_st.data{data_col}, crit_vals);
+	else
+			% Check to see if were are dealing with numbers embedded in cells
+			numMask = cellfun(@isnumeric,data_st.data{data_col});
+			if all(numMask)
+				lengthMask = cellfun('length',data_st.data{data_col}) == 1;
+				if all(lengthMask)
+					tmp = ismember(cat(1,data_st.data{data_col}{:}), crit_vals);
+				else
+					error('Cannot handle non-scalar numeric data')
+				end
+			else
+				tmp = ismember(data_st.data{data_col}, crit_vals);
+			end
 	end
 	
 	% Check to see if any of the criterion values have wildcards, in which case

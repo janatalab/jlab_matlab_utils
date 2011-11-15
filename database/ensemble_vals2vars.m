@@ -138,6 +138,9 @@ for ival = 1:nvals
 				error('\nMore than 1 unique old value')
 			end
 		end
+		if iscell(uniqueOldVal)
+			uniqueOldVal = uniqueOldVal{1};
+		end
 		out_st.data{outcols.(currVar)}{ival,1} = uniqueOldVal;
 	end
 	
@@ -154,7 +157,11 @@ for ival = 1:nvals
 		end
 		
 		% Assign the value
-		out_st.data{outcols.(newVars{inew})}{ival,1} = data_st.data{srcCols.(valVar)}(compositeMask);
+		tmpval = data_st.data{srcCols.(valVar)}(compositeMask);
+		if iscell(tmpval)
+			tmpval = tmpval{1};
+		end
+		out_st.data{outcols.(newVars{inew})}{ival,1} = tmpval;
 		
 	end
 end % for inew
