@@ -39,6 +39,7 @@ function result = ensemble_load_expinfo(indata,params)
 %                 key information be passed along
 % 2010.06.18 FB - now accepts inData={'task','return_outdir'}, for
 %                   ensemble_jobman_parallel
+% 2011.11.23 PJ - added filtering of subject info
 
 if( isstr( indata ) && strcmp( indata, 'getDefaultParams' ) )
 	result.ensemble.experiment_title = 'use local settings';
@@ -68,7 +69,7 @@ conn_id = mysql_make_conn(params.mysql);
 
 expname = params.ensemble.experiment_title;
 
-% Get the experiment information
+%% Get the experiment metadata
 fprintf('Getting experiment information for: %s\n', expname);
 exp_meta = mysql_extract_metadata('table','experiment', ...
   'experiment_title',expname, ...
@@ -80,7 +81,7 @@ if isempty(exp_meta.response_table)
     'you think you are connecting to!\n'], expname);
   return
 end
-        
+  
 % Pull desired parts of the response table into a response structure
 fprintf('Extracting the response table: %s\n', exp_meta.response_table);
 if ~isfield(params.ensemble, 'extract_vars') || isempty(params.ensemble.extract_vars)
@@ -104,7 +105,7 @@ result.data{end+1} = exp_meta_dataStruct;
 exp_meta_cols = set_var_col_const(exp_meta_dataStruct.vars);
 experiment_id = exp_meta_dataStruct.data{exp_meta_cols.experiment_id};
 
-%get sessinfo data
+%% Load session table info
 sessInfo = ensemble_init_data_struct;
 sessInfo.name = 'session_info';
 sessInfo.type = 'session_info';
@@ -134,7 +135,7 @@ end
 sess_colNames = set_var_col_const(sessInfo.vars);
 sessIDList = sessInfo.data{sess_colNames.session_id};
 
-%get the response info and filter it
+%% Load response table
 fprintf('Loading response table information ...\n');
 respinfo = ensemble_init_data_struct;
 [respinfo.data,respinfo.vars] = mysql_extract_data('table', exp_meta.response_table, ...
@@ -178,7 +179,9 @@ end
 % update the output structure
 result.vars{end+1} = 'session_info';
 result.data{end+1} = sessInfo;
+outCols = set_var_col_const(result.vars);
 
+%% Load subject table info
 % Pull the subject information for all of the subjects
 fprintf('Loading subject information ...\n');
 if ~isfield(params.ensemble,'enc_key')
@@ -197,15 +200,43 @@ if ~isfield(params.ensemble, 'conn_id') || isempty(params.ensemble.conn_id)
 	end
 end
 
+if isfield(params,'mysql')
+	login_params = params.mysql;
+elseif isfield(params,'ensemble')
+	login_params = params.ensemble;
+else
+	login_params = struct();
+end
+
 subInfo = mysql_get_subinfo('subject_id', sessInfo.data{sess_colNames.subject_id}, ...
-  'ensemble', params.ensemble);
+  'mysql', login_params);
 subInfo.name = 'subject_info';
 subInfo.type = 'subject_info';
+
+% Perform filtering on subject info
+subInfo = ensemble_filter(subInfo, params.filt);
+scols = set_var_col_const(subInfo.vars);
+
+% Get list of retained subject IDs
+goodSubIDs = unique(subInfo.data{scols.subject_id});
+
+% Refilter session and response table structures
+tmpfilt = struct();
+tmpfilt.include.all.subject_id = goodSubIDs;
+
+result.data{outCols.session_info} = ...
+	ensemble_filter(result.data{outCols.session_info}, tmpfilt);
+sessInfo = result.data{outCols.session_info};
+
+result.data{outCols.response_data} = ...
+	ensemble_filter(result.data{outCols.response_data}, tmpfilt);
+respinfo = result.data{outCols.response_data};
 
 % update the output structure
 result.vars{end+1} = 'subject_info';
 result.data{end+1} = subInfo;
 
+%% Get stimulus info
 % Get stimulus information if there are any stimuli associated with the
 % response table
 if ~all(isnan(respinfo.data{respcols.stimulus_id}))

@@ -4,12 +4,18 @@ function outvar = ensemble_form_table(data_st,params)
 % ensemble_form_table(data_st,params)
 %
 % 05/01/07 Petr Janata
+% 23Nov2011 PJ - improved conn_id handling, fixed handling of array of
+% forms
 outvar = [];
 
 try conn_id = params.conn_id; catch
-  try conn_id = params.ensemble.conn_id; catch
-    conn_id = [];
-  end
+	if isfield(params,'mysql')
+		conn_id = params.mysql.conn_id;
+	else
+		try conn_id = params.ensemble.conn_id; catch
+			conn_id = [];
+		end
+	end
 end
 
 % Make sure we have compqids
@@ -43,9 +49,9 @@ for iform = 1:nforms
 
   for isub = 1:nsub
     
-    nquest = length(form_data.question);
+    nquest = length(form_data(iform).question);
     for iq = 1:nquest
-      q = form_data.question(iq);
+      q = form_data(iform).question(iq);
       compqid = q.compqid;
       qid_mask = data_st.data{cols.compqid} == compqid;
       
@@ -54,7 +60,7 @@ for iform = 1:nforms
       % Make a composite mask
       compmask = form_mask & qid_mask & sub_mask_mtx(:,isub);
       if ~any(compmask)
-	continue
+				continue
       end
       
       % Determine what type of data the question is

@@ -1,7 +1,7 @@
-function ensemble_display_table(data_st,params)
+function data_st = ensemble_display_table(data_st,params)
 % Mechanism for formatting display of data in a table.
 %
-% ensemble_display_table(data_st,params)
+% data_st = ensemble_display_table(data_st,params)
 %
 % The data to be displayed should be stored in a cell array in variable called
 % data.  
@@ -23,7 +23,7 @@ cols = set_var_col_const(data_st.vars);
 % columns
 ncols = size(data_st.data{cols.data},2);
 for icol = 1:ncols
-  if prod(size(data_st.data{cols.data}{icol})) ~= ...
+  if numel(data_st.data{cols.data}{icol}) ~= ...
 	length(data_st.data{cols.data}{icol})
     msgstr = sprintf('%s: Display data column contains a matrix', mfilename);
     error(msgstr);

@@ -24,7 +24,7 @@ function an_st = ensemble_enum_hist(data_st,params)
 % 04/17/09 PJ - added output of plotted data to comma-separated files.
 % 05/11/10 PJ - Fixed bug where enum_mask was being checked instead of
 %               qinfo_enum_mask, leading to erroneous question skipping.
-% 02/15/11 PJ - Fixed conn_id checking
+% 02/15/11 PJ - Fixed conn_id checking, handling of only 1 subject
 
 an_st = {};
 na = 0;
@@ -294,18 +294,18 @@ for iqid = 1:nqid
       switch sa_str
         case 'mean'
           if any(isnan(data)) fun = @nanmean; else fun = @mean; end
-          result = fun(data);
+          result = fun(data,1);
         case 'nitems'
           result = sum(~isnan(data(:,1)));
         case 'std'
           if any(isnan(data)) fun = @nanstd; else fun = @std; end
-          result = fun(data);
+          result = fun(data,1);
         case 'min'
           if any(isnan(data)) fun = @nanmin; else fun = @min; end
-          result = fun(data);
+          result = fun(data,1);
         case 'max'
           if any(isnan(data)) fun = @nanmax; else fun = @max; end
-          result = fun(data);
+          result = fun(data,1);
           
       end % switch sa_str
       
