@@ -23,12 +23,21 @@ function an_st = ensemble_report_written(data_st,params)
 % params.report.write2file - write output to a file (otherwise stdout)
 % params.report.fname - name of file to write responses to
 % params.report.filemode - defaults to 'wt'
-% params.report.verbose - devaults to 1
+% params.report.verbose - defaults to 1
 
 % 04/29/07 Petr Janata - adapted from ensemble_enum_stats
 % 07/17/08 PJ - fixed call to ensemble_init_fid to conform to new param handling
+% 23Nov2011 PJ - improved handling of conn_id
 
-try conn_id = params.ensemble.conn_id; catch conn_id = []; end
+try
+	if isfield(params, 'mysql')
+		conn_id = params.mysql.conn_id;
+	elseif isfield(params, 'ensemble')
+		conn_id = params.ensemble.conn_id;
+	end
+catch ME
+	conn_id = [];
+end
 
 an_st = ensemble_init_data_struct;
 an_st.type = 'enum_written_by_compqid'; 
