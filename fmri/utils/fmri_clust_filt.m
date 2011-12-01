@@ -21,7 +21,7 @@ else
   multiplier = 0;
 end
 
-fprintf('Finding clusters of size %d in %d good voxels\n', k, length(good_vox_idxs));
+fprintf('Finding clusters of size >=%d in %d good voxels\n', k, length(good_vox_idxs));
 
 % Create an XYZ list
 [XYZ{1:3}] = ind2sub(size(Y),good_vox_idxs);
@@ -50,7 +50,7 @@ for i = 1:max(A)
 end
 
 % Weed out voxels that didn't pass the threshold
-fprintf('Found %d voxels belonging to clusters\n', length(Q));
+fprintf('Found %d voxels belonging to %d clusters\n', length(Q), nc);
 XYZ = XYZ(:,Q);
 good_vox_idxs = good_vox_idxs(Q);
 
