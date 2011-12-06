@@ -13,6 +13,7 @@ function subinfo = mysql_get_subinfo(varargin)
 % 'subject_id' - vector of subject IDs
 % 'conn_id' - mysql connection ID to utilize
 % 'mysql' - a structure containing host,database,user,passwd,enc_key fields
+% 'extract_vars' - list of fields to extract
 
 % 01/26/07 Petr Janata
 % 06/01/07 Stefan Tomic - fixed handling of temporary conn_id
@@ -23,6 +24,8 @@ ensemble_globals;
 % Initialize some variables
 subinfo = ensemble_init_data_struct;
 
+extract_vars = {};
+
 % Parse the input arguments
 narg = length(varargin);
 for iarg = 1:2:narg
@@ -31,6 +34,8 @@ for iarg = 1:2:narg
       subids = varargin{iarg+1};
     case {'mysql','ensemble'}
       params = varargin{iarg+1};
+		case {'extract_vars'}
+			extract_vars = varargin{iarg+1};
     otherwise
       fprintf('mysql_get_subinfo: Unknown input argument: %s\n', varargin{iarg});
   end
@@ -77,6 +82,7 @@ enc_fields = encrypted_fields.subject;
   'subject_id',subids,...
   'encrypted_fields',enc_fields,...
   'enc_key',params.enc_key, ...
+	'extract_vars', extract_vars, ...
   'conn_id',conn_id);
 
 % Close the database connection if it was temporary
