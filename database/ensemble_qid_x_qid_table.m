@@ -3,7 +3,11 @@ function an_st = ensemble_qid_x_qid_table(data_st,params)
 % an_st = ensemble_qid_x_qid_table(data_st,params);
 %
 % Produces a table in which the levels for one question ID form the columns and
-% the levels for the other question ID form the rows
+% the levels for the other question ID form the rows.
+%
+% params.table.qid_order = compqid values specifying row, column order
+% params.report.tables.print = should table be printed
+% params.report.tables.write2file - should table be written to a file
 
 % 05/18/07 PJ - added conn_id support, and resolution of
 % {'display','report'} ambiguity
@@ -20,8 +24,12 @@ end
 
 if isfield(params,'display')
   report_str = 'display';
+elseif isfield(params, 'report')
+  report_str = 'report';
 else
   report_str = 'report';
+  params.report.tables.print = 0;
+  params.report.tables.write2file = 0;
 end
 
 an_st = {};
@@ -31,7 +39,7 @@ na = 0;
 incol = set_var_col_const(data_st.vars);
 
 % Make sure that we have either compqid or question and subquestion ID information
-if ~isfield(incol,'compqid') & ~all(isfield(incol,{'question_id','subquestion'}))
+if ~isfield(incol,'compqid') && ~all(isfield(incol,{'question_id','subquestion'}))
   fprintf(['Did not find necessary question and subquestion or composite question ID' ...
 	' information in the input data']);
   return
@@ -180,7 +188,7 @@ an_st{na}.data{an_cols.nstim} = squeeze(cntmtx(nrows,ncols,:));
 an_st{na}.report.printfun = @print_tables;
 
 % Print the info if desired
-if params.(report_str).tables.print | params.(report_str).tables.write2file
+if params.(report_str).tables.print || params.(report_str).tables.write2file
   an_st{na}.report.printfun(an_st{na},params.(report_str).tables);
 end
 
@@ -201,7 +209,7 @@ end % function an_st = init_analysis_struct
 function print_tables(an_st,params)
 
   fid = 1;
-  if params.write2file
+  if isfield(params,'write2file') && params.write2file
     fid = fopen(params.fname,'wt');
     if fid ~= -1
       fprintf('Writing table to file: %s\n', params.fname);

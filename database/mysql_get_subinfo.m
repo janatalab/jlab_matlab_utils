@@ -43,13 +43,13 @@ end
 
 try
 	conn_id = params.conn_id;
-catch ME
+catch 
 	conn_id = [];
 end
 
 try 
 	enc_key = params.enc_key;
-catch ME
+catch 
 	enc_key = '';
 end
 

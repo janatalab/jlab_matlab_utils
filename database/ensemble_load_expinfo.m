@@ -195,7 +195,7 @@ end
 if ~isfield(params.ensemble, 'conn_id') || isempty(params.ensemble.conn_id)
 	try 
 		params.ensemble.conn_id = params.mysql.conn_id;
-	catch ME
+  catch
 		fprintf('Failed to locate connection ID');
 	end
 end
