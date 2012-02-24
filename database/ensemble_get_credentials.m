@@ -17,7 +17,7 @@ end
 if ~exist('cred_type','var')
   cred_type = 'subject';
 elseif ~ismember(cred_type, {'subject','researcher'})
-  fprintf('%s: Unknown login type: %s', mfilename, cred_type);
+  fprintf('%s: Unknown login type: %s\n', mfilename, cred_type);
   return
 end
 
