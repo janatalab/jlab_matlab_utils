@@ -66,7 +66,15 @@ for iarg = 1:2:narg
   end % switch 
 end % for iarg
  
-try attrib_names = check_cell(params.attrib_names); catch attrib_names = {}; end
+try 
+	attrib_names = check_cell(params.attrib_names); 
+catch
+	if isfield(params,'stimselect') && isfield(params.stimselect,'attrib_names')
+		attrib_names = params.stimselect.attrib_names;
+	else
+		attrib_names = {};
+	end
+end
 if isempty(attrib_names)
   sprintf('no attribute names specified\n')
   return
