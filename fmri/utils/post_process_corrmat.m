@@ -19,7 +19,7 @@ function [cmat, X] = post_process_corrmat(spm_fname,opt)
 % 2010.02.16 FB - added opt.names, header documentation
 
 if nargin < 2
-  opt = struct([]);
+  opt = struct();
 end
 
 load new_seismic  % colormap
@@ -30,7 +30,7 @@ if isfield(data,'SPM')
   Xnames = xX.name;
   Sess = data.SPM.Sess;
 else
-  xX = data.xX
+  xX = data.xX;
   Xnames = xX.Xnames;
   Sess = data.Sess;
 end
