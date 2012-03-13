@@ -32,6 +32,9 @@ function outData = check_completion_v2(varargin)
 % 4/7/2009 Stefan Tomic - adapted script into a more general purpose function for all experiments
 % 06/15/2010 PJ - eliminated ensemble_globals, and forced new
 %                 msyql_make_conn scheme.
+% 13Mar2012 PJ - Fixed handling of database connectivity, giving
+% precedence to mysql.  Added reporting of subject names and start and stop
+% times
 
 outData = [];
 
@@ -43,11 +46,23 @@ else
   fprintf('%s: Wrong number of arguments: %d\n', mfilename, nargin);
 end
 
+if isfield(params,'mysql')
+	db_params_struct = 'mysql';
+elseif isfield(params, 'ensemble')
+	db_params_struct = 'ensemble';
+else
+	error('Do not have a mysql structure with db parameter info');
+end
+
 try
-  conn_id = params.ensemble.conn_id;
+  conn_id = params.mysql.conn_id;
 catch
-  conn_id = 7;
-  params.ensemble.conn_id = conn_id;
+	try 
+		conn_id = params.ensemble.conn_id;
+	catch
+		conn_id = 7;
+		params.mysql.conn_id = conn_id;
+	end
 end
 
 try
@@ -57,7 +72,7 @@ catch
 end
 
 if(mysql(conn_id,'status') ~= 0)
-  mysql_make_conn(params.ensemble);
+  mysql_make_conn(params.(db_params_struct));
 end
 
 try tbl_name = params.resptbl_name; catch tbl_name = ''; end
@@ -122,6 +137,11 @@ else
 end
 params.report.fid = fid;
 
+% Get subject information
+subInfo = mysql_get_subinfo('subject_id', completedData.data{cdCols.subject_id}, ...
+  'mysql', params.(db_params_struct));
+siCols = set_var_col_const(subInfo.vars);
+
 nsess = length(completedData.data{cdCols.session_id});
 fprintf(fid,'%d initiated sessions\n', nsess);
 
@@ -139,7 +159,7 @@ for itype = 1:2
   end
   
   fprintf(fid,'\n%s\n', type_str);
-  fprintf(fid,'Session\tSubject\tTicketID\tTicketCode\n');
+  fprintf(fid,'Session\tSubject\tFirstName\tLastName\tStartTime\tEndTime\tTicketID\tTicketCode\n');
   for isess = 1:length(idx_list)
     curr_idx = idx_list(isess);
     
@@ -147,9 +167,21 @@ for itype = 1:2
     mysql_str = sprintf('SELECT ticket_code FROM ticket WHERE ticket_id = %d;', curr_tick_id);
     ticket_code = mysql(conn_id, mysql_str);
     
-    fprintf(fid, '%d\t%s\t%d\t%s\n', ...
+		start_str = datestr(completedData.data{cdCols.date_time}(curr_idx));
+		if strcmp(type_str,'INCOMPLETE')
+			stop_str = '';
+		else
+			stop_str = datestr(completedData.data{cdCols.end_datetime}(curr_idx));
+		end
+		
+		first_name = subInfo.data{siCols.name_first}{strcmp(subInfo.data{siCols.subject_id},completedData.data{cdCols.subject_id}{curr_idx})};
+		last_name = subInfo.data{siCols.name_last}{strcmp(subInfo.data{siCols.subject_id},completedData.data{cdCols.subject_id}{curr_idx})};
+			
+    fprintf(fid, '%d\t%s\t%s\t%s\t%s\t%s\t%d\t%s\n', ...
       completedData.data{cdCols.session_id}(curr_idx), ...
       completedData.data{cdCols.subject_id}{curr_idx}, ...
+			first_name, last_name, ...
+      start_str, stop_str, ...
       curr_tick_id, ticket_code{1});
   end
 end
