@@ -12,6 +12,22 @@ function an_st = ensemble_enum_hist(data_st,params)
 % answers to the same question on different forms combined, you must filter the
 % data to only process forms with unique question IDs.  This behavior may
 % change in future versions.
+%
+% Required variables:
+% params.mysql.conn_id
+%
+% Optional parameters
+% params.filt - struct for ensemble_filter for narrowing range of analyzed
+%               question_ids
+% params.item_var - variable by which to summarize responses. Options: 
+%                   'session_id','subject_id','stimulus_id'
+% params.report.figs.plot
+% params.report.figs.ylim
+% params.report.figs.title
+% params.report.figs.{} - a number of other parameters that govern figure
+%                         plotting
+% params.report.tables - specification for writing to a file. See
+%                        ensemble_init_fid()
 
 % 01/28/07 Petr Janata - adapted from quest_resp_dist.m and an earlier start on
 % ensemble_enum_hist which was much more oriented towards returning function
