@@ -16,7 +16,7 @@ if isfield(col,'compqid')
   return % nothing to construct, so return what we received
 end
 
-if ~isfield(col,'compqid') & ~all(isfield(col,{'question_id','subquestion'}))
+if ~isfield(col,'compqid') && ~all(isfield(col,{'question_id','subquestion'}))
   fprintf(['%s: Did not find necessary question and subquestion or composite question ID' ...
 	' information in the input data'], mfilename);
   data_st = [];

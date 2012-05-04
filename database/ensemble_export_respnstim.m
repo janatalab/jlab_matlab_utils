@@ -134,6 +134,8 @@ function outData = ensemble_export_respnstim(inData,params)
 % by stimulus, or any other variable, you can later retrieve the order of
 % presentation of stimuli by sorting by response_order.
 % PJ 24/09/10 - fixed passing of qnums to make_valid_struct_key
+% PJ 04May2012 - improved handling of question type to differentiate enums
+% from text and numeric data, e.g. reaction times, written to response_text
 
 % % initialize output data struct
 outData = ensemble_init_data_struct;
@@ -554,6 +556,7 @@ if isfield(params.export,'by_stimulus')
     scol = rsCols.stimulus_id;
     qcol = rsCols.question_id;
     ecol = rsCols.response_enum;
+		rtcol = rsCols.response_text;
     tcol = rsCols.trial_id;
     rocol = rsCols.response_order;
     
@@ -712,7 +715,17 @@ if isfield(params.export,'by_stimulus')
                         lqid = lqid{1};
                     end
                     [qidx] = find(ismember(stmData.data{qcol},lqid));
-                    if length(qidx) > 1
+										
+										% Make sure this question existed for this particular
+										% stimulus_id
+										if isempty(qidx)
+											continue
+											if qtype == 's'
+												qdata = '';
+											else
+												qdata = NaN;
+											end
+										elseif length(qidx) > 1
                         lsubq = cqids.data{cqSub}(lqidx);
                         lsubq = lsubq{1};
                         if length(qidx) < lsubq
@@ -720,11 +733,34 @@ if isfield(params.export,'by_stimulus')
                         else
                             qidx = qidx(lsubq);
                         end
-                    end
-                    qenum = stmData.data{ecol}(qidx);
-                    if isnumeric(qenum)
-                        qdata = enum2data(qenum);
-                    end
+										else
+										
+											% Determine whether the response should be drawn from
+											% response_enum or response_text
+											srcType = cqids.data{cqQin}{iq}.type;
+											if strcmp(srcType,'enum')
+												srcCol = ecol;
+											else
+												srcCol = rtcol;
+											end
+											
+											qenum = stmData.data{srcCol}(qidx);
+											if isnumeric(qenum)
+												switch srcType
+													case 'enum'
+														qdata = enum2data(qenum);
+													otherwise
+														qdata = qenum;
+												end
+											else
+												switch srcType
+													case {'varchar','text'}
+														qdata = qenum{1};
+													otherwise
+														qdata = str2num(qenum{1});
+												end
+											end
+										end
                 end % if length(qcidx)
                 ocol = outCols.(make_valid_struct_key(qi));
                 qtype = outData.datatype{ocol};

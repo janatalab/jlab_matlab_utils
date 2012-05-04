@@ -146,6 +146,12 @@ respinfo.name = 'response_data';
 respinfo.type = 'response_data';
 respcols = set_var_col_const(respinfo.vars);
 
+% Check to make sure that subquestion information isn't NaN
+if any(isnan(respinfo.data{respcols.subquestion}))
+	fprintf('Replacing NaNs in subquestion field with 1\n');
+	respinfo.data{respcols.subquestion}(isnan(respinfo.data{respcols.subquestion})) = 1;
+end
+
 % Check to see if we are filtering using 'terminal_form'
 respFilt = [];
 try term_form = params.ensemble.terminal_form; catch term_form = []; end
@@ -214,23 +220,30 @@ subInfo.name = 'subject_info';
 subInfo.type = 'subject_info';
 
 % Perform filtering on subject info
-subInfo = ensemble_filter(subInfo, params.filt);
+if isfield(params,'filt')
+	subInfo = ensemble_filter(subInfo, params.filt);
+end
 scols = set_var_col_const(subInfo.vars);
 
 % Get list of retained subject IDs
 goodSubIDs = unique(subInfo.data{scols.subject_id});
 
 % Refilter session and response table structures
-tmpfilt = struct();
-tmpfilt.include.all.subject_id = goodSubIDs;
-
-result.data{outCols.session_info} = ...
-	ensemble_filter(result.data{outCols.session_info}, tmpfilt);
-sessInfo = result.data{outCols.session_info};
-
-result.data{outCols.response_data} = ...
-	ensemble_filter(result.data{outCols.response_data}, tmpfilt);
-respinfo = result.data{outCols.response_data};
+if isfield(params,'ensemble') && isfield(params.ensemble,'refilterBySubjectTableIDs') && ~params.ensemble.refilterBySubjectTableIDs
+	fprintf('Not refiltering session and response data using subject table information ...\n');
+else
+	fprintf('Refiltering session and response data using subject table information ...\n');
+	tmpfilt = struct();
+	tmpfilt.include.all.subject_id = goodSubIDs;
+	
+	result.data{outCols.session_info} = ...
+		ensemble_filter(result.data{outCols.session_info}, tmpfilt);
+	sessInfo = result.data{outCols.session_info};
+	
+	result.data{outCols.response_data} = ...
+		ensemble_filter(result.data{outCols.response_data}, tmpfilt);
+	respinfo = result.data{outCols.response_data};
+end
 
 % update the output structure
 result.vars{end+1} = 'subject_info';
