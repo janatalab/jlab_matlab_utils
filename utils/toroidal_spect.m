@@ -16,7 +16,7 @@ function [amp, theta, phi, names, Rsqr, X] = toroidal_spect(data, dims,m, n)
 %  theta and phi given in dims. If data is a matrix, rows are individual
 %  surfaces that are to be modelled.
 %
-
+% 
 % 03/25/02 Petr Janata
 
 nunits_theta = dims(1);

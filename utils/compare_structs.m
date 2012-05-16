@@ -2,11 +2,13 @@ function [structsAreEqual,firstViolation,violationReason] = compare_structs(stru
 %
 % Compares two structs to see if they have identical fields and/or values
 %
-% struct1 and struct2 are the only required arguments
-% the rest of the arguments are tag,value pairs that specify how
-% the structs will be compared.
+% struct1 and struct2 are the only required arguments. the rest of the
+% arguments are tag,value pairs that specify how the structs will be
+% compared.
+% 
 % supported tags and values:
-%    'values' (true or false): specifies whether field values will be compared or not.
+%    'values' (true or false): specifies whether field values will be
+%       compared or not.
 %    'substruct' (true or false): specifies whether to check only
 %         whether struct1 is contained in struct2 (struct2 simply has
 %         more fields and values than struct1 but otherwise are
@@ -18,6 +20,11 @@ function [structsAreEqual,firstViolation,violationReason] = compare_structs(stru
 %         will automatically be checked.
 %    'ignore_fieldnames': a cell array of strings that, if encountered
 %         as a fieldname, will be skipped, and will not be compared.
+%    'subsetIsOK': a cell array of strings identifying fieldnames for which
+%         a subset is of values is OK. Example: If the value of the
+%         fieldname 'HalfDecayTimes' in struct1 contains ([0.2 2]), the
+%         values of a matched fieldname in struct2 would be deemed equal if
+%         it contained the desired values and any others, e.g. [0.2 2 4 8].
 %
 % defaults if not specified are 'values',true and 'contained',false
 %
@@ -32,9 +39,9 @@ function [structsAreEqual,firstViolation,violationReason] = compare_structs(stru
 %                     inequalities. 
 %
 %   violationReason - provides a concise descriptor of the type of
-%                     violation that occurred. This is short and simple to allow for
-%                     easy string matching if a more elaborate report is desired in a
-%                     higher level script.
+%                     violation that occurred. This is short and simple to
+%                     allow for easy string matching if a more elaborate
+%                     report is desired in a higher level script.
 %
 % Copyright (c) 2007 The Regents of the University of California
 % All Rights Reserved.
@@ -47,10 +54,7 @@ function [structsAreEqual,firstViolation,violationReason] = compare_structs(stru
 %   also added handling of struct arrays
 % 11/11/2009 - Fred Barrett, added 'ignore_fieldnames' option
 % 01Nov2011 - Petr Janata, added ability to specify those fieldnames for
-%             which specification of a subset of values is OK. Example: If
-%             an array of HalfDecayTimes is requested ([0.2 2]), an
-%             analysis would be deemed OK if it contained the desired
-%             HalfDecayTimes and any others, e.g. [0.2 2 4 8]
+%             which specification of a subset of values is OK. 
 
 numberTypes = {'int8','uint8','int16','uint16','int32','uint32','int64','uint64','double'};
 firstViolation = {};
