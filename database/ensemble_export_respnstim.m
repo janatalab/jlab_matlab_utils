@@ -136,6 +136,10 @@ function outData = ensemble_export_respnstim(inData,params)
 % PJ 24/09/10 - fixed passing of qnums to make_valid_struct_key
 % PJ 04May2012 - improved handling of question type to differentiate enums
 % from text and numeric data, e.g. reaction times, written to response_text
+% PJ 29May2012 - fixed handling of multi-part questions; fixed indexing
+% when overall list of questions involves checkbox enums; fixed handling
+% of output datatypes so that they are dynamically determined based on
+% qinfo
 
 % % initialize output data struct
 outData = ensemble_init_data_struct;
@@ -522,7 +526,7 @@ if isfield(params.export,'by_stimulus')
         end
         lqinfo = mysql_extract_metadata('table','question',...
             'question_id',lqid,'conn_id',params.mysql.conn_id);
-        cqids.data{cqQin}(icq) = {lqinfo};
+        cqids.data{cqQin}(icq) = {lqinfo(cqids.data{cqSub}{icq})}; % cqids.data{cqSub}{icq}
         uhft = {lqinfo.html_field_type};
         if strmatch('checkbox',uhft{lsqid});
             % get dfid for qid, expand qnums for this compqid
@@ -546,8 +550,21 @@ if isfield(params.export,'by_stimulus')
     numconst = length(outData.vars);
     for iadvar = numconst+1:numconst+length(qnums)
         outData.data{iadvar} = [];
-        %%%% FIXME: assumes all responses will be numeric
-        outData.datatype = [outData.datatype 'n'];
+       
+				% Figure out which compqid row we are dealing with
+				stridx = regexp(qnums{iadvar-numconst},'_c\d{2}');
+				if isempty(stridx)
+					cqid = qnums{iadvar-numconst};
+				else
+					cqid = qnums{iadvar-numconst}(1:stridx-1);
+				end
+				cqidrow = find(ismember(cqids.data{cqCqi}, cqid));
+				switch cqids.data{cqQin}{cqidrow}.type
+					case {'text','varchar'}
+						outData.datatype = [outData.datatype 's'];
+					otherwise
+						outData.datatype = [outData.datatype 'n'];
+				end
     end
     outData.vars = [outData.vars qStructs];
     outCols = set_var_col_const(outData.vars);    
@@ -694,7 +711,7 @@ if isfield(params.export,'by_stimulus')
                     end
                     if lsqidx
                         qenum = stmData.data{ecol}(lsqidx);
-                        if bidx <= nenum
+                        if bidx <= nenum && ~isnan(qenum)
                             if isempty(cqids.data{cqBit}{lcqidx})
                                 qdata = data2bitmask(qenum,nenum);
                                 cqids.data{cqBit}{lcqidx} = qdata;
@@ -737,7 +754,7 @@ if isfield(params.export,'by_stimulus')
 										
 											% Determine whether the response should be drawn from
 											% response_enum or response_text
-											srcType = cqids.data{cqQin}{iq}.type;
+											srcType = cqids.data{cqQin}{lqidx}.type;
 											if strcmp(srcType,'enum')
 												srcCol = ecol;
 											else

@@ -23,7 +23,7 @@ bitmask = fliplr(bitmask);
 
 % if a maximum bit has been specified, make sure that the number of columns in
 % our mask corresponds to the desired number of bits
-if exist('max_bit') && max_bit > size(bitmask,2)
+if exist('max_bit','var') && max_bit > size(bitmask,2)
   bitmask(end,max_bit) = 0;
 end
 
