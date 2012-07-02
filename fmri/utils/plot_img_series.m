@@ -15,6 +15,8 @@ function plot_img_series(imgInfo,params)
 %   .SEPARATE_FIGS - place each page in its own figure window [0]
 %   .PRINT_FIGS - print the figure [0]
 %   .figfname - path to which to print the figure ['']
+%   .PLOT_INDIV_SLICES - plots each slice to its own jpeg file in a
+%   directory 
 
 % December 2010, Petr Janata
 
@@ -34,14 +36,17 @@ try rowTitleAreaHeight = params.rowTitleAreaHeight; catch rowTitleAreaHeight = 0
 try colScaleFactor = params.colScaleFactor; catch colScaleFactor = 0.95; end
 try PRINT_FIGS = params.PRINT_FIGS; catch PRINT_FIGS = 0; end
 try figfname = params.figfname; catch figfname = ''; end
+try PLOT_INDIV_SLICES = params.PLOT_INDIV_SLICES; catch PLOT_INDIV_SLICES = 0; end
 
 numRow = ceil(maxImgPerPage/numCol);
+
+global_tp = tp;
 
 % Initialize plot parameters
 clear global SO
 global SO
 
-% Figure out how many ICs we need to plot
+% Figure out how many total plots we have
 numPlots = length(imgInfo);
 
 numPages = ceil(numPlots/maxImgPerPage);
@@ -75,14 +80,15 @@ for ipage = 1:numPages
 	SO.transform = tp.transform_types{tp.transform_idx};
 		
 	for iplot = 1:length(pageImgIdxs)
+    currIdx = pageImgIdxs(iplot);
 		
 		% Copy the img stack
-		SO.img = imgInfo(pageImgIdxs(iplot)).img;
+		SO.img = imgInfo(currIdx).img;
 		
-		try SO.cbar = imgInfo(pageImgIdxs(iplot)).cbar; catch SO.cbar = []; end
-		try SO.contours = imgInfo(pageImgIdxs(iplot)).contours; catch SO.contours = []; end
-		try SO.ticks = imgInfo(pageImgIdxs(iplot)).ticks; catch SO.ticks.show = 0; end		
-    try SO.white_background = imgInfo(pageImgIdxs(iplot)).white_background; catch SO.white_background = 0; end
+		try SO.cbar = imgInfo(currIdx).cbar; catch SO.cbar = []; end
+		try SO.contours = imgInfo(currIdx).contours; catch SO.contours = []; end
+		try SO.ticks = imgInfo(currIdx).ticks; catch SO.ticks.show = 0; end		
+    try SO.white_background = imgInfo(currIdx).white_background; catch SO.white_background = 0; end
    
     if SO.white_background
       SO.labels.colour = [0 0 0];
@@ -90,7 +96,7 @@ for ipage = 1:numPages
     
 		% Specify the plot area
 		rowidx = ceil(iplot/numCol);
-		colidx = mod(iplot-1,numRow)+1;
+		colidx = mod(iplot-1,numCol)+1;
 			
 		row_height = 1/numRow;
 		height = row_height-rowTitleAreaHeight;
@@ -103,12 +109,23 @@ for ipage = 1:numPages
 		left = (colidx-1)/numCol+col_margin;
 			
 		% Make the plot
-		if ~isempty(tp.non_contig_slices)
-			SO.slices = tp.non_contig_slices;
-		else
-			SO.slices = ...
-				tp.slice_ranges(tp.transform_idx,1):sign(diff(tp.slice_ranges(tp.transform_idx,:)))*tp.slice_skip:tp.slice_ranges(tp.transform_idx,2);
-		end
+    if isfield(imgInfo(currIdx), 'tp')
+      tp = imgInfo(currIdx).tp;
+    else
+      tp = global_tp;
+    end
+    
+    if ~isempty(tp.non_contig_slices)
+      SO.slices = tp.non_contig_slices;
+    else
+      if length(tp.slice_ranges) > 1
+        SO.slices = ...
+          tp.slice_ranges(tp.transform_idx,1):sign(diff(tp.slice_ranges(tp.transform_idx,:)))*tp.slice_skip:tp.slice_ranges(tp.transform_idx,2);
+      else
+        SO.slices = tp.slice_ranges;
+      end
+    end
+    
 		slice_overlay('checkso')
 			
 		SO.refreshf = 1;
@@ -119,35 +136,70 @@ for ipage = 1:numPages
 			
 		% Now we need to add a title
 		try 
-			title_str = imgInfo(pageImgIdxs(iplot)).title.text;
+			title_str = imgInfo(currIdx).title.text;
 		catch
 			title_str = '';
 		end
 		
 		try 
-			format_args = imgInfo(pageImgIdxs(iplot)).title.format_args;
+			format_args = imgInfo(currIdx).title.format_args;
 		catch 
 			format_args = {};
 		end
 			
-		% Create an axes in the title area
-		tah = axes('position', [left bottom+height width rowTitleAreaHeight], ...
+		if ~isempty(title_str)
+      % Create an axes in the title area
+      tah = axes('position', [left bottom+height width rowTitleAreaHeight], ...
 			'visible','off');
 			
-		if ~isempty(title_str)
 			t = text(0.5, 0.25, title_str, format_args{:});
 		end
 	end % for iplot=
 		
+  % If we are plotting individual slices and have only one child axes, then
+  % try to crop the figure to the axes
+  children = get(gcf,'children');
+  if length(children) == 1
+    % Get the position of the child and simply try to set the paper
+    % position to that
+%    childPos = get(children,'Position');
+%    set(gcf,'Position',childPos)
+%    set(gcf,'PaperPositionMode','auto')
+%    set(children,'Position',[0 0 1 1], 'units', 'normalized')
+    
+    % To make sure that tick labels show up, set their color to black
+    set(children,'xcolor', [0 0 0], 'ycolor', [0 0 0])
+  end
+  
 	% Print the figure out to a file
+  if PLOT_INDIV_SLICES && exist(imgInfo(currIdx).fpath,'dir')
+    transform_str = tp.transform_types{tp.transform_idx};
+
+    [fpath,fstub] = fileparts(imgInfo(currIdx).fpath);
+    switch transform_str
+      case 'coronal'
+        slice_plane = 'y';
+      case 'axial'
+        slice_plane = 'z';
+      otherwise
+        slice_plane = 'x';
+    end
+    figfname = fullfile(imgInfo(currIdx).fpath, sprintf('%s_%s=%dmm.png',fstub, slice_plane,tp.slice_ranges));
+    append_str = '';
+    ftype_str = '-dpng';
+  end 
+  
 	if PRINT_FIGS && ~isempty(figfname)
-		if ipage == 1
-			fprintf('Printing plots to %s\n', figfname);
-			append_str = '';
-		else
-			append_str = '-append';
-		end
+    if ~PLOT_INDIV_SLICES
+      ftype_str = '-dpsc';
+      if ipage == 1
+        fprintf('Printing plots to %s\n', figfname);
+        append_str = '';
+      else
+        append_str = '-append';
+      end
+    end
 		set(gcf,'PaperPosition',[0 0 get(gcf,'PaperSize')]);
-		print(figfname, '-dpsc', append_str);
+		print(figfname, ftype_str, append_str);
 	end
 end % for ipage
