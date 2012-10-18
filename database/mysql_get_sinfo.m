@@ -20,7 +20,7 @@ function sinfo = mysql_get_sinfo(subid,params)
 %       .exp_ids -- experiments the subject has participated in
 %       .exp_names
 %       .sess_ids -- session IDs
-% 
+
 % 03/05/06 Petr Janata - determines participation dates for the subject
 % 04/15/06 PJ - optimized search for subject ID in response tables
 % 06/21/06 PJ - searches session table instead of response tables.
@@ -33,6 +33,7 @@ function sinfo = mysql_get_sinfo(subid,params)
 % particular user that will be running this function. This will
 % 03/29/11 FB - if DOB is encrypted, datenum(sinfo.datenum) will fail. This
 % error is now being caught, so that mysql_get_sinfo can continue
+% 10/18/12 PJ - ignores experiments with no response table
 
 sinfo = [];
 
@@ -103,6 +104,9 @@ else
   ntbl = length(resp_tbls);
   tbl_mask = zeros(1,ntbl);
   for itbl = 1:ntbl
+		if isempty(resp_tbls{itbl})
+			continue
+		end
     mysql_str = sprintf('SELECT subject_id FROM %s WHERE subject_id="%s";', resp_tbls{itbl}, subid);
     sublist = mysql(params.conn_id, mysql_str);
     if ~isempty(sublist)

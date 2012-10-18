@@ -97,6 +97,7 @@ else
 	nRecords = length(values);
 end
 
+key_list = [];
 for iRecord = 1:nRecords
 	
 	if dataByCol
