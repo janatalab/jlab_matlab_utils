@@ -24,11 +24,11 @@ function result_st = ensemble_concat_datastruct(data_st,params)
 
 % return '' if data_st{1} == struct('name','return_outdir')
 if (iscell(data_st) && ~isempty(data_st) && isfield(data_st{1},'task') && ...
-        ~isempty(strmatch('return_outdir',data_st{1}.task))) || ...
-        (isstruct(data_st) && isfield(data_st,'task') && ...
-        ~isempty(strmatch('return_outdir',data_st.task)))
-    result_st = '';
-    return
+    ~isempty(strmatch('return_outdir',data_st{1}.task))) || ...
+    (isstruct(data_st) && isfield(data_st,'task') && ...
+    ~isempty(strmatch('return_outdir',data_st.task)))
+  result_st = '';
+  return
 end
 
 result_st = ensemble_init_data_struct;
@@ -59,27 +59,27 @@ try type_as_var = params.type_as_var; catch type_as_var = false; end
 
 % Original versions of this script did not operate based on type
 if ~type_as_var
-
+  
   % Copy the variables from the first data struct
   vars = data_st{1}.vars;
   nvars = length(vars);
-
+  
   result_st.vars = vars;
   result_st.data = data_st{1}.data;
-
+  
   if nstruct < 2
     return
   end
-
+  
   for istruct = 2:nstruct
     for ivar = 1:nvars
       if ~strcmp(data_st{istruct}.vars{ivar},vars{ivar})
-	fprintf('%s: variable mismatch: Found %s, expected %s\n', mfilename, ...
-	    data_st{istruct}.vars{ivar}, vars{ivar});
-	result_st = ensemble_init_data_struct;
-	return
+        fprintf('%s: variable mismatch: Found %s, expected %s\n', mfilename, ...
+          data_st{istruct}.vars{ivar}, vars{ivar});
+        result_st = ensemble_init_data_struct;
+        return
       else
-	result_st.data{ivar} = [result_st.data{ivar}; data_st{istruct}.data{ivar}];
+        result_st.data{ivar} = [result_st.data{ivar}; data_st{istruct}.data{ivar}];
       end
     end % for ivar
   end % for istruct
@@ -87,8 +87,8 @@ if ~type_as_var
 else
   % Get a list of unique datastruct types
   struct_types = cellfun(@getfield,data_st, ...
-      ... %repmat({'name'},size(data_st)),'UniformOutput',false); % PJ 07Dec2010 - I think this is supposed to be type instead of name
-			repmat({'type'},size(data_st)),'UniformOutput',false);
+    ... %repmat({'name'},size(data_st)),'UniformOutput',false); % PJ 07Dec2010 - I think this is supposed to be type instead of name
+    repmat({'type'},size(data_st)),'UniformOutput',false);
   
   unique_types = unique(struct_types);
   num_types = length(unique_types);
@@ -96,7 +96,7 @@ else
   result_st.vars = unique_types;
   for itype = 1:num_types
     curr_type = unique_types{itype};
-
+    
     % Initialize a data struct for this particular data type
     curr_st = ensemble_init_data_struct;
     curr_st.name = sprintf('%s_concat', curr_type);
@@ -114,15 +114,15 @@ else
     % Match the variables and copy the data for the remaining structures
     for istruct = 2:length(st_idxs)
       for ivar = 1:nvars
-	if ~strcmp(data_st{st_idxs(istruct)}.vars{ivar}, vars{ivar})
-	  fprintf('%s: variable mismatch: Found %s, expected %s\n', mfilename, ...
-	      data_st{st_idxs(istruct)}.vars{ivar}, vars{ivar});
-	  result_st = ensemble_init_data_struct;
-	  return
-	else
-	  curr_st.data{ivar} = [curr_st.data{ivar}; ...
-		data_st{st_idxs(istruct)}.data{ivar}];
-	end
+        if ~strcmp(data_st{st_idxs(istruct)}.vars{ivar}, vars{ivar})
+          fprintf('%s: variable mismatch: Found %s, expected %s\n', mfilename, ...
+            data_st{st_idxs(istruct)}.vars{ivar}, vars{ivar});
+          result_st = ensemble_init_data_struct;
+          return
+        else
+          curr_st.data{ivar} = [curr_st.data{ivar}; ...
+            data_st{st_idxs(istruct)}.data{ivar}];
+        end
       end
     end % for istruct=
     
