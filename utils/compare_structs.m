@@ -43,7 +43,7 @@ function [structsAreEqual,firstViolation,violationReason] = compare_structs(stru
 %                     allow for easy string matching if a more elaborate
 %                     report is desired in a higher level script.
 %
-% Copyright (c) 2007 The Regents of the University of California
+% Copyright (c) 2007-2012 The Regents of the University of California
 % All Rights Reserved.
 %
 % Author(s)

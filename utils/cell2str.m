@@ -7,6 +7,8 @@ function [s] = cell2str(cs,delim)
 %
 % This function is useful in conjunction with sprintf statements
 %
+% Copyright (c) 2003-2012 The Regents of the University of California
+% All Rights Reserved.
 
 % 4/23/03 Petr Janata
 % 10/23/10 PJ - added handling of empty cell array

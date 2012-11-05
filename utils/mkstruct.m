@@ -10,7 +10,7 @@ function st = mkstruct(fields,args)
 % args - a list of param/value pairs containing the name of the field and the
 %        value it should be populated with
 %
-% Copyright (c) 2006 The Regents of the University of California
+% Copyright (c) 2006-2012 The Regents of the University of California
 % All Rights Reserved.
 %
 % Author:

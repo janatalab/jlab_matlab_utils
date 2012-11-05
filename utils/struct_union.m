@@ -8,7 +8,7 @@ function struct1 = struct_union(struct1,struct2)
 % populating a parameter structure with default values which may be
 % missing from the specified parameters.
 %
-% Copyright (c) 2008 The Regents of the University of California
+% Copyright (c) 2008-2012 The Regents of the University of California
 % All Rights Reserved.
 %
 % Authors:

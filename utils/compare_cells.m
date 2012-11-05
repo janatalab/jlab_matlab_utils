@@ -47,7 +47,10 @@ function [cellsAreEqual,firstViolation,violationReason] = compare_cells(cell1,ce
 % NOTE: if one cell is a transposition of the other, they will be found
 % unequal, either by size, or by contents
 % 
-% FB 209.02.24
+% Copyright (c) 2009-2012 The Regents of the University of California
+% All Rights Reserved.
+%
+% FB 2009.02.24
 
 % 
 % initialize variables

@@ -1,5 +1,5 @@
 function new_stimlist = check_stim_dirs(stimlist,varargin)
-% Creates a directory structure for ipem_proc_series calculations 
+% Creates a directory structure for jlmt_proc_series calculations 
 %
 % new_stimlist = check_stim_dirs(stimlist);
 %
@@ -22,7 +22,7 @@ function new_stimlist = check_stim_dirs(stimlist,varargin)
 % OUTPUTS
 % new_stimlist - list of symlinks to original stimuli.
 %
-% Copyright (c) 2006 The Regents of the University of California
+% Copyright (c) 2006-2012 The Regents of the University of California
 % All Rights Reserved
 %
 % December 29, 2006 Petr Janata

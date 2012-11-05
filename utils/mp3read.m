@@ -63,7 +63,7 @@ cmd = [mp3info, ' -r m -p "%Q %u %r %v * %C %e %E %L %O %o %p" "', FILE,'"'];
 % C = Copyright, e = emph, E = CRC, L = layer, O = orig, o = mono, p = pad
 w = mysystem(cmd);
 if isempty(w) & exist(FILE,'file')
-    trylim = 10;
+    trylim = 20;
     tries = 0;
     pauseval = 2;
     fprintf(1,'mp3info error, retrying %d times\n',trylim);

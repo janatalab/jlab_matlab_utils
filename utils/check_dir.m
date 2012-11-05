@@ -1,7 +1,7 @@
 function status = check_dir(outdir, verbose, parents, group, perm)
 % Checks for existence of outdir, and creates it if necessary
 %
-% status = check_dir(outdir, verbose, recurse);
+% status = check_dir(outdir, verbose, parents, group, perm);
 %
 % status returns 0 on success and 1 on failure
 %
@@ -18,7 +18,7 @@ function status = check_dir(outdir, verbose, parents, group, perm)
 % perm:     if set, mkdir will change the permissions of the new directory
 %           to this value
 %
-% Copyright (c) 2005 The Regents of the University of California
+% Copyright (c) 2005-2012 The Regents of the University of California
 % All Rights Reserved
 %
 % Author(s):
