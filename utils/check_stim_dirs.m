@@ -60,6 +60,7 @@ if(VERBOSE)
   fprintf('\nChecking stimulus directories...\n');
 end
 
+check_dir(destroot);
 
 nstims = length(stimlist);
 for istim = 1:nstims
@@ -67,6 +68,7 @@ for istim = 1:nstims
     fprintf('Stim %d/%d\n', istim,nstims);
   end
   curr_dir = destroot;
+  
   res = stimlist{istim};
   while ~isempty(res)
     [tok,res] = strtok(res,filesep);

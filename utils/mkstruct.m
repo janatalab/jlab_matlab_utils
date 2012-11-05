@@ -40,7 +40,7 @@ if nargs
     
     % Make sure the tag exists
     if ~any(ismember(lower(fields),lower(tag)))
-      fprintf('Skipping unknown tag: %s\n', tag);
+      fprintf('%s: Skipping unknown tag: %s\n', mfilename, tag);
       continue
     end
 

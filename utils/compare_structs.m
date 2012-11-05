@@ -55,10 +55,13 @@ function [structsAreEqual,firstViolation,violationReason] = compare_structs(stru
 % 11/11/2009 - Fred Barrett, added 'ignore_fieldnames' option
 % 01Nov2011 - Petr Janata, added ability to specify those fieldnames for
 %             which specification of a subset of values is OK. 
+% 30Oct2012 - Improved handling of ignore_fieldnames; eliminated instances
+% of strmatch()
 
 numberTypes = {'int8','uint8','int16','uint16','int32','uint32','int64','uint64','double'};
 firstViolation = {};
 violationReason = '';
+VERBOSE = 0;
 
 if (nargin > 2)
   for iarg = 1:2:nargin-2
@@ -71,8 +74,10 @@ if (nargin > 2)
       checkTypes = varargin{iarg+1};
      case 'ignore_fieldnames'
 			 ignore_fieldnames = varargin{iarg+1};
-			case 'subsetIsOK'
-				subsetIsOK = varargin{iarg+1};
+      case 'subsetIsOK'
+        subsetIsOK = varargin{iarg+1};
+      case 'verbose'
+        VERBOSE = varargin{iarg+1};
     end
   end
 end
@@ -80,7 +85,11 @@ end
 if ~exist('checkValues','var'), checkValues = true; end
 if ~exist('checkSubstruct','var'), checkSubstruct = true; end
 if ~exist('checkTypes','var'), checkTypes = true; end
-if ~exist('ignore_fieldnames','var'), ignore_fieldnames = {}; end
+if ~exist('ignore_fieldnames','var')
+  ignore_fieldnames = {}; 
+elseif ischar(ignore_fieldnames)
+  ignore_fieldnames = {ignore_fieldnames};
+end
 if ~exist('subsetIsOK','var'), subsetIsOK = {}; end
 
 struct1_fieldNames = fieldnames(struct1)';
@@ -143,8 +152,10 @@ for iField = 1:struct1_nFields
     
   struct1_fieldName = struct1_fieldNames{iField};
   
-  if ~isempty(strmatch(struct1_fieldName,ignore_fieldnames,'exact'))
-    warning('fieldname %s encountered, but ignored',struct1_fieldName);
+  if ismember(struct1_fieldName,ignore_fieldnames)
+    if VERBOSE
+      warning('fieldname %s encountered, but ignored',struct1_fieldName);
+    end
     continue
   end
   
