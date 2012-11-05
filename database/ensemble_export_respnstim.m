@@ -526,9 +526,10 @@ if isfield(params.export,'by_stimulus')
         end
         lqinfo = mysql_extract_metadata('table','question',...
             'question_id',lqid,'conn_id',params.mysql.conn_id);
-        cqids.data{cqQin}(icq) = {lqinfo(cqids.data{cqSub}{icq})}; % cqids.data{cqSub}{icq}
+        lqicq = [lqinfo.subquestion] == lsqid;
+        cqids.data{cqQin}(icq) = {lqinfo(cqids.data{cqSub}{lqicq})}; % cqids.data{cqSub}{icq}
         uhft = {lqinfo.html_field_type};
-        if strmatch('checkbox',uhft{lsqid});
+        if ~isempty(uhft{lqicq}) && ~isempty(strmatch('checkbox',uhft{lqicq}))
             % get dfid for qid, expand qnums for this compqid
             ueval = {lqinfo.enum_values};
             for istr = 1:length(ueval{lsqid})
@@ -733,51 +734,53 @@ if isfield(params.export,'by_stimulus')
                     end
                     [qidx] = find(ismember(stmData.data{qcol},lqid));
 										
-										% Make sure this question existed for this particular
-										% stimulus_id
-										if isempty(qidx)
-											continue
-											if qtype == 's'
-												qdata = '';
-											else
-												qdata = NaN;
-											end
-										elseif length(qidx) > 1
-                        lsubq = cqids.data{cqSub}(lqidx);
-                        lsubq = lsubq{1};
-                        if length(qidx) < lsubq
-                            qidx = qidx(1);
+                    % Make sure this question existed for this particular
+                    % stimulus_id
+                    if isempty(qidx)
+                        ocol = outCols.(make_valid_struct_key(qi));
+                        qtype = outData.datatype{ocol};
+                        if qtype == 's'
+                            qdata = '';
                         else
-                            qidx = qidx(lsubq);
+                            qdata = NaN;
                         end
-										else
-										
-											% Determine whether the response should be drawn from
-											% response_enum or response_text
-											srcType = cqids.data{cqQin}{lqidx}.type;
-											if strcmp(srcType,'enum')
-												srcCol = ecol;
-											else
-												srcCol = rtcol;
-											end
+                    else
+                        if length(qidx) > 1
+                            lsubq = cqids.data{cqSub}(lqidx);
+                            lsubq = lsubq{1};
+                            if length(qidx) < lsubq
+                                qidx = qidx(1);
+                            else
+                                qidx = qidx(lsubq);
+                            end
+                        end % if isempty(qidx
+                    
+                        % Determine whether the response should be drawn from
+                        % response_enum or response_text
+                        srcType = cqids.data{cqQin}{lqidx}.type;
+                        if strcmp(srcType,'enum')
+                            srcCol = ecol;
+                        else
+                            srcCol = rtcol;
+                        end
 											
-											qenum = stmData.data{srcCol}(qidx);
-											if isnumeric(qenum)
-												switch srcType
-													case 'enum'
-														qdata = enum2data(qenum);
-													otherwise
-														qdata = qenum;
-												end
-											else
-												switch srcType
-													case {'varchar','text'}
-														qdata = qenum{1};
-													otherwise
-														qdata = str2num(qenum{1});
-												end
-											end
-										end
+                        qenum = stmData.data{srcCol}(qidx);
+                        if isnumeric(qenum)
+                            switch srcType
+                              case 'enum'
+                                qdata = enum2data(qenum);
+                              otherwise
+                                qdata = qenum;
+                            end
+                        else
+                            switch srcType
+                                case {'varchar','text'}
+                                    qdata = qenum{1};
+                                otherwise
+                                    qdata = str2num(qenum{1});
+                            end
+                        end
+                    end
                 end % if length(qcidx)
                 ocol = outCols.(make_valid_struct_key(qi));
                 qtype = outData.datatype{ocol};
@@ -866,7 +869,7 @@ if fid ~= 1
                     item = '0';
                 end
             end
-            try item = regexprep(item,'\s','');
+            try item = regexprep(item,'\n','; ');
             catch
                 error('error trying to remove white space from a cell')
             end

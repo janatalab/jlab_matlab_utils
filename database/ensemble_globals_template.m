@@ -2,6 +2,9 @@
 %
 % Janata Lab, Center for Mind and Brain, UC Davis
 %
+% Copyright (c) 2010-2012 The Regents of the University of California
+% All Rights Reserved.
+%
 % Original Version by Petr Janata
 % Edited June 8, 2010 Stefan Tomic - created template from original file. Added 'county' to list of encrypted fields
 %

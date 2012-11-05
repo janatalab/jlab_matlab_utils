@@ -8,6 +8,9 @@ function newstruct = ensemble_tree2datastruct(generic_struct,params)
 %           ahead of time whether you will be dealing with one or more than
 %           one data set in your structure.
 %
+% Copyright (c) 2007-2012 The Regents of the University of California
+% All Rights Reserved.
+%
 % 15, Mar. 2007 - Stefan Tomic
 % 5 July, 2007 - Stefan Tomic, edited to conform to current
 %                ensemble spec. (data fields do not have to be the same length and

@@ -140,12 +140,19 @@ switch item_str
     item_type = 'subject';
   case 'stimulus_id'
     item_type = 'stimulus';
+  case 'none'
+    item_type = 'none';
   otherwise
     fprintf('%s: Unknown item variable: %s\n', mfilename, item_str);
 end
 
-% Precalculate the masks for the item variable we are using
-[item_mask_mtx, itemids] = make_mask_mtx(data_st.data{incol.(item_str)});
+if strcmp(item_type,'none')
+  item_mask_mtx = ones(length(data_st.data{1}),1);
+  itemids = 1;
+else
+  % Precalculate the masks for the item variable we are using
+  [item_mask_mtx, itemids] = make_mask_mtx(data_st.data{incol.(item_str)});
+end
 nitems = length(itemids);
 
 %
@@ -263,6 +270,8 @@ for iqid = 1:nqid
         itemval_str = sprintf('%d',itemids(iitem));
       case 'subject_id'
         itemval_str = itemids{iitem};
+      case 'none'
+        itemval_str = 'all';
       otherwise
         itemval_str = itemids{iitem};
     end

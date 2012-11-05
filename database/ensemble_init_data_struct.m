@@ -19,7 +19,7 @@ function data_st = ensemble_init_data_struct
 %            question information structure, etc.
 %
 %
-% Copyright (c) 2007 The Regents of the University of California
+% Copyright (c) 2007-2012 The Regents of the University of California
 % All Rights Reserved
 %
 % 02/03/07 Petr Janata

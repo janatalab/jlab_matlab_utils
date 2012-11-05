@@ -11,7 +11,7 @@ function col = set_var_col_const(var_list)
 % See also: set_form_col_const.m for a fixed set of column IDs
 %
 %
-% Copyright (c) 2007 The Regents of the University of California
+% Copyright (c) 2007-2012 The Regents of the University of California
 % All Rights Reserved
 %
 % Author:
