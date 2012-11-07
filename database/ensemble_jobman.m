@@ -163,10 +163,12 @@ for ia = idxs
 	
 	% Check to see if the name of the result is empty, and if so, populate it
 	% with the name of this analysis
-	if isempty(analysis_list{ia}.results.name)
-		analysis_list{ia}.results.name = analysis_name;
-	end
-  
+  numResults = length(result);
+  for ires = 1:numResults
+    if ~isfield(analysis_list{ia}.results{ires},'name') || isempty(analysis_list{ia}.results{ires}.name)
+      analysis_list{ia}.results{ires}.name = analysis_name;
+    end
+  end
   %    check_conn_exit(params)
   %    err = lasterror;
   %    fprintf('Failed on analysis %d ...\n%s\nReturning completed analyses ...\n', ia, err.message);
