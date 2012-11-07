@@ -120,7 +120,7 @@ for ia = idxs
 	    indata{requiredIdx} = dataList.data{dataListIdx};
 	  
 	  else
-	    error([sprintf('Analysis %s specifies a non-existent required',analysis_list{ia}.name)...
+	    error([sprintf('Analysis %s specifies a non-existent required',analysis_name)...
 		   sprintf(' datatype %s for analysis %s',requiredData.vars,analysis_list{anListIdx}.name)]);
 	  end
 	
@@ -134,7 +134,7 @@ for ia = idxs
       else
 	
 	%results field wasn't populated so required data wasn't available
-	error(sprintf('Required data for analysis ''%s'' was not available.',analysis_list{ia}.name));
+	error(sprintf('Required data for analysis ''%s'' was not available.',analysis_name));
       
       end
       
@@ -160,6 +160,12 @@ for ia = idxs
   result = fh(indata,analysisParams);      
   
   analysis_list{ia}.results = result;
+	
+	% Check to see if the name of the result is empty, and if so, populate it
+	% with the name of this analysis
+	if isempty(analysis_list{ia}.results.name)
+		analysis_list{ia}.results.name = analysis_name;
+	end
   
   %    check_conn_exit(params)
   %    err = lasterror;
