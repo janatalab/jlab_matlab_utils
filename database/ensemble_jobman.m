@@ -33,6 +33,8 @@ function analysis_list = ensemble_jobman(analysis_list,params)
 %            you to the desired breakpoint
 % 06/15/10 - PJ cleaning mysql_make_conn support
 % 04/11/11 - PJ added alternative loading of results struct from file
+% 10Nov2012 - PJ added and fixed insertion of analysis name into the
+%             results structure 
 
 
 %if conn_id is set in params, then open a mysql connection
@@ -165,7 +167,9 @@ for ia = idxs
 	% with the name of this analysis
   numResults = length(result);
   for ires = 1:numResults
-    if ~isfield(analysis_list{ia}.results{ires},'name') || isempty(analysis_list{ia}.results{ires}.name)
+		if isstruct(result) && (~isfield(result,'name') || isempty(result.name))
+			analysis_list{ia}.results.name = analysis_name;
+		elseif ~isfield(analysis_list{ia}.results{ires},'name') || isempty(analysis_list{ia}.results{ires}.name)
       analysis_list{ia}.results{ires}.name = analysis_name;
     end
   end
