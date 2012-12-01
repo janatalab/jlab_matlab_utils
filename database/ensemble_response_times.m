@@ -168,17 +168,18 @@ for ixfm = 1:nxfm
   xfm_mask = ismember(out_st.data{ocols.data_transform}, xfmType);
   
   % Get the rank order of the mean data
-  [ranked(ixfm).mean, ranks] = sort(out_st.data{ocols.mean}(xfm_mask),'descend');
+  [ranked(ixfm).mean, srcidxs] = sort(out_st.data{ocols.mean}(xfm_mask),'descend');
   
   % Write the rank info to the by-item data matrix
-  out_st.data{ocols.rank}(xfm_mask,1) = ranks(:); 
+  [sorted_srcidx, ranks] = sort(srcidxs);
+  out_st.data{ocols.rank}(xfm_mask,1) = ranks; 
   
   for ivar = 1:length(rankVars)
     cv = rankVars{ivar};
     
     % Rank the current variable
     tmp = out_st.data{ocols.(cv)}(xfm_mask);
-    ranked(ixfm).(cv) = tmp(ranks);
+    ranked(ixfm).(cv) = tmp(srcidxs);
   end
 
   % Calculate the standard error of the mean

@@ -168,11 +168,11 @@ for ia = idxs
   numResults = length(result);
   for ires = 1:numResults
 		if isstruct(result(ires)) 
-			if ~isfield(result(ires),'name') || isempty(result(ires).name)
-				analysis_list{ia}.results(ires).name = analysis_name;
-			else
-				continue
-			end
+      if ~isfield(result(ires),'name') || isempty(result(ires).name)
+        analysis_list{ia}.results(ires).name = analysis_name;
+      else
+        continue
+      end
 		elseif ~isfield(analysis_list{ia}.results{ires},'name') || isempty(analysis_list{ia}.results{ires}.name)
       analysis_list{ia}.results{ires}.name = analysis_name;
     end
