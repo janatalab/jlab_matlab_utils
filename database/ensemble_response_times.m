@@ -88,6 +88,18 @@ out_st.name = sprintf('by_%s', item_str);
 out_st.vars = [item_str out_st.vars];
 ocols = set_var_col_const(out_st.vars);
 
+% If we are looping over stimulus_id and we are normalizing the response
+% time data by some value, make sure we have a structure of those values
+if strcmp(item_type,'stimulus') && isfield(params.rt,'transform') && any(ismember(params.rt.transform,'norm'))
+  % Get the stimulus info
+  sidx = ensemble_find_analysis_struct(data_st,struct('type','stimulus_metadata'));
+  if isempty(sidx)
+    error('stimulus_metadata structure required for analysis, but none found\n')
+  end
+  stim_st = data_st{sidx};
+  stimcols = set_var_col_const(stim_st.vars);
+end
+
 % Precalculate the masks we are using for this looping variable
 if strcmp(item_type,'none')
   item_mask_mtx = ones(length(rst.data{1}),1);
@@ -107,6 +119,30 @@ allRTs = allRTs/1000;
 % Now loop over items
 for iitem = 1:nitems
   item_mask = item_mask_mtx(:,iitem);
+  
+  % Check to see if we have multiple responses per subject per item
+  uniqueSess = unique(rst.data{rcols.session_id}(item_mask));
+  [cnt] = hist(rst.data{rcols.session_id}(item_mask),uniqueSess);
+  
+  if any(cnt > 1)
+    multmask = ismember(rst.data{rcols.session_id}, uniqueSess(cnt > 1));
+    uniqueMult = unique(rst.data{rcols.session_id}(multmask));
+    nmult = length(uniqueMult);
+    for imult = 1:nmult
+      currMult = uniqueMult(imult);
+      currmask = ismember(rst.data{rcols.session_id}, currMult) & item_mask;
+
+      fprintf('Found %d responses for stimulus %d, session %d\n', ...
+        sum(currmask), itemids(iitem), currMult);
+
+      % Take the first of the multiple responses
+      [~,minidx] = min(rst.data{rcols.date_time}(currmask));
+      curridxs = find(currmask);
+      goodmask = false(size(currmask));
+      goodmask(curridxs(minidx)) = true;
+      item_mask = xor(item_mask,xor(currmask,goodmask));
+    end
+  end
   
   % Extract the response times
   resptimes = allRTs(item_mask);
@@ -140,6 +176,18 @@ for iitem = 1:nitems
     switch xfmType
       case 'none'
         data = resptimes;
+      case 'norm' % normalize by item-level data
+        % Normalize by a particular field
+        if strcmp(params.rt.norm,'duration') && isnan(stim_st.data{stimcols.duration}(iitem))
+          srcmask = stim_st.data{stimcols.stimulus_id} == itemids(iitem);
+          stimname = fullfile(params.paths.stimulus_root, stim_st.data{stimcols.location}{srcmask});
+          system_str = sprintf('mp3info -p %%S %s', stimname);
+          [~,r] = system(system_str);
+          stim_st.data{stimcols.duration}(srcmask) = min(params.maxListenTime,str2double(r));
+        end
+
+        normVal = stim_st.data{stimcols.(params.rt.norm)}(stim_st.data{stimcols.stimulus_id} == itemids(iitem));
+        data = resptimes/normVal;
       otherwise
         fh = str2func(xfmType);
         data = fh(resptimes);
@@ -187,8 +235,8 @@ for ixfm = 1:nxfm
   
   % Generate a rank ordered bar graph
   subplot(nxfm,1,ixfm)
-  h = bar(ranked(ixfm).mean);
-  add_errorbars(h,ranked(ixfm).sem)
+  h = bar(ranked(ixfm).mean,'facecolor',ones(1,3)*0.8);
+  add_errorbars(h,ranked(ixfm).sem,'k')
   
   % Add xtick labels
   set(gca,'xtick',1:nitems,'xticklabel','')
@@ -199,11 +247,29 @@ for ixfm = 1:nxfm
     else
       itemStr = sprintf('%d',ranked(ixfm).(item_str)(iitem));
     end
-    text(iitem,-1,itemStr,'rotation',-90)
+    text(iitem,max(get(gca,'ylim'))*0.05,itemStr,'rotation',90)
   end
   
-  xlabel(strrep(item_str,'_','\_'))
+  xlabel(strrep(item_str,'_','\_'), 'fontsize', 14, 'fontweight', 'bold')
   
+  switch lower(xfmType)
+    case 'none'
+      lblstr = 'Response time (s)';
+    otherwise
+      lblstr = sprintf('%s(s)', xfmType);
+  end
+  ylabel(lblstr, 'fontsize', 14, 'fontweight','bold')
+  
+  % Add sample size info
+  if ~any(diff(ranked(ixfm).numel))
+    nobsstr = sprintf('N = %d',ranked(ixfm).numel(1));
+  else
+    nobsstr = sprintf('N = %d - %d', min(ranked(ixfm).numel), max(ranked(ixfm).numel));
+  end
+  text(0.95,0.95,nobsstr,'units','normalized',...
+    'horizontalalign','right', ...
+    'fontsize', 16, ...
+    'fontweight','bold')
 end
 
 end % function
