@@ -569,6 +569,11 @@ if EXTRACT_DATA
           nlresp = length(lrespdata.data{presdcol.RESP_CODE});
           lresp{ir} = cell(nlresp,1);
           for iresp=1:nlresp
+            if ir > length(lresp) || iresp > length(lresp{ir}) || ...
+                    iresp > length(lrespdata.data{presdcol.RESP_CODE}) || ...
+                    isempty(lrespdata.data{presdcol.RESP_CODE}{iresp})
+              fprintf(1,'error?\n');
+            end % if ir > length(lresp) || iresp > lresp{ir
             lresp{ir}{iresp} = lrespdata.data{presdcol.RESP_CODE}{iresp}{1};
           end
         end
@@ -798,7 +803,7 @@ if EXTRACT_DATA
               end % for iep=1:ns
               
               % save final figure to file if not already saved
-              if SAVE_EPOCHS && (m+1) ~= ep_per_fig
+              if GRAPH_EPOCHS && SAVE_EPOCHS && (m+1) ~= ep_per_fig
                 print(pargs{:},figfname);
               end
 
@@ -839,7 +844,7 @@ if EXTRACT_DATA
               end % for iep=1:ns
               
               % save final figure to file if not already saved
-              if SAVE_EPOCHS && (m+1) ~= ep_per_fig
+              if GRAPH_EPOCHS && SAVE_EPOCHS && (m+1) ~= ep_per_fig
                 print(pargs{:},figfname);
               end
 
@@ -1009,7 +1014,8 @@ if CALCULATE_STATS
     outdata.data{gsr_idx} = ensemble_init_data_struct();
     outdata.data{gsr_idx}.type = 'gsr_summ';
     outdata.data{gsr_idx}.vars = {'subject_id','session','ensemble_id',...
-        'run','trial','integral','scl','ttl_integral','ttl_scl',...
+        'run','trial','integral','scl','sclidx',...
+        'ttl_integral','ttl_scl','ttl_sclidx',...
         'npeaks','mean_peak_height','peak_height_variance',...
         'first_peak_time','first_peak_height',rvars{:}};
     gsr_cols = set_var_col_const(outdata.data{gsr_idx}.vars);
@@ -1020,8 +1026,10 @@ if CALCULATE_STATS
     outdata.data{gsr_idx}.data{gsr_cols.trial} = [];
     outdata.data{gsr_idx}.data{gsr_cols.integral} = [];
     outdata.data{gsr_idx}.data{gsr_cols.scl} = [];
+    outdata.data{gsr_idx}.data{gsr_cols.sclidx} = [];
     outdata.data{gsr_idx}.data{gsr_cols.ttl_integral} = [];
     outdata.data{gsr_idx}.data{gsr_cols.ttl_scl} = [];
+    outdata.data{gsr_idx}.data{gsr_cols.ttl_sclidx} = [];
     outdata.data{gsr_idx}.data{gsr_cols.npeaks} = [];
     outdata.data{gsr_idx}.data{gsr_cols.mean_peak_height} = [];
     outdata.data{gsr_idx}.data{gsr_cols.peak_height_variance} = [];
@@ -1072,8 +1080,10 @@ if CALCULATE_STATS
 
       integral = trapz(sig(startint:endint));
       mscl = mean(sig(startint:endint));
+      sclidx = trapz(abs(sig(startint:endint)))/(endint-startint);
       ttl_int = trapz(sig(baseline_end+1:end));
       ttlmscl = mean(sig(baseline_end+1:end));
+      ttlsclidx = trapz(abs(sig(baseline_end+1:end)))/(length(sig)-baseline_end);
 
       % save to outdata
       outdata.data{gsr_idx} = ensemble_add_data_struct_row(...
@@ -1083,8 +1093,9 @@ if CALCULATE_STATS
           'ensemble_id',gdata.data{gcol.ensemble_id}(ie),...
           'run',gdata.data{gcol.run}(ie),...
           'trial',gdata.data{gcol.trial}(ie),...
-          'integral',integral(:),'scl',mscl(:),'ttl_integral',...
-          ttl_int(:),'ttl_scl',ttlmscl(:),...
+          'integral',integral(:),'scl',mscl(:),'sclidx',sclidx(:),...
+          'ttl_integral',ttl_int(:),'ttl_scl',ttlmscl(:),...
+          'ttl_sclidx',ttlsclidx(:),...
           'npeaks',npeaks,'mean_peak_height',mpkhght,...
           'peak_height_variance',pkhghtv,...
           'first_peak_time',fpktime,'first_peak_height',fpkhght);
@@ -1116,7 +1127,7 @@ if CALCULATE_STATS
     outdata.data{card_idx} = ensemble_init_data_struct();
     outdata.data{card_idx}.type = 'cardiac_summ';
     outdata.data{card_idx}.vars = {'subject_id','session','ensemble_id',...
-        'run','trial','heart_rate','hr_variance','hr_slope',rvars{:}};
+        'run','trial','heart_rate','hr_std','hr_rmssd','hr_slope',rvars{:}};
     card_cols = set_var_col_const(outdata.data{card_idx}.vars);
     outdata.data{card_idx}.data{card_cols.subject_id} = {};
     outdata.data{card_idx}.data{card_cols.session} = [];
@@ -1124,7 +1135,8 @@ if CALCULATE_STATS
     outdata.data{card_idx}.data{card_cols.run} = [];
     outdata.data{card_idx}.data{card_cols.trial} = [];
     outdata.data{card_idx}.data{card_cols.heart_rate} = [];
-    outdata.data{card_idx}.data{card_cols.hr_variance} = [];
+    outdata.data{card_idx}.data{card_cols.hr_rmssd} = [];
+    outdata.data{card_idx}.data{card_cols.hr_std} = [];
     outdata.data{card_idx}.data{card_cols.hr_slope} = [];
     for in=1:length(rvars)
       outdata.data{card_idx}.data{card_cols.(rvars{in})} = {};
@@ -1146,14 +1158,23 @@ if CALCULATE_STATS
       end
       if isempty(pidxs), pidxs = nan; end
 
-      dtimes = diff(pidxs);
-
-      % remove extremely small dtimes
-      dtimes(dtimes < mean(dtimes)-3*std(dtimes)) = [];
+      % get beat-to-beat intervals in ms
+      dtimes = diff(pidxs)/srate*1000;
+      dbak = dtimes;
+      
+      % remove out-of-bounds values, such that 300ms <= dtimes <= 2000ms
+      % Timonen et al 2006, in Li et al 2009 IntJPsychophysiology
+      dbak(dbak < 300) = [];
+      dbak(dbak > 2000) = [];
+      dtimes(dtimes > mean(dtimes)+std(dtimes)*3) = [];
+      dtimes(dtimes < mean(dtimes)-std(dtimes)*3) = [];
+      dtimes(dtimes < 300) = [];
+      dtimes(dtimes > 2000) = [];
 
       % heart rate (in beats per minute) and heart rate variance
-      hr_bpm = 1/(mean(dtimes)/srate)*60;
-      hr_var = var(dtimes);
+      hr_bpm = 1/(mean(dtimes)/1000)*60;
+      hr_std = std(dtimes);
+      hr_rmssd = sqrt(mean(diff(dtimes).^2));
 
       % slope of change in heart rate
       zlength = zscore(1:length(dtimes))';
@@ -1168,7 +1189,8 @@ if CALCULATE_STATS
           'ensemble_id',cdata.data{ccol.ensemble_id}(iep),...
           'run',        cdata.data{ccol.run}(iep),...
           'trial',      cdata.data{ccol.trial}(iep),...
-          'heart_rate',hr_bpm,'hr_variance',hr_var,'hr_slope',hr_slope);
+          'heart_rate',hr_bpm,'hr_rmssd',hr_rmssd,...
+          'hr_std',hr_std,'hr_slope',hr_slope);
 
     end % for iep=1:nc
 
