@@ -122,6 +122,14 @@ function outData = ensemble_export_respnstim(inData,params)
 % response_data struct. This might be a good way to deal with misc_info dat
 % moving forward.
 %
+% FIXME (13Jan2013 PJ) - There are some really costly inefficiencies in the code caused by
+% redundant generation of large masks. Rather than filtering on a
+% per-subject and per-stimulus level, it would be better to use
+% make_mask_mtx to get subject and stimulus mask matrices that can be
+% indexed into to get the mask for any given subject and stimulus
+% combination.  Similarly, the handling of checkbox responses unnecessarily
+% searches for the same information over and over again.
+
 % FB 12/17/07 - started scripting
 % FB 10/25/09 - added support for multiple trials with the same stimulus.
 % If a stimulus is presented multiple times, the trial number should be
@@ -140,6 +148,7 @@ function outData = ensemble_export_respnstim(inData,params)
 % when overall list of questions involves checkbox enums; fixed handling
 % of output datatypes so that they are dynamically determined based on
 % qinfo
+% PJ 13Jan2013 - fixed handling of subquestions
 
 % % initialize output data struct
 outData = ensemble_init_data_struct;
@@ -527,7 +536,7 @@ if isfield(params.export,'by_stimulus')
         lqinfo = mysql_extract_metadata('table','question',...
             'question_id',lqid,'conn_id',params.mysql.conn_id);
         lqicq = [lqinfo.subquestion] == lsqid;
-        cqids.data{cqQin}(icq) = {lqinfo(cqids.data{cqSub}{lqicq})}; % cqids.data{cqSub}{icq}
+        cqids.data{cqQin}(icq) = {lqinfo(lqicq)}; % cqids.data{cqSub}{icq}
         uhft = {lqinfo.html_field_type};
         if ~isempty(uhft{lqicq}) && ~isempty(strmatch('checkbox',uhft{lqicq}))
             % get dfid for qid, expand qnums for this compqid
@@ -637,6 +646,7 @@ if isfield(params.export,'by_stimulus')
             else
               stmData = stmDataT;
             end
+            stmCols = set_var_col_const(stmData.vars);
             
             outRow = outRow + 1;
             
@@ -729,14 +739,19 @@ if isfield(params.export,'by_stimulus')
                 else
                     lqidx = find(ismember(cqids.data{cqCqi},qi));
                     lqid  = cqids.data{cqQid}(lqidx);
+                    sqid = cqids.data{cqCols.subquestion}(lqidx);
                     if iscell(lqid)
                         lqid = lqid{1};
                     end
-                    [qidx] = find(ismember(stmData.data{qcol},lqid));
+                    if iscell(sqid)
+                      sqid = sqid{1};
+                    end
+                    
+                    qmask = ismember(stmData.data{qcol},lqid);
 										
                     % Make sure this question existed for this particular
                     % stimulus_id
-                    if isempty(qidx)
+                    if ~any(qmask)
                         ocol = outCols.(make_valid_struct_key(qi));
                         qtype = outData.datatype{ocol};
                         if qtype == 's'
@@ -745,14 +760,16 @@ if isfield(params.export,'by_stimulus')
                             qdata = NaN;
                         end
                     else
-                        if length(qidx) > 1
+                        if sum(qmask) > 1
                             lsubq = cqids.data{cqSub}(lqidx);
                             lsubq = lsubq{1};
-                            if length(qidx) < lsubq
-                                qidx = qidx(1);
+                            if sum(qmask) < lsubq
+                                qidx = find(qmask,1,'first');
                             else
-                                qidx = qidx(lsubq);
+                                qidx = find(qmask,1,'last');
                             end
+                        else
+                          qidx = find(qmask);
                         end % if isempty(qidx
                     
                         % Determine whether the response should be drawn from
