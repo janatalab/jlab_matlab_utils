@@ -17,18 +17,20 @@ function stimulusDataStruct = ensemble_get_stiminfo(indata,params)
 % 10/07/08 PJ - enabled passing in of stimids to make this function more useful
 % 09/30/09 ST - Added code to deal with missing attribute data (simply set
 %               attributeMeta to empty struct)
+% 25Jan2013 PJ - Fixed handling of mysql and ensemble fields
   
 % Handle database and connection defaults
 
-try database = params.ensemble.database; catch database = 'ensemble_main'; end
-
-try
-  conn_id = params.ensemble.conn_id;
-catch
-  conn_id = 1;
-  tmp_conn_id = 1;
+if isfield(params,'mysql')
+  dbinfofld = 'mysql';
+elseif isfield(params,'ensemble')
+  dbinfofld = 'ensemble';
+else
+  error('Must provide database information in params.mysql');
 end
 
+conn_id = params.(dbinfofld).conn_id;
+  
 if isstruct(indata)
   %obtain a list of unique stimulus IDs that are in the response table
   stimIDCol = strmatch('stimulus_id',indata.vars,'exact');

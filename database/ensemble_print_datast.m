@@ -57,6 +57,10 @@ outdata = indata;
 ic = set_var_col_const(indata.vars);
 nc = length(indata.vars);
 
+if nargin < 2
+  defs = struct;
+end
+
 try delim = defs.delim; catch delim = ','; end
 try print2screen = defs.print2screen; catch print2screen = 1; end
 
@@ -80,6 +84,12 @@ elseif isfield(defs,'export')
   fid = ensemble_init_fid(defs.export);
   defs.fid = fid;
   parent = 1;
+end
+
+if isfield(defs,'print2screen')
+  print2screen = defs.print2screen;
+else
+  print2screen = 1;
 end
 
 if ~fid && ~print2screen, error('no output specified'); end
