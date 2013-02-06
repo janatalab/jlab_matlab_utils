@@ -8,6 +8,13 @@ function [out_st] = ensemble_response_times(data_st,params)
 % specified in a filtering directive stored in the params structure, e.g.
 % filt.include.all.question_id = [question_ids];
 %
+% params.rt.rt_fld = name of field containing response time data (in msec).
+% Default is response_text
+%
+% params.rt.multiRespCheckFld = name of field to use for checking
+% uniqueness of response to each stimulus, i.e. one response per stimulus
+% per subject. Default='session_id';
+%
 % params.rt.transform = {'none','log10'}; - specifies whether a transform
 % should be applied to the RT data. Default='none'.
 %
@@ -24,6 +31,8 @@ function [out_st] = ensemble_response_times(data_st,params)
 
 
 % 18Nov2012 Petr Janata
+% 05Feb2013 PJ - added flexible specification of field containing response
+%                times
 
 out_st = ensemble_init_data_struct;
 out_st.type = 'response_time_data';
@@ -31,6 +40,12 @@ out_st.vars = [{'data_transform','rank'} params.rt.calc];
 
 % Get the idx of the response_data
 ridx = ensemble_find_analysis_struct(data_st,struct('type','response_data'));
+if isempty(ridx)
+  ridx = ensemble_find_analysis_struct(data_st,struct('type','resp_x_stim'));
+end
+if isempty(ridx)
+  error('Could not find an appropriate data structure with response data');
+end
 rst = data_st{ridx};
 rcols = set_var_col_const(rst.vars);
 
@@ -110,27 +125,48 @@ else
 end
 nitems = length(itemids);
 
+% Determine which field the response times are in
+if isfield(params.rt, 'rt_fld')
+  rt_fld = params.rt.rt_fld;
+else
+  rt_fld = 'response_text';
+end
+
 % Convert the response text data to doubles
-allRTs = cellfun(@str2num,rst.data{rcols.response_text});
+if iscell(rst.data{rcols.(rt_fld)})
+  allRTs = cellfun(@str2num,rst.data{rcols.(rt_fld)});
+else
+  allRTs = rst.data{rcols.(rt_fld)};
+end
 
 % Convert to seconds
 allRTs = allRTs/1000;
+
+if isfield(params.rt, 'multiRespCheckFld')
+  multiRespCheckFld = params.rt.multiRespCheckFld;
+else
+  multiRespCheckFld = 'session_id';
+end
 
 % Now loop over items
 for iitem = 1:nitems
   item_mask = item_mask_mtx(:,iitem);
   
   % Check to see if we have multiple responses per subject per item
-  uniqueSess = unique(rst.data{rcols.session_id}(item_mask));
-  [cnt] = hist(rst.data{rcols.session_id}(item_mask),uniqueSess);
+  uniqueSess = unique(rst.data{rcols.(multiRespCheckFld)}(item_mask));
+  if iscell(uniqueSess)
+    [~,cnt] = cellhist(uniqueSess);
+  else
+    [cnt] = hist(rst.data{rcols.(multiRespCheckFld)}(item_mask),uniqueSess);
+  end
   
   if any(cnt > 1)
-    multmask = ismember(rst.data{rcols.session_id}, uniqueSess(cnt > 1));
-    uniqueMult = unique(rst.data{rcols.session_id}(multmask));
+    multmask = ismember(rst.data{rcols.(multiRespCheckFld)}, uniqueSess(cnt > 1));
+    uniqueMult = unique(rst.data{rcols.(multiRespCheckFld)}(multmask));
     nmult = length(uniqueMult);
     for imult = 1:nmult
       currMult = uniqueMult(imult);
-      currmask = ismember(rst.data{rcols.session_id}, currMult) & item_mask;
+      currmask = ismember(rst.data{rcols.(multiRespCheckFld)}, currMult) & item_mask;
 
       fprintf('Found %d responses for stimulus %d, session %d\n', ...
         sum(currmask), itemids(iitem), currMult);

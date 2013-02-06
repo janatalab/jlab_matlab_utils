@@ -7,6 +7,7 @@ function mysql_group_attribs(parent_attrib_name,attrib_names,conn_id)
 
 % 08/18/05 Petr Janata
 % 06/15/10 PJ sanitized mysql_make_conn handling
+% 05Feb2013 PJ added handling of missing child attributes
 
 % Do some input parameter checking. 
 min_arg = 2;
@@ -43,9 +44,34 @@ end
 
 child_str = sprintf('"%s",',attrib_names{:});
 child_str(end) = [];
-mysql_str = sprintf(['SELECT attribute_id FROM attribute ' ...
+mysql_str = sprintf(['SELECT attribute_id, name FROM attribute ' ...
       'WHERE name in (%s);'], child_str);
-child_ids = mysql(conn_id, mysql_str);
+[child_ids, child_names] = mysql(conn_id, mysql_str);
+
+%
+% Handle insertion of missing child attributes
+%
+missing_children = setdiff(attrib_names, child_names);
+if ~isempty(missing_children)
+  numMissing = length(missing_children);
+  fprintf('Creating attribute entries for %d child attributes:\n%s\n', ...
+    numMissing, cell2str(missing_children,'\n'));
+  value_str_array = cell(1,numMissing);
+  for ichild = 1:numMissing
+    value_str_array{ichild} = sprintf('("stim_set","%s")', missing_children{ichild});
+  end
+  value_str = cell2str(value_str_array,',');
+  mysql_str = sprintf(['INSERT INTO attribute (class, name) ' ...
+    'VALUES %s;'], value_str);
+  mysql(conn_id, mysql_str);
+  
+  % Select all the children again
+  child_str = sprintf('"%s",',attrib_names{:});
+  child_str(end) = '';
+  mysql_str = sprintf(['SELECT attribute_id FROM attribute ' ...
+    'WHERE name in (%s);'], child_str);
+  child_ids = mysql(conn_id, mysql_str);
+end
 
 %
 % Now insert a bunch of child/parent relationships into the
@@ -55,7 +81,7 @@ child_ids = mysql(conn_id, mysql_str);
 value_str = sprintf('("%d","%d"),', [child_ids(:) ones(length(child_ids),1)*parent_id]');
 value_str(end) = [];
 
-mysql_str = sprintf(['INSERT INTO attribute_x_attribute' ...
+mysql_str = sprintf(['INSERT IGNORE INTO attribute_x_attribute' ...
       ' (attribute_id_child,attribute_id_parent) VALUES %s;'], value_str);
 status = mysql(conn_id, mysql_str);
 
