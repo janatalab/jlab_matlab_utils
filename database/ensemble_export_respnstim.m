@@ -149,6 +149,10 @@ function outData = ensemble_export_respnstim(inData,params)
 % of output datatypes so that they are dynamically determined based on
 % qinfo
 % PJ 13Jan2013 - fixed handling of subquestions
+% PJ 02May2013 - added handling of case when a stimulus_id is not found in
+%                a particular list
+% PJ 04May2013 - if a file intended as an input file for R is being written,
+%                added 2nd row of output specifying variable datatypes
 
 % % initialize output data struct
 outData = ensemble_init_data_struct;
@@ -190,21 +194,24 @@ end
 if isfield(params,'filt')
   rsData = ensemble_filter(rsData,params.filt);
 end
-
 rsCols = set_var_col_const(rsData.vars);
+
+% See if we are outputing for R
+usingR = isfield(params.export,'R') && (isstruct(params.export.R) || params.export.R);
 
 % % initialize subject-level data structure
 % sNum is an auto-incrementing subject number within this dataset
 sub_st.vars={'subject_id','sNum'};
-sub_st.data{1} = unique(rsData.data{rsCols.subject_id});
-subs = sub_st.data{1};
-nsub = length(sub_st.data{1});
-sub_st.data{2} = 1:nsub;
 % sub_st.datatype tracks data type
 %   (s)tring
 %   (n)umeric
 %   (l)ogical
 sub_st.datatype = {'s','n'};
+sub_st.data{1} = unique(rsData.data{rsCols.subject_id});
+subs = sub_st.data{1};
+nsub = length(sub_st.data{1});
+sub_st.data{2} = 1:nsub;
+
 
 % % extract/calculate subject-level scores
 if isfield(params.export,'by_subject')
@@ -370,7 +377,7 @@ if isfield(params.export,'by_stimulus')
                 if isfield(lsCols,'stimulus_id')
                     ustim = unique(lsData.data{lsCols.stimulus_id});
                     if ~isnumeric(ustim)
-                        warning(['stimulus_id colum for %s is non-numeric, '...
+                        warning(['stimulus_id column for %s is non-numeric, '...
                             'please use only numeric stimulus_ids. %s will '...
                             'not be included as stim-level constant data'],...
                             sfld,sfld);
@@ -451,6 +458,9 @@ if isfield(params.export,'by_stimulus')
                 % parse rows
                 for istim = 1:nstim
                     sidx = find(ismember(lsData.data{lsCols.stimulus_id},stims(istim)));
+                    if isempty(sidx)
+                      continue
+                    end
                     if length(sidx) > 1
                         sidx = sidx(1);
                     end
@@ -572,6 +582,13 @@ if isfield(params.export,'by_stimulus')
 				switch cqids.data{cqQin}{cqidrow}.type
 					case {'text','varchar'}
 						outData.datatype = [outData.datatype 's'];
+          case {'enum'} % distinguish between checkboxes and scales
+            switch cqids.data{cqQin}{cqidrow}.html_field_type
+              case 'radiogroup'
+                outData.datatype = [outData.datatype 'n'];
+              case 'checkbox'
+                outData.datatype = [outData.datatype 'l'];
+            end
 					otherwise
 						outData.datatype = [outData.datatype 'n'];
 				end
@@ -730,6 +747,16 @@ if isfield(params.export,'by_stimulus')
                                 qdata = cqids.data{cqBit}{lcqidx};
                             end
                             qdata = qdata(bidx);
+                        elseif isnan(qenum)
+                          if ~isfield(rsCols,'decline') || strcmp(stmData.data{rsCols.decline}(lsqidx),'T')
+                            if usingR
+                              qdata = 'NA';
+                            else
+                              qdata = '.';
+                            end
+                          else
+                            qdata = 0;
+                          end
                         else
                             qdata = '.';
                         end
@@ -805,7 +832,11 @@ if isfield(params.export,'by_stimulus')
                 if qtype == 's'
                     outData.data{ocol}{outRow} = qdata;
                 else
+                  if isstr(qdata) && strcmp(qdata,'NA')
+                    outData.data{ocol}(outRow) = NaN;
+                  else
                     outData.data{ocol}(outRow) = qdata;
+                  end
                 end
             end % for iq=1:length(qnums)
             cqids.data{cqBit} = cell(length(cqids.data{cqScq}),1);
@@ -836,10 +867,20 @@ if isfield(params.export,'var_name_map')
     end
 end
 
-% % print data out
+%% Write data to file
 % init file
 fid = ensemble_init_fid(params);
 fprintf(fid,'%s\n',cell2str(outData.vars,','));
+
+% if we are generating an R file, insert a row of datatype information
+if usingR
+  datatype = strrep(outData.datatype,'n','numeric');
+  datatype = strrep(datatype,'l','logical');
+  datatype = strrep(datatype,'s','character');
+  
+  fprintf(fid,'%s\n',cell2str(datatype,','));
+end
+
 if fid ~= 1
     % non-numeric cell delimiter
     if isfield(params.export,'non_num_delim')
@@ -859,31 +900,50 @@ if fid ~= 1
         row = '';
         for ivar = 1:length(outData.vars)
             item = outData.data{ivar}(irow);
+            datatype = outData.datatype{ivar};
             if iscell(item)
                 if isempty(item)
+                  if usingR
+                    item = 'NA';
+                  else
                     item = '.';
+                  end
                 else
                     item = item{1};
                     if iscell(item)
                         item = cell2str(item);
                         % does this break anything??? FIXME
                         if isempty(item)
+                          if usingR
+                            item = 'NA';
+                          else
                             item = '.';
+                          end
                         end
                     end
                 end
             end
             if isnan(item)
+              if usingR
+                item = 'NA';
+              else
                 item = '.';
-            end
-            if isnumeric(item)
+              end               
+            elseif isnumeric(item) && ~strcmp(datatype,'l')
                 item = num2str(item);
-            end
-            if islogical(item)
+            elseif islogical(item) || strcmp(datatype,'l')
                 if item
+                  if usingR
+                    item = 'TRUE';
+                  else
                     item = '1';
+                  end
                 else
+                  if usingR
+                    item = 'FALSE';
+                  else
                     item = '0';
+                  end
                 end
             end
             try item = regexprep(item,'\n','; ');
@@ -952,7 +1012,7 @@ end
 if iscell(cval) && length(cval) == 1
     cval = cval{1};
 end
-if ctype ~= 's' && cval == '.'
+if ctype ~= 's' && strcmp(cval,'.')
     cval = NaN;
 end
 
