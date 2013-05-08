@@ -69,8 +69,11 @@ end % for iarg
 try 
 	attrib_names = check_cell(params.attrib_names); 
 catch
+  % This field mess should be cleaned up
 	if isfield(params,'stimselect') && isfield(params.stimselect,'attrib_names')
 		attrib_names = params.stimselect.attrib_names;
+  elseif isfield(params,'selection') && isfield(params.selection,'attrib_names')
+    attrib_names = params.selection.attrib_names;
 	else
 		attrib_names = {};
 	end

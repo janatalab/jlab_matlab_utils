@@ -71,6 +71,9 @@ function outData = ensemble_export_respnstim(inData,params)
 %    in the output will be renamed to 'renamedq'. Original var names are
 %    returned in the outData.origvars field.
 % 
+%  params.export.R - currently a boolean that indicates whether the output
+%    file should be formatted in a manner that facilitates loading into R.
+%
 %  params for ensemble_init_fid
 %    params.write2file, params.print, params.fname, params.filemode
 %  params.sas.fname - REQUIRED if you want to automatically generate a SAS
@@ -198,6 +201,14 @@ rsCols = set_var_col_const(rsData.vars);
 
 % See if we are outputing for R
 usingR = isfield(params.export,'R') && (isstruct(params.export.R) || params.export.R);
+
+% See whether we are converting checkbox NaNs to false or leaving them as
+% NaNs
+if isfield(params.export, 'convertCheckboxNaNToFalse')
+  convertCheckboxNaNToFalse = params.export.convertCheckboxNaNToFalse;
+else
+  convertCheckboxNaNToFalse = 0;
+end
 
 % % initialize subject-level data structure
 % sNum is an auto-incrementing subject number within this dataset
@@ -748,7 +759,8 @@ if isfield(params.export,'by_stimulus')
                             end
                             qdata = qdata(bidx);
                         elseif isnan(qenum)
-                          if ~isfield(rsCols,'decline') || strcmp(stmData.data{rsCols.decline}(lsqidx),'T')
+                          if (~isfield(rsCols,'decline') || strcmp(stmData.data{rsCols.decline}(lsqidx),'T')) && ...
+                            ~convertCheckboxNaNToFalse
                             if usingR
                               qdata = 'NA';
                             else
