@@ -11,6 +11,7 @@ function [str] = make_valid_struct_key(str)
 % non alpha-numeric characters, this will not maintain their unique
 % characters
 % 
+
 % fb 2007/10/29
 
 % if (~isstr(str))

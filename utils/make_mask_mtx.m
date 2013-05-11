@@ -9,6 +9,7 @@ function [mask_mtx, unique_vals] = make_mask_mtx(data_vect)
 %
 
 % 02/14/07 Petr Janata - generalized from ensemble_make_sub_masks
+% 10May2013 PJ - optimized by using == and strcmp instead of ismember
 
 if size(data_vect,2) > 1
 	nrows = size(data_vect,1);
@@ -46,6 +47,11 @@ else
 	unique_vals = unique(data_vect);
 end
 
+% Eliminate NaNs if the exist
+if isnumeric(unique_vals)
+  unique_vals(isnan(unique_vals)) = [];
+end
+
 nvals = length(unique_vals);
 mask_mtx = false(size(data_vect,1),nvals);
 
@@ -55,8 +61,14 @@ for ival = 1:nvals
 		fprintf('%d', ival);
 	else
 		fprintf('.');
-	end
-  mask_mtx(:,ival) = ismember(data_vect, unique_vals(ival));
+  end
+  if isnumeric(unique_vals)
+    mask_mtx(:,ival) = data_vect == unique_vals(ival);
+  elseif iscell(unique_vals(ival)) && ischar(unique_vals{ival})
+    mask_mtx(:,ival) = strcmp(unique_vals{ival}, data_vect);
+  else
+    mask_mtx(:,ival) = ismember(data_vect, unique_vals(ival));
+  end
 end
 fprintf('\n');
 

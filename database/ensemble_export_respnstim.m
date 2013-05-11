@@ -124,14 +124,7 @@ function outData = ensemble_export_respnstim(inData,params)
 % function to extract that data and add it as another variable in the
 % response_data struct. This might be a good way to deal with misc_info dat
 % moving forward.
-%
-% FIXME (13Jan2013 PJ) - There are some really costly inefficiencies in the code caused by
-% redundant generation of large masks. Rather than filtering on a
-% per-subject and per-stimulus level, it would be better to use
-% make_mask_mtx to get subject and stimulus mask matrices that can be
-% indexed into to get the mask for any given subject and stimulus
-% combination.  Similarly, the handling of checkbox responses unnecessarily
-% searches for the same information over and over again.
+
 
 % FB 12/17/07 - started scripting
 % FB 10/25/09 - added support for multiple trials with the same stimulus.
@@ -156,6 +149,8 @@ function outData = ensemble_export_respnstim(inData,params)
 %                a particular list
 % PJ 04May2013 - if a file intended as an input file for R is being written,
 %                added 2nd row of output specifying variable datatypes
+% PJ 10May2013 - optimized code by replacing costly and unnecessarily
+%                repeated calls to ismember(), among other things
 
 % % initialize output data struct
 outData = ensemble_init_data_struct;
@@ -606,39 +601,9 @@ if isfield(params.export,'by_stimulus')
     end
     outData.vars = [outData.vars qStructs];
     outCols = set_var_col_const(outData.vars);    
-
-    % a few constants
-    scol = rsCols.stimulus_id;
-    qcol = rsCols.question_id;
-    ecol = rsCols.response_enum;
-		rtcol = rsCols.response_text;
-    tcol = rsCols.trial_id;
-    rocol = rsCols.response_order;
     
-    % sum(nstimpersub) = nrows
     nrows = 0;
-    subData.vars = {'subid','locData','stim'};
-    subCols = set_var_col_const(subData.vars);
-    for isdv = 1:length(subData.vars)
-        subData.data{isdv} = cell(nsub,1);
-    end
-    for isub = 1:nsub
-        % get this subject's response data
-        locFilt.include.all.subject_id = {subs{isub}};
-        locData = ensemble_filter(rsData,locFilt);
-        subData.data{subCols.subid}(isub) = {subs{isub}};
-        subData.data{subCols.locData}(isub) = {locData};
-
-        % get unique stim
-        ustims = unique(locData.data{scol});
-        stimidxs = ~isnan(ustims);
-        stim = ustims(stimidxs);
-        subData.data{subCols.stim}(isub) = {stim};
-
-        nstim = length(stim);
-        nrows = nrows + nstim;
-    end
-
+    
     for ivar = 1:length(outData.vars)
         if outData.datatype{ivar} == 's'
             outData.data{ivar} = cell(nrows,1);
@@ -647,41 +612,54 @@ if isfield(params.export,'by_stimulus')
         end
     end
     
+    % Create mask matrices that we can use to access the data
+    [subMask, subIDs] = make_mask_mtx(rsData.data{rsCols.subject_id});
+    [stimMask, stimIDs] = make_mask_mtx(rsData.data{rsCols.stimulus_id});
+    nstim = length(stimIDs);
+    if any(~isnan(rsData.data{rsCols.trial_id}))
+      [trialMaskMtx, trialIDs] = make_mask_mtx(rsData.data{rsCols.trial_id});
+    else
+      trialMask = ones(size(rsData.data{rsCols.trial_id}));
+    end
+    
     % row counter
     outRow = 0;
+    
     % % collate stim-level data
     for isub = 1:nsub
-        subid   = subData.data{subCols.subid}(isub);
-        locData = subData.data{subCols.locData}(isub);
-        stim    = subData.data{subCols.stim}(isub);
-        locData = locData{1};
-        stim    = stim{1};
-        nstim   = length(stim);
+        subid = subIDs(isub);
 
         for istim = 1:nstim
-          stmFilt = {};
-          stmFilt.include.all.stimulus_id = stim(istim);
-          stmDataT = ensemble_filter(locData,stmFilt);
-          uTrials = unique(stmDataT.data{tcol});
-          nTrials = ~isnan(uTrials);
-          nUt = sum(nTrials);
-          if ~nUt, nUt = 1; end
+          currStimID = stimIDs(istim);
           
+          % Make sure this subject encountered this stimulus
+          if ~any(subMask(:,isub) & stimMask(:,istim))
+            continue
+          end
+
+          if exist('trialMaskMtx','var')
+            uTrials = unique(rsData.data{rsCols.trial_id}(subMask(:,isub) & stimMask(:,istim)));
+            nTrials = ~isnan(uTrials);
+            nUt = sum(nTrials);
+          else
+            uTrials = NaN;
+            nUt = 1; 
+          end
+
           for in=1:nUt
             if nUt > 1
-              tFilt.include.all.trial_id = uTrials(in);
-              stmData = ensemble_filter(stmDataT,tFilt);
-            else
-              stmData = stmDataT;
+              trialMask = trialMaskMtx(:,trialIDs == uTrials(in));
             end
-            stmCols = set_var_col_const(stmData.vars);
+           
+            rsMask = subMask(:,isub) & stimMask(:,istim) & trialMask;
+            currCompIdxs = find(rsMask);
             
             outRow = outRow + 1;
             
             % set id vars
             outData.data{outCols.subject_id}(outRow) = subid;
             outData.data{outCols.sNum}(outRow) = isub;
-            outData.data{outCols.stimulus_id}(outRow) = stim(istim);
+            outData.data{outCols.stimulus_id}(outRow) = currStimID;
             outData.data{outCols.trial_id}(outRow) = uTrials(in);
             outData.data{outCols.stim_rep}(outRow) = in;
             
@@ -692,7 +670,7 @@ if isfield(params.export,'by_stimulus')
             end
             % set stimulus metadata
             if smIdxs
-                stimidx = ismember(smData.data{smCols.stimulus_id},stim(istim));
+                stimidx = ismember(smData.data{smCols.stimulus_id},currStimID);
                 for ismd = 1:length(smIdxs)
                     smdidx = smIdxs(ismd);
                     smvar = smData.vars{smdidx};
@@ -708,8 +686,7 @@ if isfield(params.export,'by_stimulus')
             end
 
             % set response_order
-            outData.data{outCols.response_order}(outRow) = stmData.data{rocol}(1);
-            
+            outData.data{outCols.response_order}(outRow) = rsData.data{rsCols.response_order}(find(rsMask,1,'first'));
             for iq = 1:length(qnums)
                 qi = qnums(iq);
                 if iscell(qi)
@@ -724,7 +701,7 @@ if isfield(params.export,'by_stimulus')
                 if ~isempty(qcidx)
                     % data2bitmask, get items
                     lcqid = qi(1:qcidx-1);
-                    lcqidx = find(ismember(cqids.data{cqCqi},lcqid));
+                    lcqidx = find(strcmp(lcqid,cqids.data{cqCqi}));
                     lqinfo = cqids.data{cqQin}(lcqidx);
                     if (length(lqinfo)>1)
                         lqi = strmatch('checkbox',lqinfo.html_field_type);
@@ -738,7 +715,9 @@ if isfield(params.export,'by_stimulus')
                         lqid = lqid{1};
                     end
                     bidx  = str2double(qi(qcidx+2:end));
-                    lsqidx = find(ismember(stmData.data{qcol},lqid));
+                    
+                    lsqidx = find(rsData.data{rsCols.question_id}(rsMask) == lqid);
+                   
                     if length(lsqidx) > 1
                         lsubq = cqids.data{cqSub}(lcqidx);
                         lsubq = lsubq{1};
@@ -749,7 +728,7 @@ if isfield(params.export,'by_stimulus')
                         end
                     end
                     if lsqidx
-                        qenum = stmData.data{ecol}(lsqidx);
+                        qenum = rsData.data{rsCols.response_enum}(currCompIdxs(lsqidx));
                         if bidx <= nenum && ~isnan(qenum)
                             if isempty(cqids.data{cqBit}{lcqidx})
                                 qdata = data2bitmask(qenum,nenum);
@@ -759,9 +738,9 @@ if isfield(params.export,'by_stimulus')
                             end
                             qdata = qdata(bidx);
                         elseif isnan(qenum)
-                          if (~isfield(rsCols,'decline') || strcmp(stmData.data{rsCols.decline}(lsqidx),'T')) && ...
-                            ~convertCheckboxNaNToFalse
-                            if usingR
+                          if (~isfield(rsCols,'decline') || strcmp(rsData.data{rsCols.decline}(currCompIdxs(lsqidx)),'T')) && ...
+                             ~convertCheckboxNaNToFalse
+                           if usingR
                               qdata = 'NA';
                             else
                               qdata = '.';
@@ -776,7 +755,7 @@ if isfield(params.export,'by_stimulus')
                         qdata = '.';
                     end % if lsqid
                 else
-                    lqidx = find(ismember(cqids.data{cqCqi},qi));
+                    lqidx = find(strcmp(qi,cqids.data{cqCqi}));
                     lqid  = cqids.data{cqQid}(lqidx);
                     sqid = cqids.data{cqCols.subquestion}(lqidx);
                     if iscell(lqid)
@@ -786,12 +765,12 @@ if isfield(params.export,'by_stimulus')
                       sqid = sqid{1};
                     end
                     
-                    qmask = ismember(stmData.data{qcol},lqid);
+                    qmask = rsData.data{rsCols.question_id}(rsMask) == lqid;
 										
                     % Make sure this question existed for this particular
                     % stimulus_id
                     if ~any(qmask)
-                        ocol = outCols.(make_valid_struct_key(qi));
+                        ocol = outCols.(qStructs{iq});
                         qtype = outData.datatype{ocol};
                         if qtype == 's'
                             qdata = '';
@@ -815,12 +794,12 @@ if isfield(params.export,'by_stimulus')
                         % response_enum or response_text
                         srcType = cqids.data{cqQin}{lqidx}.type;
                         if strcmp(srcType,'enum')
-                            srcCol = ecol;
+                            srcCol = rsCols.response_enum;
                         else
-                            srcCol = rtcol;
+                            srcCol = rsCols.response_text;
                         end
 											
-                        qenum = stmData.data{srcCol}(qidx);
+                        qenum = rsData.data{srcCol}(currCompIdxs(qidx));
                         if isnumeric(qenum)
                             switch srcType
                               case 'enum'
@@ -838,7 +817,7 @@ if isfield(params.export,'by_stimulus')
                         end
                     end
                 end % if length(qcidx)
-                ocol = outCols.(make_valid_struct_key(qi));
+                ocol = outCols.(qStructs{iq});
                 qtype = outData.datatype{ocol};
                 qdata = sanitize_cell_value(qdata,qtype);
                 if qtype == 's'
