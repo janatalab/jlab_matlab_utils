@@ -4,13 +4,14 @@ function [strs,ids] = mysql_resolve_enum(dfid, conn_id)
 % will be returned.  For each dfid, there will be a cell array of strings
 % corresponding to the different enum values.
 %
-% strs = mysql_resolve_enum(dfid);
+% strs = mysql_resolve_enum(dfid, conn_id);
 %
 % conn_id - connection to database - required
 
 % 08/27/05 Petr Janata
 % 11/10/05 PJ - modified output format
 % 06/15/10 PJ - mysql_make_conn sanitization
+% 12May2013 PJ - Fixed issue of commas within enum values by using regexp()
 
 
 % Check for valid connection to database
@@ -21,22 +22,19 @@ end
 id_str = sprintf('%d,', dfid);
 id_str(end) = [];
 
-mysql_str = sprintf('SELECT enum_values, data_format_id FROM data_format WHERE data_format_id IN (%s);', id_str);
+mysql_str = sprintf('SELECT enum_values, data_format_id FROM data_format WHERE data_format_id IN (%s) ORDER BY data_format_id;', id_str);
 [tmp_strs, ids] = mysql(conn_id,mysql_str);
 
-ndfid = length(dfid);
-[strs{1:ndfid}] = deal({});
-
-% Sort into original order
-for iid = 1:ndfid
-  enum_str = tmp_strs{ismember(ids,dfid(iid))};
-
-  % Tokenize the string
-  ie = 0;
-  while ~isempty(enum_str)
-    ie=ie+1;
-    [strs{iid}{ie}, enum_str] = strtok(enum_str,',');
-  end
+% use regexp to parse the enum strings
+pat = '","';
+split = regexp(tmp_strs, pat, 'split');
+for iid = 1:length(dfid)
+  split{iid} = regexprep(split{iid},'"',''); % remove the residual leading and trailing double quotes
 end
+
+% Reorder them into the dfid order that was requested
+[~,idxOrder] = intersect(dfid,ids);
+strs = split(idxOrder);
+ids = dfid;
 
 return
