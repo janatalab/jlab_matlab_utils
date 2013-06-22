@@ -21,6 +21,9 @@ if ~isfield(params,'src_vars')
 end
 
 xfmVars = params.src_vars;
+if ~iscell(xfmVars)
+  xfmVars = {xfmVars};
+end
 nvars = length(xfmVars);
 
 srcVars = data_st.vars;
