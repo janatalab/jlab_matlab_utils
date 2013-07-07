@@ -600,9 +600,12 @@ if isfield(params.export,'by_stimulus')
 				end
     end
     outData.vars = [outData.vars qStructs];
-    outCols = set_var_col_const(outData.vars);    
+    outCols = set_var_col_const(outData.vars);  
     
-    nrows = 0;
+    % 06Jul2013 PJ - this is weird. Why is this here? outData.data needs to
+    % be filled down rows, but initializing like this alone does not force
+    % filling down rows.
+    nrows = 0;  
     
     for ivar = 1:length(outData.vars)
         if outData.datatype{ivar} == 's'
@@ -657,16 +660,16 @@ if isfield(params.export,'by_stimulus')
             outRow = outRow + 1;
             
             % set id vars
-            outData.data{outCols.subject_id}(outRow) = subid;
-            outData.data{outCols.sNum}(outRow) = isub;
-            outData.data{outCols.stimulus_id}(outRow) = currStimID;
-            outData.data{outCols.trial_id}(outRow) = uTrials(in);
-            outData.data{outCols.stim_rep}(outRow) = in;
+            outData.data{outCols.subject_id}(outRow,1) = subid;
+            outData.data{outCols.sNum}(outRow,1) = isub;
+            outData.data{outCols.stimulus_id}(outRow,1) = currStimID;
+            outData.data{outCols.trial_id}(outRow,1) = uTrials(in);
+            outData.data{outCols.stim_rep}(outRow,1) = in;
             
             % set subject-level scores
             % start at 3, since subject_id and sNum are always 1 and 2
             for icon = 3:length(sub_st.vars)
-                outData.data{icon}(outRow) = sub_st.data{icon}(isub);
+                outData.data{icon}(outRow,1) = sub_st.data{icon}(isub);
             end
             % set stimulus metadata
             if smIdxs
@@ -678,15 +681,15 @@ if isfield(params.export,'by_stimulus')
                     ltype = outData.datatype{outCols.(smvar)};
                     lsmpt = sanitize_cell_value(lsmpt,ltype);
                     if ltype == 's'
-                        outData.data{outCols.(smvar)}{outRow} = lsmpt;
+                        outData.data{outCols.(smvar)}{outRow,1} = lsmpt;
                     else
-                        outData.data{outCols.(smvar)}(outRow) = lsmpt;
+                        outData.data{outCols.(smvar)}(outRow,1) = lsmpt;
                     end
                 end
             end
 
             % set response_order
-            outData.data{outCols.response_order}(outRow) = rsData.data{rsCols.response_order}(find(rsMask,1,'first'));
+            outData.data{outCols.response_order}(outRow,1) = rsData.data{rsCols.response_order}(find(rsMask,1,'first'));
             for iq = 1:length(qnums)
                 qi = qnums(iq);
                 if iscell(qi)
@@ -821,12 +824,12 @@ if isfield(params.export,'by_stimulus')
                 qtype = outData.datatype{ocol};
                 qdata = sanitize_cell_value(qdata,qtype);
                 if qtype == 's'
-                    outData.data{ocol}{outRow} = qdata;
+                    outData.data{ocol}{outRow,1} = qdata;
                 else
                   if isstr(qdata) && strcmp(qdata,'NA')
-                    outData.data{ocol}(outRow) = NaN;
+                    outData.data{ocol}(outRow,1) = NaN;
                   else
-                    outData.data{ocol}(outRow) = qdata;
+                    outData.data{ocol}(outRow,1) = qdata;
                   end
                 end
             end % for iq=1:length(qnums)

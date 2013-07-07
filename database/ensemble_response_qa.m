@@ -8,6 +8,7 @@ function out_st = ensemble_response_qa(data_st,params)
 % struct.
 
 % 02May2013 Petr Janata
+% 05Jul2013 PJ - added formatting for convenient output string
 
 out_st = [];
 
@@ -85,7 +86,12 @@ if nprob
     fprintf('Subject %s had no variability on form(s): %s\n', probSubs{iprob}, ...
       sprintf('%d, ',formids(data(strcmp(probSubs{iprob},subids),:) <= sdCrit)));
   end
- 
+  
+  % Print a string that can be copied and pasted into a globals file
+  probStr = sprintf('''%s'',', probSubs{:});
+  probStr(end) = '';
+  fprintf('suspectSubs = {%s};\n', probStr);
 end
+
 
 return
