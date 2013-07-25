@@ -31,13 +31,19 @@ function [data_st] = ensemble_filter(data_st,filt)
 % filt.include.all.date_time.start=datenum('01-Jan-1901');
 % filt.include.all.date_time.stop=datenum('01-Jan-2020');
 %
+% start and stop serve as greater-than and less-than operators,
+% respectively. To include the start or stop value, use start_inc and
+% stop_inc.
+
 % 01/31/07 Petr Janata - adapted from ensemble_apply_crit.m (which didn't have
 %                        the added layer of and/or logic)
 %
 % 02/08/07 Stefan Tomic - added 'exact' argument to strmatch
 % 03/15/07 S.T. - added support for using NaN as a filtering criteria
 % 09/25/07 PJ - returns if filt spec is empty
-% 11/14/11 Pj - added handling of scalar data embedded in cells
+% 11/14/11 PJ - added handling of scalar data embedded in cells
+% 24Jul2013 PJ - Fixed handling of start/stop (greater than, less than)
+%                to properly follow the all/any logic.
 
 %deal with the possibility that params struct was specified
 %directly rather than passing "params.filt"
@@ -113,7 +119,7 @@ for itype = 1:ntypes
 				limit_flds = fieldnames(filt.(type_str).(logic_str).(fld_str));
 				nlim = length(limit_flds);
 				
-				tmp = true(size(data_st.data{data_col}));
+				%tmp = true(size(data_st.data{data_col}));
 				for ilim = 1:nlim
 					limit_str = limit_flds{ilim};
 					crit_val = filt.(type_str).(logic_str).(fld_str).(limit_str);
@@ -138,10 +144,20 @@ for itype = 1:ntypes
 							tmp2 = data_st.data{data_col} < crit_val;
 						case 'stop_inc'
 							tmp2 = data_st.data{data_col} <= crit_val;
+            otherwise
+              error('Unknown limit string: %s', limit_str)
 					end % switch limit_str
 					
-					tmp = tmp & tmp2;  % conjoin masks
+          tmp(:,ilim) = tmp2;  % conjoin masks
 				end % for ilim
+        
+        % Finalize tmp based on the desired logic
+        if strcmp(logic_str,'all')
+          tmp = all(tmp,2);
+        else
+          tmp = any(tmp,2);
+        end
+        
 			else
 				crit_vals = filt.(type_str).(logic_str).(fld_str);
 				

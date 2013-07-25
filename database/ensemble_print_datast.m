@@ -49,8 +49,10 @@ function outdata = ensemble_print_datast(indata,defs)
 % 
 % RETURNS
 %   indata - in the form it was provided
-% 
+
 % FB <fbarrett@ucdavis.edu> 2010.10.18
+% 24Jul2013 - Petr Janata - added handling of logicals as well as standar
+%             filtering
 
 %% set variables
 outdata = indata;
@@ -126,9 +128,14 @@ elseif all(nested)
   return
 end
 
+%% Perform filtering
+if isfield(defs, 'filt') && ~isempty(defs.filt)
+  indata = ensemble_filter(indata, defs.filt);
+end
+
 %% non-nested data structure, so print it out
 % print header lines
-if ~isempty(name)
+if ~isempty(name) && isfield(defs, 'print_header') && defs.print_header
   if print2screen, fprintf(1,'----------\nSource: %s\n----------\n\n',name); end
   if fid, fprintf(fid,'----------\nSource: %s\n----------\n\n',name); end
 end
@@ -151,7 +158,7 @@ for k=1:length(indata.data{1})
         data = data{1};
       end
     end
-    if isnumeric(data), data = num2str(data); end
+    if isnumeric(data) || islogical(data), data = num2str(data); end
     if l > 1, inputstr = [inputstr delim]; end
     inputstr = [inputstr data];
   end

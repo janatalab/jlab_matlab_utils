@@ -18,6 +18,7 @@
 %   'delim'    - ascii character for delimiters. {default:[9 32]
 %                i.e space and tab}. It is also possible to enter 
 %                strings, Ex: [9 ' ' ','].
+%   'blankcell' - ['on'|'off'] extract blank cells {default:'on'}
 %   'verbose'  - ['on'|'off'] {default:'on'}
 %   'nlines'   - [integer] number of lines to read {default: all file}
 %
@@ -33,8 +34,6 @@
 %        fewer columns than others.
 %
 % Author: Arnaud Delorme, CNL / Salk Institute, 29 March 2002
-
-%123456789012345678901234567890123456789012345678901234567890123456789012
 
 % Copyright (C) Arnaud Delorme, CNL / Salk Institute, 29 March 2002
 %
@@ -52,39 +51,7 @@
 % along with this program; if not, write to the Free Software
 % Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
-% $Log: loadtxt.m,v $
-% Revision 1.10  2005/05/24 17:51:16  arno
-% remove cell2mat
-%
-% Revision 1.9  2005/02/14 00:20:57  arno
-% fix delim
-%
-% Revision 1.8  2005/02/04 00:38:50  arno
-% upgrading to use finputcheck
-%
-% Revision 1.7  2004/07/29 21:06:17  arno
-% coma separated file debug
-%
-% Revision 1.6  2004/01/29 01:35:35  arno
-% debug numerical conversion
-%
-% Revision 1.5  2003/11/19 19:28:16  arno
-% now reading empty tabs
-%
-% Revision 1.4  2003/11/07 01:45:32  arno
-% adding nline argument
-%
-% Revision 1.3  2003/01/10 17:28:56  arno
-% debug last
-%
-% Revision 1.2  2003/01/10 17:27:13  arno
-% str2num -> str2double
-%
-% Revision 1.1  2002/04/05 17:39:45  jorn
-% Initial revision
-%
-
-function array = loadtxt( filename, varargin )
+function array = loadtxt( filename, varargin );
 
 if nargin < 1
 	help loadtxt;
@@ -97,12 +64,15 @@ else
     g = [];
 end;
 
-g = finputcheck( varargin, { 'convert'   'string'   { 'on' 'off' }   'on';
+g = finputcheck( varargin, { 'convert'   'string'   { 'on';'off';'force' }   'on';
                              'skipline'  'integer'  [0 Inf]          0;
-                             'verbose'   'string'   { 'on' 'off' }   'on';
-                             'delim'     { 'integer' 'string' } []               [9 32];
+                             'verbose'   'string'   { 'on';'off' }   'on';
+                             'uniformdelim' 'string'   { 'on';'off' }   'off';                             
+                             'blankcell' 'string'   { 'on';'off' }   'on';
+                             'delim'     { 'integer';'string' } []               [9 32];
                              'nlines'    'integer'  []               Inf });
 if isstr(g), error(g); end;
+if strcmpi(g.blankcell, 'off'), g.uniformdelim = 'on'; end;
 g.convert = lower(g.convert);
 g.verbose = lower(g.verbose);
 g.delim = char(g.delim);
@@ -127,36 +97,30 @@ if strcmp(g.verbose, 'on'), fprintf('Reading file (lines): '); end;
 while isempty(inputline) | inputline~=-1
      colnb = 1;
      if ~isempty(inputline)
-	     switch g.convert
-	        case 'off',
-			     while ~isempty(deblank(inputline))
-			         % 07/29/04 Petr Janata added following line to
-			         % mitigate problem of strtok ignoring leading
-			         % delimiters and deblanking residue in the event
-			         % of only space existing between delimiters
-			         inputline = strrep(inputline,[g.delim g.delim],[g.delim ' ' g.delim]);
-                     
-			         [array{linenb, colnb} inputline] = strtok(inputline, g.delim);
-			         colnb = colnb+1;
-			     end;
-	        case 'on',
-			     while ~isempty(deblank(inputline))
-			         [tmp inputline] = mystrtok(inputline, g.delim);
-			         if ~isempty(tmp) & tmp(1) > 43 & tmp(1) < 59, tmp2 = str2num(tmp);
-                     else tmp2 = []; end;
-			         if isempty( tmp2 )  , array{linenb, colnb} = tmp;
-			         else                  array{linenb, colnb} = tmp2;
-			         end;
-			         colnb = colnb+1;
-			     end;
-	        case 'force',
-			     while ~isempty(deblank(inputline))
-			         [tmp inputline] = mystrtok(inputline, g.delim);
-			         array{linenb, colnb} = str2double( tmp );
-			         colnb = colnb+1;
-			     end;
-	        otherwise, error('Unrecognised converting option');
-	     end;   
+         tabFirstpos = 1;
+         
+         % convert all delimiter to the first one
+         if strcmpi(g.uniformdelim, 'on')
+             for index = 2:length(g.delim)
+                 inputline(find(inputline == g.delim(index))) = g.delim(1);
+             end;
+         end;
+         
+         while ~isempty(deblank(inputline))
+             if strcmpi(g.blankcell,'off'), inputline = strtrim(inputline); end;
+             if tabFirstpos && length(inputline) > 1 && all(inputline(1) ~= g.delim), tabFirstpos = 0; end;
+             [tmp inputline tabFirstpos] = mystrtok(inputline, g.delim, tabFirstpos);
+             switch g.convert
+                case 'off', array{linenb, colnb} = tmp;
+                case 'on',  
+                     tmp2 = str2double(tmp);
+                     if isnan( tmp2 )  , array{linenb, colnb} = tmp;
+                     else                array{linenb, colnb} = tmp2;
+                     end;
+                case 'force', array{linenb, colnb} = str2double(tmp);
+             end;
+             colnb = colnb+1;
+         end;
 	     linenb = linenb +1;
      end;
      inputline = fgetl(fid);
@@ -171,11 +135,20 @@ fclose(fid);
 
 % problem strtok do not consider tabulation
 % -----------------------------------------
-function [str, strout] = mystrtok(strin, delim);
-    if delim == 9 % tab
-        if length(strin) > 1 & strin(1) == 9 & strin(2) == 9 
+function [str, strout, tabFirstpos] = mystrtok(strin, delim, tabFirstpos);
+    % remove extra spaces at the beginning
+    while any(strin(1) == delim) && strin(1) ~= 9 && strin(1) ~= ','
+         strin = strin(2:end);
+    end;
+    % for tab and coma, consider empty cells
+    if length(strin) > 1 && any(strin(1) == delim)
+        if tabFirstpos || any(strin(2) == delim)
             str = '';
             strout = strin(2:end);
+            if strin(2) ~= 9 && strin(2) ~= ','
+                tabFirstpos = 0;
+                strout = strtrim(strout);
+            end;
         else
             [str, strout] = strtok(strin, delim);
         end;
