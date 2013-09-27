@@ -44,6 +44,8 @@ function [data_st] = ensemble_filter(data_st,filt)
 % 11/14/11 PJ - added handling of scalar data embedded in cells
 % 24Jul2013 PJ - Fixed handling of start/stop (greater than, less than)
 %                to properly follow the all/any logic.
+% 27Sep2013 PJ - minor bug fix associated with failure to initialize tmp
+%                variable during evaluation of lt gt criteria
 
 %deal with the possibility that params struct was specified
 %directly rather than passing "params.filt"
@@ -119,7 +121,7 @@ for itype = 1:ntypes
 				limit_flds = fieldnames(filt.(type_str).(logic_str).(fld_str));
 				nlim = length(limit_flds);
 				
-				%tmp = true(size(data_st.data{data_col}));
+				tmp = true(size(data_st.data{data_col},1),nlim);
 				for ilim = 1:nlim
 					limit_str = limit_flds{ilim};
 					crit_val = filt.(type_str).(logic_str).(fld_str).(limit_str);
