@@ -82,7 +82,7 @@ for iarg = 1:2:narg
     case 'conn_id'
       conn_id = varargin{iarg+1};
       
-    case 'encrypted_fields'
+    case {'encrypted_fields','encrypted_flds'}
       encrypted_fields = varargin{iarg+1};
     
     case 'enc_key'
@@ -184,8 +184,17 @@ mysql_str = sprintf(['SELECT %s FROM %s ' ...
 
 % Extract the data
 [data{1:length(fld.extract_flds)}] = mysql(conn_id, mysql_str);
-
 vars = fld.extract_flds;
+cols = set_var_col_const(vars);
+
+% Deal with any necessary conversions from numeric fields that were
+% encrypted
+if exist('encrypted_fields','var') && any(strcmp('response_enum', encrypted_fields)) && any(strcmp('response_enum',vars))
+  tmp = data{cols.response_enum};
+  datamask = ~cellfun('isempty',tmp);
+  data{cols.response_enum} = nan(size(datamask));
+    data{cols.response_enum}(datamask) = cell2mat(cellfun(@str2num,tmp,'UniformOutput',0));
+end
 
 if exist('tmp_conn_id','var')
   mysql(conn_id,'close');

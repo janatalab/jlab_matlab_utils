@@ -41,6 +41,7 @@ function an_st = ensemble_enum_hist(data_st,params)
 % 05/11/10 PJ - Fixed bug where enum_mask was being checked instead of
 %               qinfo_enum_mask, leading to erroneous question skipping.
 % 02/15/11 PJ - Fixed conn_id checking, handling of only 1 subject
+% 01Nov2013 PJ - added optional suppression of by-item results
 
 an_st = {};
 na = 0;
@@ -247,39 +248,49 @@ for iqid = 1:nqid
   
   an_st{na}.meta.question = qinfo(curr_qid_idx);
   
+  %% Reports
+  
   %
   % Perform any reports of the data in which reporting is done on a per-item basis
   %
-  nr=nr+1;
-  an_st{na}.report{nr}.type = 'distrib_by_cat';
-  an_st{na}.report{nr}.figfun = @plot_distrib_by_cat;
-  if do_plot
-    an_st{na}.report{nr}.figs = ...
-      plot_distrib_by_cat(an_st{na}.data{an_cols.prop}, params.(repstr));
+
+  reportByItem = 1;
+  if isfield(params.report, 'by_item')
+    reportByItem = params.report.by_item;
   end
   
-  fprintf(fid,'\nQuestion (%1.2f): %s\n', ...
-    qinfo(curr_qid_idx).compqid, qinfo(curr_qid_idx).question_text);
-  if ~isempty(qinfo(curr_qid_idx).heading)
-    fprintf(fid,'Subquestion: %s\n', qinfo(curr_qid_idx).heading);
-  end
-  fprintf(fid,'%s\t%s\n', item_str, cell2str(enum_values,'\t'));
-  for iitem = 1:nitems
-    switch item_str
-      case {'session_id','stimulus_id'}
-        itemval_str = sprintf('%d',itemids(iitem));
-      case 'subject_id'
-        itemval_str = itemids{iitem};
-      case 'none'
-        itemval_str = 'all';
-      otherwise
-        itemval_str = itemids{iitem};
+  if reportByItem
+    nr=nr+1;
+    an_st{na}.report{nr}.type = 'distrib_by_cat';
+    an_st{na}.report{nr}.figfun = @plot_distrib_by_cat;
+    if do_plot
+      an_st{na}.report{nr}.figs = ...
+        plot_distrib_by_cat(an_st{na}.data{an_cols.prop}, params.(repstr));
     end
     
-    enum_str = sprintf('\t%d', an_st{na}.data{an_cols.count}(iitem,:));
-    fprintf(fid,'%s%s\n', itemval_str, enum_str);
-  end
-  
+    fprintf(fid,'\nQuestion (%1.2f): %s\n', ...
+      qinfo(curr_qid_idx).compqid, qinfo(curr_qid_idx).question_text);
+    if ~isempty(qinfo(curr_qid_idx).heading)
+      fprintf(fid,'Subquestion: %s\n', qinfo(curr_qid_idx).heading);
+    end
+    fprintf(fid,'N = %d\n', nitems);
+    fprintf(fid,'%s\t%s\n', item_str, cell2str(enum_values,'\t'));
+    for iitem = 1:nitems
+      switch item_str
+        case {'session_id','stimulus_id'}
+          itemval_str = sprintf('%d',itemids(iitem));
+        case 'subject_id'
+          itemval_str = itemids{iitem};
+        case 'none'
+          itemval_str = 'all';
+        otherwise
+          itemval_str = itemids{iitem};
+      end
+      
+      enum_str = sprintf('\t%d', an_st{na}.data{an_cols.count}(iitem,:));
+      fprintf(fid,'%s%s\n', itemval_str, enum_str);
+    end
+  end % isfield(params.report, 'by_item') && params.report.by_item
   %
   % Now perform the set of analyses that collapse across items
   %
@@ -368,6 +379,8 @@ for iqid = 1:nqid
   if ~isempty(qinfo(curr_qid_idx).heading)
     fprintf(fid,'Subquestion: %s\n', qinfo(curr_qid_idx).heading);
   end
+  
+  fprintf(fid,'\nN = %d\n', nitems);
   
   for ienum = 1:length(qinfo(curr_qid_idx).enum_values)
     fprintf(fid,'%30s:\t%1.2f\n', qinfo(curr_qid_idx).enum_values{ienum}, ...
@@ -507,7 +520,7 @@ end
 
 % Write the data that were plotted to a comma-delimited text file
 try data2file = pp.data2file; catch data2file = true; end
-if data2file && ~isempty(pp.figfname)
+if data2file && isfield(pp, 'figfname') && ~isempty(pp.figfname)
   [fpath,fname,fext] = fileparts(pp.figfname);
   datafname = fullfile(fpath,[fname '.csv']);
   % open the file for writing

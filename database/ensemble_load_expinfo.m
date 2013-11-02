@@ -138,9 +138,21 @@ sessIDList = sessInfo.data{sess_colNames.session_id};
 %% Load response table
 fprintf('Loading response table information ...\n');
 respinfo = ensemble_init_data_struct;
+
+% Check to see if we are dealing with encrypted fields
+if isfield(params.ensemble, 'encrypted_fields')
+  encrypted_flds = params.ensemble.encrypted_fields;
+  enc_key = params.mysql.enc_key;
+else
+  encrypted_flds = {};
+  enc_key = '';
+end
+
 [respinfo.data,respinfo.vars] = mysql_extract_data('table', exp_meta.response_table, ...
 	'extract_flds', extract_vars, 'order_by','response_id', ...
 	'session_id', sessIDList, ...
+  'encrypted_flds', encrypted_flds, ...
+  'enc_key', enc_key, ...
 	'conn_id', conn_id);
 respinfo.name = 'response_data';
 respinfo.type = 'response_data';
