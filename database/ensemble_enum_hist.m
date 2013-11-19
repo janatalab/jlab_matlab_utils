@@ -122,7 +122,14 @@ notbitmask_mask = ismember(compqid_vect, notbitmask_compqids);
 
 % Copy all of the enum data to the data_vect
 data_vect = zeros(size(compqid_vect));
-data_vect(enum_mask) = data_st.data{incol.response_enum}(enum_mask);
+if ~iscell(data_st.data{incol.response_enum}(enum_mask))
+  data_vect(enum_mask) = data_st.data{incol.response_enum}(enum_mask);
+elseif params.force_cell2double
+  data_vect(enum_mask) = cellfun(@str2num,data_st.data{incol.response_enum}(enum_mask));
+else
+  error('Response enum data is likely encrypted!')
+end
+  
 
 % Convert the data for all of the non-bitmask enums to category indices
 data_vect(notbitmask_mask) = enum2data(data_vect(notbitmask_mask));
