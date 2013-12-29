@@ -34,6 +34,7 @@ function sessData = ensemble_session_trial_info_without_trial_id(indata,params)
 %
 %
 % 29 June 2011 - BH
+% 06Sep2013 PJ - added parfor to session loop
 
 if ~isfield(params,'verbose'), params.verbose=0; end
 
@@ -74,18 +75,21 @@ respCols = set_var_col_const(respData.vars);
 sessionIDs = sessData.data{sessCols.session_id};
 subjectIDs = sessData.data{sessCols.subject_id};
 
+sessData.data{sessCols.trial_info} = cell(length(sessionIDs),1);
+tinfoStack = cell(length(sessionIDs),1);
 for sessIdx = 1:length(sessionIDs)
 
-  sessInfo.session_id = sessionIDs(sessIdx);
-  sessInfo.subject_id  = subjectIDs{sessIdx};
+  session_id = sessionIDs(sessIdx);
+  subject_id  = subjectIDs{sessIdx};
  
   message(['Sorting trial info for session # ' num2str(sessIdx) ...
-	   ', ID ' sessInfo.subject_id ...
-       ', Ensemble session # ' num2str(sessInfo.session_id)],...
+	   ', ID ' subject_id ...
+       ', Ensemble session # ' num2str(session_id)],...
        params.verbose);
   
-  filt.include.all.session_id = sessInfo.session_id;
-  respThisSess = ensemble_filter(respData,filt);
+  cfilt = [];
+  cfilt.include.all.session_id = session_id;
+  respThisSess = ensemble_filter(respData,cfilt);
   
   trialInfoStruct = ensemble_init_data_struct;
   trialInfoStruct.name='trial info';
@@ -119,8 +123,9 @@ for sessIdx = 1:length(sessionIDs)
   if isfield(params,'parse_audio_stims') && ~isempty(params.parse_audio_stims)
   
       parseAudioParams = params.parse_audio_stims;
+      parseAudioParams.mysql = params.mysql;
       parseAudioParams.filename = ...
-          replaceFilenameTags(parseAudioParams.filename,sessInfo);
+          replaceFilenameTags(parseAudioParams.filename,struct('subject_id',subject_id,'session_id',session_id));
 
 
       %if the recorded responses in Ensemble or audio recordings
@@ -129,7 +134,7 @@ for sessIdx = 1:length(sessionIDs)
       %(ignoreParsedStimAudioForSub)during matching
       if(isfield(params,'ignoreMatchedEventForSub'))
           
-          [hasEventExclusions,ignoreCellIdx] = ismember(sessInfo.subject_id,params.ignoreMatchedEventForSub{1});
+          [hasEventExclusions,ignoreCellIdx] = ismember(subject_id,params.ignoreMatchedEventForSub{1});
           if(ignoreCellIdx ~= 0)
               parseAudioParams.ignoreEventIdxs = ...
                   params.ignoreMatchedEventForSub{2}{ignoreCellIdx};
@@ -138,14 +143,14 @@ for sessIdx = 1:length(sessionIDs)
               %if ensemble practice sessions are missing from database,
               %then we might need to revise which practice trials to
               %throw out.
-              practiceTrialIdxs = setdiff(practiceTrialIdxs,parseAudioParams.ignoreEventIdxs);
+              usePracticeTrialIdxs = setdiff(practiceTrialIdxs,parseAudioParams.ignoreEventIdxs);
 
           end
       end
         
       if(isfield(params,'ignoreParsedStimAudioForSub'))
           [hasStimAudioExclusions,ignoreCellIdx] = ...
-          ismember(sessInfo.subject_id,params.ignoreParsedStimAudioForSub{1});
+          ismember(subject_id,params.ignoreParsedStimAudioForSub{1});
           
           if(ignoreCellIdx ~= 0)
               parseAudioParams.ignoreParsedAudioIdxs = params.ignoreParsedStimAudioForSub{2}{ignoreCellIdx};
@@ -154,7 +159,7 @@ for sessIdx = 1:length(sessionIDs)
       
       trialInfoStruct = parse_audio_clips(trialInfoStruct,parseAudioParams);
       if isempty(trialInfoStruct)
-          warning('no audio data for %s',sessInfo.subject_id);
+          warning('no audio data for %s',subject_id);
           continue
       end
   end %parse audio
@@ -162,7 +167,7 @@ for sessIdx = 1:length(sessionIDs)
   if isfield(params,'parse_midi_resps') && ~isempty(params.parse_midi_resps)
     
     parseMidiRespsParams = params.parse_midi_resps;
-    parseMidiRespsParams.filename = replaceFilenameTags(parseMidiRespsParams.filename,sessInfo);
+    parseMidiRespsParams.filename = replaceFilenameTags(parseMidiRespsParams.filename,struct('subject_id',subject_id,'session_id',session_id));
     trialInfoStruct = parse_midi_slider_response(trialInfoStruct,parseMidiRespsParams);
    
   end %parse MIDI
@@ -174,9 +179,10 @@ for sessIdx = 1:length(sessionIDs)
     trialInfoStruct.data{iCol} = trialInfoStruct.data{iCol}(trialIdxsToKeep);
   end
   
-  sessData.data{sessCols.trial_info}(sessIdx,1) = {trialInfoStruct};
+  tinfoStack{sessIdx} = trialInfoStruct;
   
 end %sessIdx
+sessData.data{sessCols.trial_info} = tinfoStack;
 
 function message(messageString,verbose)
 

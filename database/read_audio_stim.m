@@ -35,17 +35,70 @@ else
   mysql_conn_id = varargin{4};  % doesn't this defy the purpose of varargin?
 end
 
+if nargin > 5
+  params = varargin{5};
+else
+  params = [];
+end
+
 if(nargin == 0)
   error('Need a stimulus_id from the stimulus table. Type ''help read_audio_stim'' for more information.');
 end
 
+if ~exist('mysql_conn_id','var') || isempty(mysql_conn_id)
+  error('Unspecified mysql conn_id')
+else
+  mysqlFail = false;
+end
+
 % Check for valid connection to database
-if ~exist('mysql_conn_id','var') || isempty(mysql_conn_id) || mysql(mysql_conn_id,'status')
-  error('%s: Do not have a valid connection ID', mfilename);
+maxTries = 30;
+numTries = 0;
+forceStatusCheck = true;
+while forceStatusCheck && ~mysqlFail && mysql(mysql_conn_id,'status') && numTries < maxTries
+  numTries=numTries+1;
+  pause(rand*2)
+  fprintf('.')
+end
+
+if forceStatusCheck && (numTries == maxTries)
+  mysqlFail = true;
+end
+  
+% Get a temporary connection ID if necessary. This means we have to pass in
+% a params struct though
+usingTmpConnID = false;
+if mysqlFail && ~isempty(params) && isfield(params,'mysql')
+  fprintf('Trying to establish alternate connection\n');
+  for iport = setdiff(0:9,mysql_conn_id)
+    if ~mysql(iport,'status')
+      params.mysql.conn_id = iport;
+      mysql_conn_id = mysql_make_conn(params.mysql);
+      usingTmpConnID = true;
+      mysqlFail = false;
+      fprintf('Established alternate connection: %d\n', mysql_conn_id);
+      break
+    end
+    pause(rand*5)
+  end
+  if ~usingTmpConnID
+    error('Tried, but failed to get an open port: last tried: %d', iport)
+  end
+end
+  
+if mysqlFail
+  error('%s: Do not have a valid connection ID to read stimulus_id: %d; Tried %d times on conn_id: %d', ...
+    mfilename, stimulus_id, numTries, mysql_conn_id);
+elseif numTries
+  fprintf('Tried to reach database %d times\n', numTries);
 end
 
 sql_choose_stim = sprintf('select location from stimulus where stimulus_id = %d',stimulus_id);
 stim_location = mysql(mysql_conn_id,sql_choose_stim);
+
+if usingTmpConnID
+  mysql(mysql_conn_id,'close')
+end
 
 stim_location = char(stim_location);
 
@@ -78,7 +131,7 @@ switch(nargin)
   N = varargin{1};
   mono = varargin{2};
   downsamp = 1;
- case {4,5}
+ case {4,5,6}
   N = varargin{1};
   mono = varargin{2};
   if(isempty(varargin{3}))

@@ -151,6 +151,8 @@ function outData = ensemble_export_respnstim(inData,params)
 %                added 2nd row of output specifying variable datatypes
 % PJ 10May2013 - optimized code by replacing costly and unnecessarily
 %                repeated calls to ismember(), among other things
+% PJ 28Dec2013 - added default handling when question datatype is 'enum',
+%                but html_field_type is ''.
 
 % % initialize output data struct
 outData = ensemble_init_data_struct;
@@ -575,32 +577,35 @@ if isfield(params.export,'by_stimulus')
     qStructs = make_valid_struct_key(tmp_qnums);
     numconst = length(outData.vars);
     for iadvar = numconst+1:numconst+length(qnums)
-        outData.data{iadvar} = [];
-       
-				% Figure out which compqid row we are dealing with
-				stridx = regexp(qnums{iadvar-numconst},'_c\d{2}');
-				if isempty(stridx)
-					cqid = qnums{iadvar-numconst};
-				else
-					cqid = qnums{iadvar-numconst}(1:stridx-1);
-				end
-				cqidrow = find(ismember(cqids.data{cqCqi}, cqid));
-				switch cqids.data{cqQin}{cqidrow}.type
-					case {'text','varchar'}
-						outData.datatype = [outData.datatype 's'];
-          case {'enum'} % distinguish between checkboxes and scales
-            switch cqids.data{cqQin}{cqidrow}.html_field_type
-              case 'radiogroup'
-                outData.datatype = [outData.datatype 'n'];
-              case 'checkbox'
-                outData.datatype = [outData.datatype 'l'];
-            end
-					otherwise
-						outData.datatype = [outData.datatype 'n'];
-				end
+      outData.data{iadvar} = [];
+      
+      % Figure out which compqid row we are dealing with
+      stridx = regexp(qnums{iadvar-numconst},'_c\d{2}');
+      if isempty(stridx)
+        cqid = qnums{iadvar-numconst};
+      else
+        cqid = qnums{iadvar-numconst}(1:stridx-1);
+      end
+      cqidrow = find(ismember(cqids.data{cqCqi}, cqid));
+      switch cqids.data{cqQin}{cqidrow}.type
+        case {'text','varchar'}
+          cdt = 's';
+        case {'enum'} % distinguish between checkboxes and scales
+          switch cqids.data{cqQin}{cqidrow}.html_field_type
+            case 'radiogroup'
+              cdt = 'n';
+            case 'checkbox'
+              cdt = 'l';
+            otherwise
+              cdt = 'n';
+          end
+        otherwise
+          cdt = 'n';
+      end
+      outData.datatype = [outData.datatype cdt];
     end
     outData.vars = [outData.vars qStructs];
-    outCols = set_var_col_const(outData.vars);  
+    outCols = set_var_col_const(outData.vars);
     
     % 06Jul2013 PJ - this is weird. Why is this here? outData.data needs to
     % be filled down rows, but initializing like this alone does not force

@@ -41,14 +41,28 @@ function an_st = ensemble_enum_hist(data_st,params)
 % 05/11/10 PJ - Fixed bug where enum_mask was being checked instead of
 %               qinfo_enum_mask, leading to erroneous question skipping.
 % 02/15/11 PJ - Fixed conn_id checking, handling of only 1 subject
+<<<<<<< .mine
+% 23Aug2013 PJ - fixed minor issues associated with labeling of plots and
+%                figure printing
+=======
 % 01Nov2013 PJ - added optional suppression of by-item results
+>>>>>>> .r708
 
 an_st = {};
 na = 0;
 
-try conn_id = params.ensemble.conn_id; catch conn_id = []; end
+try 
+  conn_id = params.ensemble.conn_id; 
+catch
+  conn_id = []; 
+end
+
 if isempty(conn_id)
-  try conn_id = params.mysql.conn_id; catch conn_id = []; end
+  try 
+    conn_id = params.mysql.conn_id; 
+  catch
+    conn_id = []; 
+  end
 end
 
 % Deal with some ambiguity in how reporting structures are defined
@@ -64,7 +78,11 @@ for itype = 1:length(report_string_types)
   end
 end
 
-try do_plot = params.(repstr).figs.plot; catch do_plot = 0; end
+try 
+  do_plot = params.(repstr).figs.plot; 
+catch
+  do_plot = 0; 
+end
 
 % Apply any specified filtering to the input data
 if isfield(params,'filt')
@@ -479,7 +497,8 @@ for icat = 1:ncat
   % FB 11/13/2007 added this conditional, since empty enum values create
   % an empty cell return from linewrap, which in turn is illegal in
   % cell2str, which finally kills any analysis in its tracks
-  if(length(linewrap(params.qinfo.enum_values{sorted_idxs(icat)},18)))
+  if ~isempty(params.qinfo.enum_values{sorted_idxs(icat)}) && ...
+      ~isempty(linewrap(params.qinfo.enum_values{sorted_idxs(icat)},18))
     label_text = cell2str(linewrap(params.qinfo.enum_values{sorted_idxs(icat)},18),'\n');
   else
     label_text = ' ';
@@ -520,10 +539,7 @@ if add_pagehdr
   pp.fig.title = pp.pagehdr.title;
 end
 
-if isfield(pp,'write2file') && pp.write2file
-  fprintf('Printing figure to file: %s\n', pp.figfname);
-  print(pp.figfname, pp.printargs{:})
-end
+print_fig(pp)
 
 % Write the data that were plotted to a comma-delimited text file
 try data2file = pp.data2file; catch data2file = true; end
@@ -629,10 +645,7 @@ ax(nax)=add_fighdr(pp.pagehdr);
 pp.fig.title = pp.pagehdr.title;
 pp.fig.axes = ax;
 
-if isfield(pp,'write2file') && pp.write2file
-  fprintf('Printing figure to file: %s\n', pp.figfname);
-  print(pp.figfname, pp.printargs{:})
-end
+print_fig(pp);
 
 out_pp = pp;
 end % function pp = plot_distrib_by_cat(data_st,params)
@@ -643,3 +656,15 @@ th = text(0.95,0.95,sprintf('N=%d', nitems), ...
   'horizontalalign','right', ...
   'verticalalign', 'top');
 end % function add_nitems_txt(nitems,params)
+
+function print_fig(pp)
+if isfield(pp,'write2file') && pp.write2file
+  if isfield(pp,'printargs')
+    printargs = pp.printargs;
+  else
+    printargs = {'-dpsc','-append'};
+  end
+  fprintf('Printing figure to file: %s\n', pp.figfname);
+  print(pp.figfname, printargs{:})
+end
+end % print_fig
