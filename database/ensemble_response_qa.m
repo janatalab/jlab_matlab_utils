@@ -76,7 +76,8 @@ if nprob
   % Handle subjects with NaNs
   probSubs = subids(nanMask);
   for iprob = 1:sum(nanMask)
-    fprintf('Subject %s had no data for form(s): %s\n', probSubs{iprob}, ...
+    fprintf('Subject %s missing a total of %d responses in encounters with form(s): %s\n', probSubs{iprob}, ...
+      sum(isnan(data(strcmp(probSubs{iprob}, subids),:))), ...
       sprintf('%d, ',formids(isnan(data(strcmp(probSubs{iprob},subids),:)))));
   end
   

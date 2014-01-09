@@ -8,6 +8,10 @@ function attrib_id = mysql_check_attribute(attrib_tag, params)
 % of strings in which case each string is checked as a tag, and a vector of
 % attribute IDs is returned.
 %
+% params.conn_id - specify the mysql connection to use
+% params.create - indicate whether attribute should be created if not
+%                  present [default: false]
+%
 % If create is true and the attribute is not found, the attribute is created.
 % If multiple tags are searched and the creation parameter is set to false, any
 % missing attributes are indicated by NaNs in the attribute ID vector.

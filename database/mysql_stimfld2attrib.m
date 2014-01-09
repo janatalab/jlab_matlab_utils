@@ -13,6 +13,7 @@ function attrib_id = mysql_stimfld2attrib(varargin)
 
 % 03/31/09 PJ
 % 07/18/09 PJ - extracted portion of code into mysql_check_attribute
+% 21Nov2013 PJ - added checking and conversion of string to cell during fldval handling
 
 % Parse the input arguments
 narg = length(varargin);
@@ -45,6 +46,9 @@ attrib_id = mysql_check_attribute(attrib_tag, params);
 %
 switch fldname
   case {'name','description','playlist','artist','album','genre','location'}
+    if ~iscell(fldvals)
+      fldvals = {fldvals};
+    end
     stim_str = sprintf('"%s"',cell2str(fldvals,'","'));
   otherwise
     stim_str = sprintf('%d,', fldvals);
