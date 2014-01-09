@@ -118,6 +118,7 @@ check_dir(outroot);
 % Copy the stimuli
 srcs = strcat(fullfile(stimroot,filesep), stim_st.data{scols.location});
 nstim = size(srcs,1);
+fprintf('Copying %d files\n', nstim);
 for istim = 1:nstim
   srcLoc = srcs{istim}; % get the current stimulus path
   
@@ -130,8 +131,11 @@ for istim = 1:nstim
   status = unix(unix_str);
   if status
     error('Problem executing: %s', unix_str)
+  else
+    fprintf('.');
   end
   
 end % for istim
-  
+fprintf('\nDone copying files!\n');
+
 return
