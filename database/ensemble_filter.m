@@ -46,6 +46,8 @@ function [data_st] = ensemble_filter(data_st,filt)
 %                to properly follow the all/any logic.
 % 27Sep2013 PJ - minor bug fix associated with failure to initialize tmp
 %                variable during evaluation of lt gt criteria
+% 09Jan2014 PJ - expanded list of wildcards that trigger regexp usage to
+%                '[*^$]' from '[*]'
 
 %deal with the possibility that params struct was specified
 %directly rather than passing "params.filt"
@@ -194,7 +196,7 @@ for itype = 1:ntypes
 				% Check to see if any of the criterion values have wildcards, in which case
 				% we need to switch to regexp
 				if iscellstr(crit_vals) || ischar(crit_vals)
-					is_wild = ~cellfun('isempty',regexp(crit_vals,'[*]'));
+					is_wild = ~cellfun('isempty',regexp(crit_vals,'[*$^]'));
 					wild_idxs = find(is_wild);
 					for iwild = 1:length(wild_idxs)
 						tmp = tmp|~cellfun('isempty',regexp(data_st.data{data_col}, ...

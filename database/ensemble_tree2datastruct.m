@@ -39,14 +39,19 @@ function newstruct = ensemble_tree2datastruct(generic_struct,params)
 %                              any vectors in a cell (even if there is a single
 %                              vector). Default is off (do not encapsulate
 %                              single vector).
+%
+% 09Jan2014 Petr Janata - added 'ignore_reserved_names' option to keep
+%      fields with names of 'name' and 'type' in the data part of the new
+%      Ensemble datastruct
   
-  
-  
-  
-try
-  params.encapsulate_in_cells;
-catch
+if ~isfield(params,'encapsulate_in_cells') || isempty(params.encapsulate_in_cells)
   params.encapsulate_in_cells = 0;
+end
+
+if ~isfield(params,'ignore_reserved_names') || isempty(params.ignore_reserved_names)
+  ignore_reserved_names = 0;
+else
+  ignore_reserved_names = params.ignore_reserved_names;
 end
   
 %only perform conversion if it looks like this is not an Ensemble
@@ -67,32 +72,27 @@ metaIdx = strmatch('meta',fnames,'exact');
 %if any fieldnames are reserved fieldnames in the datastruct
 %(e.g. name or type), assign these to the appropriate places
 %instead of to 'vars' and 'data'
-if(~isempty(typeIdx))
-  fnames = setdiff(fnames,'type');
-  type = generic_struct(1).type;
-else
-  type = '';
-end
-
-if(~isempty(nameIdx))
-  fnames = setdiff(fnames,'name');
-  name = generic_struct(1).name;
-else
-  name = '';
-end
-
-if(~isempty(reportIdx))
-  fnames = setdiff(fnames,'report');
-  report = generic_struct(1).report;
-else
-  report = struct();
-end
-
-if(~isempty(metaIdx))
-  fnames = setdiff(fnames,'meta');
-  meta = generic_struct(1).meta;
-else
-  meta = struct();
+type = ''; name=''; report = struct(); meta = struct();
+if ~ignore_reserved_names
+  if(~isempty(typeIdx))
+    fnames = setdiff(fnames,'type');
+    type = generic_struct(1).type;
+  end
+  
+  if(~isempty(nameIdx))
+    fnames = setdiff(fnames,'name');
+    name = generic_struct(1).name;
+  end
+  
+  if(~isempty(reportIdx))
+    fnames = setdiff(fnames,'report');
+    report = generic_struct(1).report;
+  end
+  
+  if(~isempty(metaIdx))
+    fnames = setdiff(fnames,'meta');
+    meta = generic_struct(1).meta;
+  end
 end
 
 %if this is an array of structs, we will encapsulate the values corresponding
@@ -104,13 +104,13 @@ else
 end
 
 for ifld = 1:length(fnames)
- 
+  
   struct_idx = 1;
   
   for struct_idx = 1:length(generic_struct)
-  
+    
     dataCell = generic_struct(struct_idx).(fnames{ifld});
-
+    
     fieldType = class(dataCell);
     
     if(struct_idx == 1 && ifld == 1)
@@ -118,19 +118,19 @@ for ifld = 1:length(fnames)
     end
     
     switch fieldType
-	
-     case 'struct'
-      if(isempty(dataCell))
-	assignData = ensemble_init_data_struct;
-      else
-	assignData = ensemble_tree2datastruct(dataCell);
-      end
       
-     otherwise
-      assignData = dataCell;
-      
+      case 'struct'
+        if(isempty(dataCell))
+          assignData = ensemble_init_data_struct;
+        else
+          assignData = ensemble_tree2datastruct(dataCell,params);
+        end
+        
+      otherwise
+        assignData = dataCell;
+        
     end
-	
+    
     if(encapsulate)
       newstruct.data{ifld}{struct_idx,1} = assignData;
     else
@@ -138,7 +138,7 @@ for ifld = 1:length(fnames)
     end
     
   end
-
+  
 end
 
 return
