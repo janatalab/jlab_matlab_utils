@@ -43,7 +43,13 @@ function newstruct = ensemble_tree2datastruct(generic_struct,params)
 % 09Jan2014 Petr Janata - added 'ignore_reserved_names' option to keep
 %      fields with names of 'name' and 'type' in the data part of the new
 %      Ensemble datastruct
+% 19Feb2014 Petr Janata - fixed handling of situation where params is not
+%      passed in as an input argument
   
+if nargin < 2
+  params = struct;
+end
+
 if ~isfield(params,'encapsulate_in_cells') || isempty(params.encapsulate_in_cells)
   params.encapsulate_in_cells = 0;
 end
