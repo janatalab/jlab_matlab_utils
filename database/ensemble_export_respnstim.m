@@ -153,6 +153,8 @@ function outData = ensemble_export_respnstim(inData,params)
 %                repeated calls to ismember(), among other things
 % PJ 28Dec2013 - added default handling when question datatype is 'enum',
 %                but html_field_type is ''.
+% PJ 26Feb2014 - fixed strange handling of trialMask (see additional
+%                comment below with this date stamp)
 
 % % initialize output data struct
 outData = ensemble_init_data_struct;
@@ -650,13 +652,22 @@ if isfield(params.export,'by_stimulus')
             nTrials = ~isnan(uTrials);
             nUt = sum(nTrials);
           else
-            uTrials = NaN;
-            nUt = 1; 
+            % uTrials = NaN;
+            % nUt = 1; % see 26Feb2014 note below
           end
 
           for in=1:nUt
-            if nUt > 1
+            % 26Feb2014 PJ - the current conditional is really odd. It
+            % assumes that a situation with the unique number of trials of
+            % 1 cannot be valid. It seems the test here should be whether
+            % uTrials is NaN, in which case it should throw an error
+            % because it cannot construct the trial mask. Currently it
+            % throws an error because trialMask is undefined.
+            %if nUt > 1 % original code
+            if nUt
               trialMask = trialMaskMtx(:,trialIDs == uTrials(in));
+            else
+              error('Could not construct trialMask');
             end
            
             rsMask = subMask(:,isub) & stimMask(:,istim) & trialMask;
