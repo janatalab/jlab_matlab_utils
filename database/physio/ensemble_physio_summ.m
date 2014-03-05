@@ -447,7 +447,10 @@ end
 nchan = length(channels);
 if ~nchan, error('no supported channels provided'), end
 
-eeglab('initpaths');
+%eeglab('initpaths');
+% Add only the eeglab paths we need
+eeglab_root = fileparts(which('eeglab'));
+addpath(fullfile(eeglab_root,'functions/popfunc'));
 
 % init default vars used in extracted datasets
 xvars = {'subject_id','session','ensemble_id','run','trial',...

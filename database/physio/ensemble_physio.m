@@ -127,7 +127,12 @@ try SIG_CHECK = defs.SIG_CHECK; catch SIG_CHECK = 1; end
 try LINK2FMRI = defs.LINK2FMRI; catch LINK2FMRI = 0; end
 
 % init EEGLAB
-eeglab('initpaths');
+
+% eeglab('initpaths');
+% Add only the eeglab paths we need
+eeglab_root = fileparts(which('eeglab'));
+addpath(fullfile(eeglab_root,'functions/popfunc'));
+addpath(fullfile(eeglab_root,'functions/sigprocfunc'));
 
 %
 % START OF THE SUBJECT LOOP
