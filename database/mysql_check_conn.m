@@ -1,4 +1,4 @@
-function status = mysql_check_conn(conn_id,action);
+function status = mysql_check_conn(conn_id,action)
 % Checks a mysql connection, opens or closes if necessary.
 % conn_id = mysql_check_conn(conn_id,action);
 %
@@ -13,7 +13,7 @@ end
 
 status = mysql(conn_id,'status'); % returns 0 if active
 
-if status==0 & ~strcmp(action,'close')
+if status==0 && ~strcmp(action,'close')
   return
 end
 

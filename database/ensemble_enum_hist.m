@@ -41,12 +41,9 @@ function an_st = ensemble_enum_hist(data_st,params)
 % 05/11/10 PJ - Fixed bug where enum_mask was being checked instead of
 %               qinfo_enum_mask, leading to erroneous question skipping.
 % 02/15/11 PJ - Fixed conn_id checking, handling of only 1 subject
-<<<<<<< .mine
 % 23Aug2013 PJ - fixed minor issues associated with labeling of plots and
 %                figure printing
-=======
 % 01Nov2013 PJ - added optional suppression of by-item results
->>>>>>> .r708
 
 an_st = {};
 na = 0;
