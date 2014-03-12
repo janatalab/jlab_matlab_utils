@@ -155,6 +155,8 @@ function outData = ensemble_export_respnstim(inData,params)
 %                but html_field_type is ''.
 % PJ 26Feb2014 - fixed strange handling of trialMask (see additional
 %                comment below with this date stamp)
+% PJ 11Mar2014 - tried further to improve use of either trialMask or
+%                trialMaskMtx
 
 % % initialize output data struct
 outData = ensemble_init_data_struct;
@@ -628,7 +630,10 @@ if isfield(params.export,'by_stimulus')
     nstim = length(stimIDs);
     if any(~isnan(rsData.data{rsCols.trial_id}))
       [trialMaskMtx, trialIDs] = make_mask_mtx(rsData.data{rsCols.trial_id});
+      usingTrialMaskMtx = 1;
+      trialMask = [];
     else
+      usingTrialMaskMtx = 0;
       trialMask = ones(size(rsData.data{rsCols.trial_id}));
     end
     
@@ -652,8 +657,8 @@ if isfield(params.export,'by_stimulus')
             nTrials = ~isnan(uTrials);
             nUt = sum(nTrials);
           else
-            % uTrials = NaN;
-            % nUt = 1; % see 26Feb2014 note below
+            uTrials = NaN;
+            nUt = 1;
           end
 
           for in=1:nUt
@@ -664,10 +669,12 @@ if isfield(params.export,'by_stimulus')
             % because it cannot construct the trial mask. Currently it
             % throws an error because trialMask is undefined.
             %if nUt > 1 % original code
-            if nUt
+            % 11Mar2014 PJ - added usingTrialMaskMtx check to disambiguate
+            %    the two possible conditions
+            if nUt && usingTrialMaskMtx
               trialMask = trialMaskMtx(:,trialIDs == uTrials(in));
-            else
-              error('Could not construct trialMask');
+            elseif isempty(trialMask)
+              error('Failed to construct trialMask');
             end
            
             rsMask = subMask(:,isub) & stimMask(:,istim) & trialMask;
