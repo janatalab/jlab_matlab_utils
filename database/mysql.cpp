@@ -3,6 +3,7 @@
 #include <string.h>
 #include <ctype.h>  //  for toupper() macro in streq()
 
+
 #ifdef WIN32
 #include <windows.h>
 #endif
@@ -39,6 +40,8 @@ const bool debug=false;  //  turn on information messages
  *   Windows:  mex -I"C:\mysql\include" -DWIN32 mysql.cpp 
  *                              "C:\mysql\lib\opt\libmySQL.lib"
  *   Linux:    mex -I/usr/include/mysql -L/usr/lib/mysql
+ *                             -lmysqlclient mysql.cpp
+ *   Mac:      mex -I/usr/local/mysql/include -L/usr/local/mysql/lib 
  *                             -lmysqlclient mysql.cpp
  *  where "C:\mysql", "/usr/lib/mysql", "/usr/include/mysql", etc
  *  are where you installed the MySQL client libraries.
@@ -459,7 +462,7 @@ public:
 	conninfo()  { conn=NULL;  isopen=false; }
 };
 
-const int MAXCONN = 10;
+const int MAXCONN = 15;
 
 //  List of connection information
 static conninfo c[MAXCONN];
@@ -472,6 +475,11 @@ static conninfo c[MAXCONN];
 //    which of course requires us to find it first. The deletion
 //    requires some copying in the case  j < ncid-1.
 static int ncid=0, prevcid[MAXCONN];
+
+// Try to toggle between mysql stores across successive calls in hopes of avoiding Mac OS issues
+static MYSQL_RES *res_stack[2];
+static int curr_res = 0;
+
 static void stackprint()
 {
 	mexPrintf("| Stack is [");
@@ -540,6 +548,8 @@ void mexFunction(int nlhs, mxArray *plhs[],
 			{ showusage();
 			  mexErrMsgTxt("All args must be strings, except dbHandle"); }}}
 
+    if (debug) mexEvalString("drawnow;");
+    
 	/*********************************************************************/
 	//  Identify what action he wants to do
 
@@ -579,7 +589,7 @@ void mexFunction(int nlhs, mxArray *plhs[],
 	if (jarg==0)
 		{
 		if (q==OPEN)
-			{ for ( cid=0 ; cid<MAXCONN & c[cid].isopen ; cid++ );
+			{ for ( cid=0 ; (cid<MAXCONN) & c[cid].isopen ; cid++ );
 			  if (cid>=MAXCONN) mexErrMsgTxt("Can\'t find free handle"); }
 		else if (ncid>0)
 			cid=prevcid[ncid-1];
@@ -591,6 +601,7 @@ void mexFunction(int nlhs, mxArray *plhs[],
 	//  These values must not be used if  cid<0
 	mp dummyconn;     mp &conn = (cid>=0) ? c[cid].conn : dummyconn;
 	bool dummyisopen; bool &isopen = (cid>=0) ? c[cid].isopen : dummyisopen;
+    my_bool secauth = 0;
 
 	if (q==OPEN)
 		{
@@ -621,6 +632,13 @@ void mexFunction(int nlhs, mxArray *plhs[],
 		//  If this fails, then conn is still set, but isopen stays false
 		if (!(conn=mysql_init(conn)))
 			mexErrMsgTxt("Couldn\'t initialize MySQL connection object");
+        
+        if (mysql_options(conn,MYSQL_READ_DEFAULT_GROUP,"client"))
+            mexErrMsgTxt("Could not set mysql option: MYSQL_READ_DEFAULT_GROUP\n");
+        
+        if (mysql_options(conn,MYSQL_SECURE_AUTH, &secauth))
+            mexErrMsgTxt("Could not set mysql option: MYSQL_SECURE_AUTH\n");
+            
 		if (!mysql_real_connect( conn, host, user, pass, NULL,port,NULL,0 ))
 			mexErrMsgTxt(mysql_error(conn));
 		const char *c=mysql_stat(conn);
@@ -748,6 +766,7 @@ void mexFunction(int nlhs, mxArray *plhs[],
 
 	else if (q==CMD)
 		{
+            
 		//  Check that we have a valid connection
 		if ( cid<0 || !isopen ) mexErrMsgTxt("No connection open");
 		if (mysql_ping(conn))
@@ -757,15 +776,43 @@ void mexFunction(int nlhs, mxArray *plhs[],
 			  mexErrMsgTxt("Query failed"); }
 
 		//  Execute the query (data stays on server)
+            if (debug) {
+                mexPrintf("starting mysql_query()\n");
+                mexEvalString("drawnow;");
+            }
+            
 		if (mysql_query(conn,query))  mexErrMsgTxt(mysql_error(conn));
+            
+            if (debug) {
+                mexPrintf("finished mysql_query()\n");
+                mexEvalString("drawnow;");
+            }
 
 		//  Download the data from server into our memory
 		//     We need to be careful to deallocate res before returning.
 		//  Matlab's allocation routines return instantly if there is not
 		//  enough free space, without giving us time to dealloc res.
 		//  This is a potential memory leak but I don't see how to fix it.
-		MYSQL_RES *res = mysql_store_result(conn);
-
+        if (debug) {
+            mexPrintf("initiating mysql_store_result(); curr_res=%d\n", curr_res);
+            mexEvalString("drawnow;");
+        }
+            
+        res_stack[curr_res] = mysql_store_result(conn);
+            
+        MYSQL_RES *res = res_stack[curr_res];
+            
+            if (curr_res == 0){
+                curr_res = 1;
+            } else {
+                curr_res = 0;
+            }
+            
+        if (debug) {
+            mexPrintf("finished mysql_store_result()\n");
+            mexEvalString("drawnow;");
+        }
+            
 		//  As recommended in Paul DuBois' MySQL book (New Riders, 1999):
 		//  A NULL result set after the query can indicate either
 		//    (1) the query was an INSERT, DELETE, REPLACE, or UPDATE, that
@@ -824,7 +871,15 @@ void mexFunction(int nlhs, mxArray *plhs[],
 				  pr[j] = NULL; }}}
 
 		//  Load the data into the cells
+            if (debug) {
+                mexPrintf("initiating mysql_data_seek(res,0)\n");
+                mexEvalString("drawnow;");
+            }
 		mysql_data_seek(res,0);
+            if (debug) {
+                mexPrintf("finished mysql_data_seek(res,0)\n");
+                mexEvalString("drawnow;");
+            }
 		{ for ( int i=0 ; i<nrow ; i++ )
 			{ MYSQL_ROW row = mysql_fetch_row(res);
 			  if (!row)
@@ -836,7 +891,17 @@ void mexFunction(int nlhs, mxArray *plhs[],
 				  else
 					{ mxArray *c = mxCreateString(row[j]);
 					  mxSetCell(plhs[j],i,c); }}}}
-		mysql_free_result(res);
+            if (debug) {
+                mexPrintf("initiating mysql_free_result()\n");
+                mexEvalString("drawnow;");
+            }
+            
+            mysql_free_result(res);
+            
+            if (debug) {
+                mexPrintf("finished mysql_free_result()\n");
+                mexEvalString("drawnow;");
+            }
 		}
 	else
 		{ mexPrintf("Unknown query type q = %d\n",q);
