@@ -1,4 +1,4 @@
-function p = janatalabpublic_pathdef
+function p = janatapublic_pathdef
 %PATHDEF Search path defaults.
 %   PATHDEF returns a string that can be used as input to MATLABPATH
 %   in order to set the path.
@@ -9,9 +9,10 @@ function p = janatalabpublic_pathdef
 
 % PATH DEFINED HERE -- Don't change this line.
 
-if strmatch(computer,'PCWIN')
+switch computer
+  case {'PCWIN','PCWIN64'}
     path_sep = ';';
-else
+  otherwise
     path_sep = ':';
 end
 

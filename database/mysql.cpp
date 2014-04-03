@@ -8,6 +8,10 @@
 #include <windows.h>
 #endif
 
+#ifdef WIN64
+#include <windows.h>
+#endif
+
 #include <mysql.h>  //  Definitions for MySQL client API
 #include <mex.h>    //  Definitions for Matlab API
 
