@@ -89,9 +89,9 @@ if date_entered >= crit_datenum
   % Get the experiment names
   expids = sprintf('%d,', sinfo.exp_ids(:));
   expids(end) = [];
-  mysql_str = sprintf(['SELECT experiment_title FROM experiment WHERE' ...
+  mysql_str = sprintf(['SELECT experiment_title, experiment_id FROM experiment WHERE' ...
 	' experiment_id IN (%s);'], expids);
-  [sinfo.exp_names] = mysql(params.conn_id, mysql_str);
+  [sinfo.exp_names, sinfo.exp_name_ids] = mysql(params.conn_id, mysql_str);
   
 else
 
