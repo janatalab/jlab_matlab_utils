@@ -12,6 +12,9 @@ function result_st = ensemble_concat_datastruct(data_st,params)
 % in this way in a single call to ensemble_concat_datastruct.  It is
 % recommended that this variable is set to true, but it is currently set to
 % false by default for purposes of backward compatibility.
+%
+% See also ensemble_combine_datastructs() for more possibilities of
+% combining datastructs with heterogeneous sets of variables.
 
 % 05/08/07 Petr Janata
 % 03/12/08 Petr Janata
