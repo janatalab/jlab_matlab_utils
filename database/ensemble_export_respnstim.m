@@ -124,6 +124,8 @@ function outData = ensemble_export_respnstim(inData,params)
 % function to extract that data and add it as another variable in the
 % response_data struct. This might be a good way to deal with misc_info dat
 % moving forward.
+%
+% SEE ALSO: ensemble_print_datast()
 
 
 % FB 12/17/07 - started scripting
