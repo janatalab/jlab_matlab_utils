@@ -36,6 +36,7 @@ function [data,vars] = mysql_extract_data(varargin)
 %                         identified by 'encrypted_fields' cell array. The key
 %                         is passed in as 'enc_key'
 % 06/15/10 PJ Sanitized mysql_make_conn
+% 29May2014 PJ Made failing due to missing search criteria more graceful
 
 % Initialize some variables
 fld.crit_flds = {};
@@ -127,6 +128,11 @@ for ivar = 1:nfld_vars
   end % if ~isempty(bad_flds)
 end % for ivar
 
+% Initialize the output variables and data array
+vars = fld.extract_flds;
+data = cell(1,length(vars));
+cols = set_var_col_const(vars);
+
 % Prepare elements of the query
 extract_vars_str = cell2str(fld.extract_flds,',');
 if(exist('encrypted_fields','var'))
@@ -159,12 +165,17 @@ else
       crit_str = [crit_str ' AND'];
     end
   
-    if isstr(crit_vals{icrit}{1})
-      crit_val_str = sprintf('"%s",', crit_vals{icrit}{:});
+    if ~isempty(crit_vals{icrit}) && ~isempty(crit_vals{icrit}{1})
+      if isstr(crit_vals{icrit}{1})
+        crit_val_str = sprintf('"%s",', crit_vals{icrit}{:});
+      else
+        crit_val_str = sprintf('%d,', crit_vals{icrit}{:});
+      end
+      crit_val_str(end) = [];
     else
-      crit_val_str = sprintf('%d,', crit_vals{icrit}{:});
+      fprintf('%s: No criterion specified for %s. Search will fail!\n', mfilename, fld.crit_flds{icrit});
+      return
     end
-    crit_val_str(end) = [];
     
     curr_crit_str = sprintf(' %s IN (%s)', fld.crit_flds{icrit},crit_val_str);
     
@@ -184,8 +195,6 @@ mysql_str = sprintf(['SELECT %s FROM %s ' ...
 
 % Extract the data
 [data{1:length(fld.extract_flds)}] = mysql(conn_id, mysql_str);
-vars = fld.extract_flds;
-cols = set_var_col_const(vars);
 
 % Deal with any necessary conversions from numeric fields that were
 % encrypted

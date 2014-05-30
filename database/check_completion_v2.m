@@ -71,7 +71,7 @@ end
 try
   params.filt;
 catch
-  params.filt = {};
+  params.filt = {};handling
 end
 
 if(mysql(conn_id,'status') ~= 0)
