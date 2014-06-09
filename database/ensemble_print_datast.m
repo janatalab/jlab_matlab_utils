@@ -133,6 +133,14 @@ if isfield(defs, 'filt') && ~isempty(defs.filt)
   indata = ensemble_filter(indata, defs.filt);
 end
 
+%% Check to see if there are multiple columns within any given variable
+for ivar = 1:nc
+  dims = size(indata.data{ivar});
+  if dims(2) > 1
+    warning('Variable <%s> contains %d columns. Only using values in first column', indata.vars{ivar}, dims(2));
+  end
+end
+
 %% non-nested data structure, so print it out
 % print header lines
 if ~isempty(name) && isfield(defs, 'print_header') && defs.print_header
@@ -158,7 +166,9 @@ for k=1:length(indata.data{1})
         data = data{1};
       end
     end
-    if isnumeric(data) || islogical(data), data = num2str(data); end
+    if isnumeric(data) || islogical(data)
+      data = num2str(data); 
+    end
     if l > 1, inputstr = [inputstr delim]; end
     inputstr = [inputstr data];
   end
