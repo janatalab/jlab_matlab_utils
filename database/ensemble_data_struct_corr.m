@@ -51,8 +51,18 @@ out_st.data{ocols.corrpval} = corrpval;
 out_st.data{ocols.corrvars} = extracted_vars;
 
 % Make a plot if we want it
-if isfield(params,'report') && isfield(params.report,'figs') && isfield(params.report.figs, 'plot')
-  doPlot = params.report.figs.plot;
+if isfield(params,'report') && isfield(params.report,'figs')
+  if isfield(params.report.figs, 'plot')
+    doPlot = params.report.figs.plot;
+  else
+    doPlot = true;
+  end
+  
+  if isfield(params.report.figs, 'write2file')
+    write2file = params.report.figs.write2file;
+  else
+    write2file = false;
+  end
 end
 
 if doPlot
@@ -74,5 +84,10 @@ if doPlot
   title(sprintf('N = %d', N),'fontsize',18)
 end
 
+if write2file
+  figfname = fullfile(params.paths.figures, [params.report.figs.fstub '.eps']);
+  fprintf('Printing figure: %s\n', figfname);
+  print(figfname, '-depsc')
+end
 
 return
