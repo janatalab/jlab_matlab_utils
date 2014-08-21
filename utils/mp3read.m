@@ -170,7 +170,7 @@ else
     end
     tmpfile = fullfile(tmpdir,tmpstub);
   else
-    tmpfile = ['/tmp/tmp',tmpstub,'.wav'];
+    tmpfile = fullfile('/tmp',tmpstub);
   end
 
   skipx = 0;
