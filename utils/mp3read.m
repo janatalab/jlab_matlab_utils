@@ -18,6 +18,8 @@ function [Y,FS,NBITS,OPTS] = mp3read(FILE,N,MONO,DOWNSAMP)
 %            passing N = [];
 % 2011-07-01 PJ - mpg123 would sometimes return insufficient data when only
 %            a partial read was requested, so a bit extra is being requested now
+% 2014-08-20 PJ - added dynamic mpg123, mp3info location based on
+%                 architecture
 % $Header: /homes/dpwe/matlab/columbiafns/RCS/mp3read.m,v 1.7 2005/04/11 20:55:16 dpwe Exp $
 
 if nargin < 2
@@ -40,7 +42,7 @@ if nargin < 4
 else
   downsamp = DOWNSAMP;
 end
-if downsamp ~= 1 & downsamp ~= 2 & downsamp ~= 4
+if downsamp ~= 1 && downsamp ~= 2 && downsamp ~= 4
   error('DOWNSAMP can only be 1, 2, or 4');
 end
 
@@ -51,8 +53,20 @@ end
 %forcemono = 1;
 
 %%%%%% Location of the binaries
-mpg123 = '/usr/local/bin/mpg123';
-mp3info = '/usr/local/bin/mp3info';
+arch = computer('arch');
+if strcmp(arch,'win32')
+   fpath = fileparts(which(mfilename));
+   mp3_toolbox_path = fullfile(fpath,'mp3_toolbox');
+   if exist(mp3_toolbox_path)
+     mpg123 = fullfile(mp3_toolbox_path,'mpg123');
+     mp3info = fullfile(mp3_toolbox_path,'mp3info');
+   else
+     error('Cannot locate mpg123 and mp3info!')
+   end
+else
+  mpg123 = '/usr/local/bin/mpg123';
+  mp3info = '/usr/local/bin/mp3info';
+end
 
 %%%%%% Constants
 NBITS=16;
@@ -62,7 +76,7 @@ cmd = [mp3info, ' -r m -p "%Q %u %r %v * %C %e %E %L %O %o %p" "', FILE,'"'];
 % Q = samprate, u = #frames, r = bitrate, v = mpeg version (1/2/2.5)
 % C = Copyright, e = emph, E = CRC, L = layer, O = orig, o = mono, p = pad
 w = mysystem(cmd);
-if isempty(w) & exist(FILE,'file')
+if isempty(w) && exist(FILE,'file')
     trylim = 20;
     tries = 0;
     pauseval = 2;
@@ -79,7 +93,7 @@ if isempty(w) & exist(FILE,'file')
 end % if isempty(w) & exist(FILE,'file
     
 % Break into numerical and ascii parts by finding the delimiter we put in
-starpos = findstr(w,'*');
+starpos = strfind(w,'*');
 nums = str2num(w(1:(starpos - 2)));
 strs = tokenize(w((starpos+2):end));
 
@@ -93,7 +107,7 @@ mpgv = nums(4);
 % http://board.mp3-tech.org/view.php3?bn=agora_mp3techorg&key=1019510889
 if layer == 1
   smpspfrm = 384;
-elseif SR < 32000 & layer ==3
+elseif SR < 32000 && layer ==3
   smpspfrm = 576;
   if mpgv == 1
     error('SR < 32000 but mpeg version = 1');
@@ -120,7 +134,7 @@ OPTS.fmt.mpgChanmode = strs{6};
 OPTS.fmt.mpgPad = strs{7};
 OPTS.fmt.mpgSampsPerFrame = smpspfrm;
 
-if SR == 16000 & downsamp == 4
+if SR == 16000 && downsamp == 4
   error('mpg123 will not downsample 16 kHz files by 4 (only 2)');
 end
 
@@ -148,7 +162,16 @@ if strcmp(N,'size') == 1
 else
 
   % Temporary file to use
-  tmpfile = ['/tmp/tmp',num2str(round(1000*rand(1))),'.wav'];
+  tmpstub = sprintf('tmp%s.wav',num2str(round(1000*rand(1)))); 
+  if strcmp(computer,'PCWIN')
+    tmpdir = fullfile(FILE(1:regexp(FILE,filesep)-1),'TMP');
+    if ~exist(tmpdir,'dir')
+      mkdir(tmpdir)
+    end
+    tmpfile = fullfile(tmpdir,tmpstub);
+  else
+    tmpfile = ['/tmp/tmp',tmpstub,'.wav'];
+  end
 
   skipx = 0;
   skipblks = 0;
@@ -179,7 +202,11 @@ else
   [Y,SR] = wavread(tmpfile);
 
   % Delete tmp file
-  mysystem(['rm ', tmpfile]);
+  if strcmp(computer,'PCWIN')
+    delete(tmpfile);
+  else
+    mysystem(['rm ', tmpfile]);
+  end
   
   % Select the desired part
   if endfrm > sttfrm
