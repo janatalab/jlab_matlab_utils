@@ -15,6 +15,8 @@ function an_st = ensemble_data_by_question(data_st,params)
 % 02/04/07 Petr Janata
 % 10/07/08 PJ - generalized to handle other databases
 % 22/07/10 PJ - fixed conn_id handling
+% 22/08/14 PJ - fixed search through ensemble,mysql structs for database
+%               info
 
 an_st = ensemble_init_data_struct;
 an_st.type = 'data_by_compqid'; 
@@ -32,11 +34,17 @@ end
 % Extract info regarding the database and connection ID we should be talking to
 param_fld_names = {'ensemble','mysql'};
 idxs = find(isfield(params,param_fld_names));
+nidx = length(idxs);
 if isempty(idxs)
   error('%s: Do not have sufficient database connection information', mfilename)
 else
-  database = params.(param_fld_names{idxs(1)}).database;
-  conn_id = params.(param_fld_names{idxs(1)}).conn_id;
+  for iidx = 1:nidx
+    if isfield(params.(param_fld_names{idxs(iidx)}), 'database')
+      database = params.(param_fld_names{idxs(iidx)}).database;
+      conn_id = params.(param_fld_names{idxs(iidx)}).conn_id;
+      continue
+    end
+  end
 end
 
 % Apply any specified filtering to the input data
@@ -109,3 +117,4 @@ for iqid = 1:nqid
   an_st.data{iqid} = curr_st;
 end % for iqid
 
+end

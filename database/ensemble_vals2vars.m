@@ -5,16 +5,21 @@ function [out_st, newVars] = ensemble_vals2vars(data_st, params)
 %
 % Additional parameters that govern how this function work are:
 % params.by_var - Unique values of this variable are looped over when
-% creating the rearranged matrix. This variable should have exactly one
-% instance of each unique combination of the values of the source
-% variables, i.e. new variable. If this field is not specified, the first
-% variable in the data structure variables is used.
+%                 creating the rearranged matrix. This variable should have
+%                 exactly one instance of each unique combination of the
+%                 values of the source variables, i.e. new variable. If
+%                 this field is not specified, the first variable in the
+%                 data structure variables is used. 
 %
 % params.value_var - name of the variable that contains the actual values
-% that will be placed in the new variables. If this is not specified,
-% 'value' is used.
+%                    that will be placed in the new variables. If this is
+%                    not specified, 'value' is used. 
+% params.carryover_vars - list of variable names from original data
+%                  structure to carry over to the new structure.
 
 % 09Nov2011 Petr Janata
+% 22Aug2014 PJ - fixed handling of non-cell by_var; added carryover_vars
+%                option
 
 if ~isfield(params,'src_vars')
 	error('%s: Variables whose values to transform not specified in params.src_vars', mfilename)
@@ -99,7 +104,11 @@ newVars = strrep(newVars,'.','p');
 %
 
 % Figure out which variables we are carrying over
-carryoverVars = setdiff(srcVars, xfmVars);
+if isfield(params,'carryover_vars')
+  carryoverVars = params.carryover_vars;
+else
+  carryoverVars = setdiff(srcVars, xfmVars);
+end
 nCarryover = length(carryoverVars);
 
 % Set the variable list
@@ -117,8 +126,12 @@ for ival = 1:nvals
 		fprintf('%d', ival);
 	else
 		fprintf('.');
-	end
-	currVal = uniqueVals{ival};
+  end
+  if iscell(uniqueVals)
+    currVal = uniqueVals{ival};
+  else
+    currVal = uniqueVals(ival);
+  end
 	valMask = ismember(data_st.data{srcCols.(byVar)}, currVal);
 
 	% Copy carryover variables
@@ -148,9 +161,13 @@ for ival = 1:nvals
 		end
 		if iscell(uniqueOldVal)
 			uniqueOldVal = uniqueOldVal{1};
-		end
-		out_st.data{outcols.(currVar)}{ival,1} = uniqueOldVal;
-	end
+    end
+    if isnumeric(uniqueOldVal)
+      out_st.data{outcols.(currVar)}(ival,1) = uniqueOldVal;
+    else
+      out_st.data{outcols.(currVar)}{ival,1} = uniqueOldVal;
+    end
+  end % end of carryover variables
 	
 	% Now, loop over all the new variables and pull the relevant data
 	nNewVars = length(newVars);
@@ -166,13 +183,25 @@ for ival = 1:nvals
 		
 		% Assign the value
 		tmpval = data_st.data{srcCols.(valVar)}(compositeMask);
+    if isempty(tmpval)
+      if isnumeric(out_st.data{outcols.(newVars{inew})}(1))
+        tmpval = NaN;
+      else
+        tmpval = '';
+      end
+    end
+    
 		if iscell(tmpval)
 			tmpval = tmpval{1};
-		end
-		out_st.data{outcols.(newVars{inew})}{ival,1} = tmpval;
+    end
+    if isnumeric(tmpval)
+      out_st.data{outcols.(newVars{inew})}(ival,1) = tmpval;
+    else
+      out_st.data{outcols.(newVars{inew})}{ival,1} = tmpval;
+    end
 		
 	end
-end % for inew
+end % for ival
 
 fprintf('\n')
 
