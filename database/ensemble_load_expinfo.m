@@ -40,8 +40,11 @@ function result = ensemble_load_expinfo(indata,params)
 % 2010.06.18 FB - now accepts inData={'task','return_outdir'}, for
 %                   ensemble_jobman_parallel
 % 2011.11.23 PJ - added filtering of subject info
+% 2014.08.31 PJ - added experiment_id to list of variables extracted from
+%                 response table to accommodate settings with multiple
+%                 experiments per response table
 
-if( isstr( indata ) && strcmp( indata, 'getDefaultParams' ) )
+if( ischar( indata ) && strcmp( indata, 'getDefaultParams' ) )
 	result.ensemble.experiment_title = 'use local settings';
 	result.mysql.host = 'use local settings';
 	result.mysql.database = 'use local settings';
@@ -50,9 +53,9 @@ if( isstr( indata ) && strcmp( indata, 'getDefaultParams' ) )
 end
 
 if (iscell(indata) && ~isempty(indata) && isfield(indata{1},'task') && ...
-        ~isempty(strmatch('return_outdir',indata{1}.task))) || ...
+        strcmp('return_outdir',indata{1}.task)) || ...
         (isstruct(indata) && isfield(indata,'task') && ...
-        ~isempty(strmatch('return_outdir',indata.task)))
+        strcmp('return_outdir',indata.task))
     result = '';
     return
 end
@@ -85,7 +88,7 @@ end
 % Pull desired parts of the response table into a response structure
 fprintf('Extracting the response table: %s\n', exp_meta.response_table);
 if ~isfield(params.ensemble, 'extract_vars') || isempty(params.ensemble.extract_vars)
-	extract_vars = {'session_id','subject_id', ...
+	extract_vars = {'experiment_id','session_id','subject_id', ...
 		'response_order','response_id', 'date_time', ...
 		'form_id','form_order','question_id','subquestion', ...
 		'stimulus_id','trial_id','response_enum','response_text','misc_info','decline'};
@@ -166,7 +169,12 @@ end
 
 % Check to see if we are filtering using 'terminal_form'
 respFilt = [];
-try term_form = params.ensemble.terminal_form; catch term_form = []; end
+if isfield(params.ensemble,'terminal_form')
+  term_form = params.ensemble.terminal_form;
+else
+  term_form = [];
+end
+
 if ~isempty(term_form) && remove_incomplete
 	form_mask = respinfo.data{respcols.form_id} == term_form;
 	finished_sessids = unique(respinfo.data{respcols.session_id}(form_mask));

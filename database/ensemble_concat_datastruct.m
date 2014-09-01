@@ -24,6 +24,9 @@ function result_st = ensemble_concat_datastruct(data_st,params)
 % returns an empty string in result_st - makes compatible with
 % ensemble_jobman_parallel.m, which queries functions for default directories
 % within which to save job_struct data
+% 31Aug2014 PJ - Added checking/conversion of strings to cells to handle
+%                cases where there is only 1 row per data structure and
+%                strings are not enclosed in cells
 
 % return '' if data_st{1} == struct('name','return_outdir')
 if (iscell(data_st) && ~isempty(data_st) && isfield(data_st{1},'task') && ...
@@ -112,7 +115,8 @@ else
     vars = data_st{st_idxs(1)}.vars;
     nvars = length(vars);
     curr_st.vars = vars;
-    curr_st.data = data_st{st_idxs(1)}.data;
+    
+    curr_st.data = sanitize_char_data(data_st{st_idxs(1)}.data);
     
     % Match the variables and copy the data for the remaining structures
     for istruct = 2:length(st_idxs)
@@ -124,7 +128,7 @@ else
           return
         else
           curr_st.data{ivar} = [curr_st.data{ivar}; ...
-            data_st{st_idxs(istruct)}.data{ivar}];
+            sanitize_char_data(data_st{st_idxs(istruct)}.data{ivar})];
         end
       end
     end % for istruct=
@@ -132,3 +136,20 @@ else
     result_st.data{itype} = curr_st;
   end % for itype
 end % if type_as_var
+end % ensemble_concat_datastruct
+
+function data = sanitize_char_data(data)
+  % Make sure that strings are in cells
+  if iscell(data)
+    nvars = length(data);
+  else
+    nvars = 1;
+  end
+  for ivar = 1:nvars
+    if iscell(data) && ischar(data(ivar))
+      data{ivar} = {data(ivar)};
+    elseif ischar(data)
+      data = {data};
+    end
+  end
+end
