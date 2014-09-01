@@ -14,10 +14,13 @@ function an_st = ensemble_qid_x_qid_table(data_st,params)
 % 03/03/11 PJ - added support for checkbox enums; implemented handling
 % (though not quite ideal) of multiple instances of question/stimulus
 % combinations
+% 01Sep2014 PJ - improved conn_id support
 
-try
+if isfield(params,'mysql')
+  conn_id = params.mysql.conn_id;
+elseif isfield(params,'ensemble')
   conn_id = params.ensemble.conn_id;
-catch
+else
   conn_id = 1;
   tmp_conn_id = 1;
 end
@@ -232,7 +235,11 @@ function print_tables(an_st,params)
   fprintf(fid,'\n\nTotal number of instances\n');
   fprintf(fid,'\n%s\n', sprintf('\t%s', colcats{:}));
   for irow = 1:nrows
-    data = sum(squeeze(an_st.data{an_cols.count}(irow,:,:)),2);
+    if nsub > 1
+      data = sum(squeeze(an_st.data{an_cols.count}(irow,:,:)),2);
+    else
+      data = an_st.data{an_cols.count}(irow,:);
+    end
     fprintf(fid,'%s%s\n', rowcats{irow}, sprintf('\t%d',data));
   end
   
@@ -240,8 +247,14 @@ function print_tables(an_st,params)
   fprintf(fid,'\n%s\n', sprintf('\t%s', colcats{:}));
   
   for irow = 1:nrows
-    data = nanmean(squeeze(an_st.data{an_cols.prop}(irow,:,:)),2);
-    err = nanstd(squeeze(an_st.data{an_cols.prop}(irow,:,:)),[],2)/sqrt(nsub);
+    if nsub > 1
+      data = nanmean(squeeze(an_st.data{an_cols.prop}(irow,:,:)),2);
+      err = nanstd(squeeze(an_st.data{an_cols.prop}(irow,:,:)),[],2)/sqrt(nsub);
+    else
+      data = an_st.data{an_cols.prop}(irow,:);
+      err = 0;
+    end
+    
     fprintf(fid,'%s%s\n', rowcats{irow}, sprintf('\t%2.1f (%2.1f)', [data err]'*100));
   end  
   
