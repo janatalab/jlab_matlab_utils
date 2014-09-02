@@ -85,6 +85,9 @@ if ~type_as_var
         result_st = ensemble_init_data_struct;
         return
       else
+        if isempty(data_st{istruct}.data{ivar})
+          error('Trying to concatenate empty data')
+        end
         result_st.data{ivar} = [result_st.data{ivar}; data_st{istruct}.data{ivar}];
       end
     end % for ivar
