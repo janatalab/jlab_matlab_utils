@@ -44,6 +44,8 @@ function an_st = ensemble_enum_hist(data_st,params)
 % 23Aug2013 PJ - fixed minor issues associated with labeling of plots and
 %                figure printing
 % 01Nov2013 PJ - added optional suppression of by-item results
+% 02Sep2014 PJ - added ability to restrict plotting to particular analysis
+%                types, e.g. prop, count
 
 an_st = {};
 na = 0;
@@ -320,19 +322,27 @@ for iqid = 1:nqid
   
   an_st{na} = init_analysis_struct;
   an_st{na}.type = sprintf('enum_category_across_%s', item_type);
+    
   an_vars = {'prop','count'};
   an_st{na}.vars = an_vars;
   an_cols = set_var_col_const(an_vars);
   nr = 0;
   
+  if isfield(params.report, 'across_items') && isfield(params.report.across_items, 'an_types')
+    report_vars = params.report.across_items.an_types;
+  else
+    report_vars = an_vars;
+  end
+
+  
   for ivar = 1:length(an_vars)
     an_type = an_vars{ivar};
     switch an_type
       case 'prop'
-        data_col = by_item_an_cols.prop;
+        data_col = by_item_an_cols.(an_type);
         plot_title = 'Average proportion of responses in each category';
       case 'count'
-        data_col = by_item_an_cols.count;
+        data_col = by_item_an_cols.(an_type);
         plot_title = 'Overall counts within in each category';
         
     end % switch an_type
@@ -380,7 +390,7 @@ for iqid = 1:nqid
     nr=nr+1;
     an_st{na}.report{nr}.type = 'distrib_by_cat';
     an_st{na}.report{nr}.figfun = @plot_hist;
-    if do_plot
+    if do_plot && any(strcmp(an_type, report_vars))
       switch an_type
         case 'prop'
           plot_title = 'Average proportion of responses in each category';

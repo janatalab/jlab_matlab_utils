@@ -161,6 +161,8 @@ end
 
 
 outData = ensemble_init_data_struct;
+outData.name = 'summary_subject_stats';
+outData.type = 'summary_stats';
 outData.vars = {'nsubs','mean_age','std_age','age_range','num_female','num_male','num_gender_no_report' ...
 	   'sessions_per_sub' 'mean_session_dur_minutes'};
 outDataCols = set_var_col_const(outData.vars);

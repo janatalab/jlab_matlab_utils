@@ -35,6 +35,8 @@ function analysis_list = ensemble_jobman(analysis_list,params)
 % 04/11/11 - PJ added alternative loading of results struct from file
 % 10Nov2012 - PJ added and fixed insertion of analysis name into the
 %             results structure
+% 02Sep2014 - Fixed handling of run_analyses vector passed in as column
+%             rather than row vector
 
 
 %if conn_id is set in params, then open a mysql connection
@@ -69,7 +71,8 @@ else
   idxs = 1:length(analysis_list);
 end
 
-for ia = idxs
+for aidx = 1:length(idxs)
+  ia = idxs(aidx);
   analysis_name = analysis_list{ia}.name;
   
   fprintf('\nPerforming analysis %d/%d: %s\n', ia, length(analysis_list), analysis_name);

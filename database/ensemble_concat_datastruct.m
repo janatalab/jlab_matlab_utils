@@ -38,11 +38,16 @@ if (iscell(data_st) && ~isempty(data_st) && isfield(data_st{1},'task') && ...
 end
 
 result_st = ensemble_init_data_struct;
-try result_st.name=params.outDataName;
-catch result_st.name='concat_datastruct';
+if isfield(params,'outDataName')
+  result_st.name=params.outDataName;
+else
+  result_st.name='concat_datastruct';
 end
-try result_st.type=params.outDataType;
-catch results_st.type='concat_datastruct';
+
+if isfield(params,'outDataType')
+  result_st.type=params.outDataType;
+else
+  result_st.type='concat_datastruct';
 end
 
 nstruct = length(data_st);
@@ -61,7 +66,11 @@ end
 % See if we want to group the input data structures by their type. If we do,
 % then the type becomes the type of the returning data structure (result_st).
 
-try type_as_var = params.type_as_var; catch type_as_var = false; end
+if isfield(params,'type_as_var')
+  type_as_var = params.type_as_var; 
+else
+  type_as_var = false; 
+end
 
 % Original versions of this script did not operate based on type
 if ~type_as_var
