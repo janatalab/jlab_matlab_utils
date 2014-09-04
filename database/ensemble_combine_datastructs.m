@@ -4,19 +4,26 @@ function out_st = ensemble_combine_datastructs(dst,params)
 %     exact match of rows across all variables. If the match is not exact,
 %     ensemble_concat_datastruct is called to concatenate the
 %     data structures.
+%
 % (2) If the two sets of variables differ, a union of the variables will be
 %     created if and only if all of the rows of the originally intersecting
 %     variable sets match.
 %
-% (3) If params.heuristic = 'merge', and there is a single intersecting
-%     variable, variables from data structure 2 are added to data structure
-%     1, populating rows in data structure 1 whose values on the
-%     intersecting variable match.
+% (3) If params.heuristic = 'merge', variables from data structure 2 are
+%     added to data structure 1, populating rows in data structure 1 whose
+%     values on the set of intersecting variables match. For each
+%     structure, uniqueness of rows (created from intersecting variables)
+%     is required and tested.
+%
+% In order to accomplish the multiple variable merge, it was necessary to
+% utilize the categorial data types from the Statistics Toolbox.
 %
 % See also: ensemble_concat_datastruct
 
 % 26Jan2013 Petr Janata
 % 22Aug2014 PJ - added merge heuristic
+% 03Sep2014 PJ - added support for merge based on multiple intersecting
+%                variables
 
 if ~iscell(dst) || length(dst) ~= 2
   error('%s: Two data structures are required', mfilename)
@@ -79,21 +86,58 @@ end
 
 % See if the out_st is still empty. If so, check whether a different
 % heurisitic has been specified.
+CAN_HANDLE_MULTIPLE_VARS = 1;
 if isfield(params,'heuristic')
   switch params.heuristic
     case 'merge'
       % Get the intersecting variable
       intersectVars = intersect(dst{1}.vars, dst{2}.vars);
+      
       numIntersect = length(intersectVars);
-      if numIntersect > 1
+      if numIntersect > 1 && ~CAN_HANDLE_MULTIPLE_VARS
         error('Too many intersecting variables')
       end
-      intersectVars = intersectVars{1};
+      
+      % Create tables for each data structure consisting only of the
+      % intersecting variables. We can the test these tables for
+      % uniqueness of rows, and find row matches between the two data
+      % structs.
+      % To accomplish this, we have to first convert the data to a
+      % categorical class (requires Statistics Toolbox), which each of the
+      % variables being a nominal type. Unique rows can then be found.
+      ordinalTbl = cell(1,2);
+      for ids = 1:2
+        [~,idxs] = ismember(intersectVars,dst{ids}.vars);
+        tbl{ids} = dst{ids}.data(idxs);
+        for iint = 1:length(intersectVars)
+          ordinalTbl{ids}(:,iint) = ordinal(tbl{ids}{iint});
+        end
+        
+        % Check for uniqueness of rows
+        uniqueRows = unique(ordinalTbl{ids},'rows');
+        numNonUnique = length(ordinalTbl{ids}) - length(uniqueRows);
+        if numNonUnique
+          fprintf('Found %d non-unique rows in data struct: %s\n',numNonUnique,dst{1}.name);
+          % Find the non-unique rows
+          [~,idxs] = ismember(ordinalTbl{ids},uniqueRows,'rows');
+          
+          % Tabulate idxs to see which appears more than once
+          t = tabulate(idxs);
+          
+          % Display the nonUnique rows
+          uniqueRows(t(:,2)>1,:)
+          
+          fprintf('Cannot merge data ...\n');
+          return
+        end       
+      end
+      
+      % Convert our ordinal table to a nominal table in order to accomplish
+      % the following ismember operation
+      [matchMask, srcIdxs] = ismember(nominal(ordinalTbl{1}),nominal(ordinalTbl{2}),'rows');
+      
       d1cols = set_var_col_const(dst{1}.vars);
       d2cols = set_var_col_const(dst{2}.vars);
-      
-      % Merge happens from right to left
-      [matchMask, srcIdxs] = ismember(dst{1}.data{d1cols.(intersectVars)}, dst{2}.data{d2cols.(intersectVars)});
       
       % Figure out which variables we'll be appending to dst1
       copyVars = setdiff(dst{2}.vars, dst{1}.vars);
@@ -108,10 +152,14 @@ if isfield(params,'heuristic')
           dst{1}.data{d1cols.(currVar)} = cell(size(matchMask));
         elseif isnumeric(dst{2}.data{d2cols.(currVar)}(1))
           dst{1}.data{d1cols.(currVar)} = nan(size(matchMask));
+        elseif islogical(dst{2}.data{d2cols.(currVar)}(1))
+          dst{1}.data{d1cols.(currVar)} = false(size(matchMask));
         end
         dst{1}.data{d1cols.(currVar)}(matchMask) = dst{2}.data{d2cols.(currVar)}(srcIdxs(matchMask));
       end
       out_st = dst{1};
+    otherwise
+      fprintf('%s: Unknown heuristic: %s\nData structures not combined ...\n', mfilename, params.heuristic);
   end
 end % if isfield (params.'heuristic')
 

@@ -40,7 +40,6 @@ if isempty(idxs)
 else
   for iidx = 1:nidx
     if isfield(params.(param_fld_names{idxs(iidx)}), 'database')
-      database = params.(param_fld_names{idxs(iidx)}).database;
       conn_id = params.(param_fld_names{idxs(iidx)}).conn_id;
       continue
     end
@@ -95,10 +94,17 @@ else
 end
 
 % get column indices into the source data
-[dummy,src_col] = ismember(extract_vars, data_st.vars);
+[~,src_col] = ismember(extract_vars, data_st.vars);
 
 for iqid = 1:nqid
-  an_st.vars{iqid} = sprintf('compqid_%d_%d',qinfo(iqid).question_id,qinfo(iqid).subquestion);
+  newVar = sprintf('s%d_%02d',qinfo(iqid).question_id,qinfo(iqid).subquestion);
+  
+  % Rename the default compqid string if there is a compqid to variable
+  % name mapping specified
+  if isfield(params,'var_name_map') && isfield(params.var_name_map,newVar)
+    newVar = params.var_name_map.(newVar);
+  end
+  an_st.vars{iqid} = newVar;
 
   % Initialize the data structure that will be assigned to this variable
   curr_st = ensemble_init_data_struct;

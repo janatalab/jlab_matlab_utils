@@ -464,7 +464,7 @@ max_chars_per_line = 50;
 if isempty(use_fig)
   figure
 else
-  figure(use_fig)
+  figure(use_fig), clf
 end
 
 nax = 0;
