@@ -55,6 +55,14 @@ else % Create a union of the variables if intersection matches
   % Compare each of the intersecting variables
   varDiffers = false(1,numIntersect);
   for ivar = 1:numIntersect
+    % Make sure that if we are dealing with a cell array that contains
+    % strings that any empty values are empty strings, rather than empty
+    for ist = 1:2
+      if iscell(dst{ist}.data{ds_idxs{ist}(ivar)})
+        emptyMask = cellfun('isempty',dst{ist}.data{ds_idxs{ist}(ivar)});
+        [dst{ist}.data{ds_idxs{ist}(ivar)}{emptyMask}] = deal('');
+      end
+    end
     varDiffers(ivar) = ~isempty(setxor(dst{1}.data{ds_idxs{1}(ivar)}, dst{2}.data{ds_idxs{2}(ivar)}));
   end
   

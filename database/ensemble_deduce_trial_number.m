@@ -52,4 +52,6 @@ for isub = 1:nsubs
   
 end % for isub
 
+out_st = resp_st;  % Assign the output
+
 return
