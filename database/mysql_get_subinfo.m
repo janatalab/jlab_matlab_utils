@@ -41,19 +41,20 @@ for iarg = 1:2:narg
   end
 end
 
-try
+if isfield(params,'conn_id')
 	conn_id = params.conn_id;
-catch 
+else 
 	conn_id = [];
 end
 
-try 
+if isfield(params,'enc_key')
 	enc_key = params.enc_key;
-catch 
+else 
 	enc_key = '';
 end
 
 % Try to get encryption key if this hasn't been obtained yet
+tmp_conn_id = false;
 if isempty(conn_id) || isempty(enc_key)
 	if ~exist('params','var') || ~isfield(params,'conn_id') || ...
 			~isfield(params,'user') || ~isfield(params,'passwd') || ...
@@ -65,9 +66,11 @@ if isempty(conn_id) || isempty(enc_key)
 	params = mysql_login(params);
 	
 	% Check for connection to database
-	tmp_conn_id = false;
+	
 	if mysql(params.conn_id,'status')
 		tmp_conn_id = true;
+  else
+    tmp_conn_id = false;
 	end
 	
 	conn_id = mysql_make_conn(params);
@@ -86,7 +89,7 @@ enc_fields = encrypted_fields.subject;
   'conn_id',conn_id);
 
 % Close the database connection if it was temporary
-if exist('tmp_conn_id','var')
+if tmp_conn_id
   mysql(conn_id,'close');
 end
 
