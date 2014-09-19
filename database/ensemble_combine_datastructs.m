@@ -24,9 +24,15 @@ function out_st = ensemble_combine_datastructs(dst,params)
 % 22Aug2014 PJ - added merge heuristic
 % 03Sep2014 PJ - added support for merge based on multiple intersecting
 %                variables
+% 18Sep2014 PJ - fixed functioning if only the first input argument is
+%                passed in
 
 if ~iscell(dst) || length(dst) ~= 2
   error('%s: Two data structures are required', mfilename)
+end
+
+if nargin < 2
+  params = struct;
 end
 
 % Determine whether the sets of variables differ
