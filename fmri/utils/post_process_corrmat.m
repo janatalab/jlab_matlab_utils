@@ -111,7 +111,7 @@ end % for irun
   
 try 
   if opt.printfig
-    print(sprintf('%s.ps',opt.figstub),'-dpsc','-adobecset', opt.append_str)
+    print(sprintf('%s.ps',opt.figstub),'-dpsc', opt.append_str)
     
     %    unix_str = sprintf('ps2pdf %s.ps %s.pdf', opt.figstub, opt.figstub);
     %    unix(unix_str);

@@ -37,6 +37,7 @@ try colScaleFactor = params.colScaleFactor; catch colScaleFactor = 0.95; end
 try PRINT_FIGS = params.PRINT_FIGS; catch PRINT_FIGS = 0; end
 try figfname = params.figfname; catch figfname = ''; end
 try PLOT_INDIV_SLICES = params.PLOT_INDIV_SLICES; catch PLOT_INDIV_SLICES = 0; end
+try PAPER_TYPE = params.paperType; catch PAPER_TYPE = 'usletter'; end
 
 numRow = ceil(maxImgPerPage/numCol);
 
@@ -45,6 +46,10 @@ global_tp = tp;
 % Initialize plot parameters
 clear global SO
 global SO
+
+if maxImgPerPage == 1
+  numCol = 1;
+end
 
 % Figure out how many total plots we have
 numPlots = length(imgInfo);
@@ -68,6 +73,7 @@ for ipage = 1:numPages
 		
 	% Position the figure appropriately
 	figure(fignum), clf
+  set(gcf,'PaperType', PAPER_TYPE);
 	set(gcf,'PaperPosition', [0 0 1 1], 'PaperUnits','normalized'); % create a full page
 	set(gcf,'PaperUnits', 'points', 'Units','points');  % convert to measure we can use to set the position with
 	set(gcf,'Position', [0 0 get(gcf,'PaperSize')]); % move the figure window on the screen and set it to correct size
