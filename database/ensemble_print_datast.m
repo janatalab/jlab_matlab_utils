@@ -53,6 +53,8 @@ function outdata = ensemble_print_datast(indata,defs)
 % FB <fbarrett@ucdavis.edu> 2010.10.18
 % 24Jul2013 - Petr Janata - added handling of logicals as well as standar
 %             filtering
+% 25Jan2015 - added option of enclosing strings containing commas in
+%             quotes. This is now the default behavior when comma-delimited
 
 %% set variables
 outdata = indata;
@@ -92,6 +94,17 @@ if isfield(defs,'print2screen')
   print2screen = defs.print2screen;
 else
   print2screen = 1;
+end
+
+% Add quotes around field contents if they contain a comma?
+if isfield(defs,'enclose_commas')
+  encloseCommas = defs.enclose_commas;
+else
+  if strcmp(delim,',')
+    encloseCommas = 1;
+  else
+    encloseCommas = 0;
+  end
 end
 
 if ~fid && ~print2screen, error('no output specified'); end
@@ -170,6 +183,11 @@ for k=1:length(indata.data{1})
       data = num2str(data); 
     end
     if l > 1, inputstr = [inputstr delim]; end
+    
+    if encloseCommas && any(data == ',')
+      data = sprintf('"%s"',data);
+    end
+    
     inputstr = [inputstr data];
   end
 

@@ -124,20 +124,22 @@ end
 out_st = ensemble_init_data_struct;
 
 % Add the variables we want to copy to the list and initialize their types
-out_st.vars = copyVars;
-ocols = set_var_col_const(out_st.vars);
-for icopy = 1:ncopy
-  currVar = copyVars{icopy};
-  currType = class(data_st.data{cols.(currVar)});
-  switch currType
-    case {'numeric','double'}
-      out_st.data{ocols.(currVar)} = nan(noutRows,1);
-    case 'logical'
-      out_st.data{ocols.(currVar)} = false(noutRows,1);
-    case 'cell'
-      out_st.data{ocols.(currVar)} = cell(noutRows,1);
-    otherwise
-      error('No initialization for type: %s', currType)
+if ncopy
+  out_st.vars = copyVars;
+  ocols = set_var_col_const(out_st.vars);
+  for icopy = 1:ncopy
+    currVar = copyVars{icopy};
+    currType = class(data_st.data{cols.(currVar)});
+    switch currType
+      case {'numeric','double'}
+        out_st.data{ocols.(currVar)} = nan(noutRows,1);
+      case 'logical'
+        out_st.data{ocols.(currVar)} = false(noutRows,1);
+      case 'cell'
+        out_st.data{ocols.(currVar)} = cell(noutRows,1);
+      otherwise
+        error('No initialization for type: %s', currType)
+    end
   end
 end
 
