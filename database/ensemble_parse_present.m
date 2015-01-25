@@ -1,5 +1,4 @@
 function outdata = ensemble_parse_present(indata,defs)
-
 % parses presentation files, saves to appropriate place on disk
 % 
 % REQUIRES
@@ -14,9 +13,12 @@ function outdata = ensemble_parse_present(indata,defs)
 %   defs.init.USE_SPM
 %   defs.init.CLOBBER
 %   defs.LINK2FMRI
-% 
+
 % 2008/08/11 FB - adapted from proc_nostalgia_fmri_fmri
 % 2009/06/18 FB - generalized from fmri analyses to all analyses
+% 2014/10/22 PJ - added support for encapsulateEnsembleIDInCell to handle
+%                 situation in which multiple Ensemble IDs are present,
+%                 e.g. one ensemble_id per run
 
 outdata = ensemble_init_data_struct();
 
@@ -66,9 +68,9 @@ check_vars = {'sinfo','pathdata'};
 check_required_vars;
 
 if (iscell(indata) && ~isempty(indata) && isfield(indata{1},'task') && ...
-        ~isempty(strmatch('return_outdir',indata{1}.task))) || ...
+        any(strncmp('return_outdir',indata{1}.task,length('return_outdir')))) || ...
         (isstruct(indata) && isfield(indata,'task') && ...
-        ~isempty(strmatch('return_outdir',indata.task)))
+        any(strncmp('return_outdir',indata.task,length('return_outdir'))))
   if exist('pathdata','var') && ~isempty(pathdata.data{1})
     if length(nsub_proc) == 1
       pfilt = struct();
@@ -174,13 +176,16 @@ for isub=1:nsub_proc
     sfilt.include.all.session = {sess.id};
     spaths = ensemble_filter(pathdata,sfilt);
     
-    indx = strmatch('behav_indir',spaths.data{pcol.path_type});
+    targStr = 'behav_indir';
+    indx = strncmp(targStr,spaths.data{pcol.path_type},length(targStr));
     behav_indir = spaths.data{pcol.path}{indx};
 
-    outdx = strmatch('behav_outdir',spaths.data{pcol.path_type});
+    targStr = 'behav_outdir';
+    outdx = strncmp(targStr,spaths.data{pcol.path_type}, length(targStr));
     behav_outdir = spaths.data{pcol.path}{outdx};
     
-    andx = strmatch('anal_outdir',spaths.data{pcol.path_type});
+    targStr = 'anal_outdir';
+    andx = strncmp(targStr,spaths.data{pcol.path_type}, length(targStr));
     if isempty(andx)
       anal_outdir = behav_outdir;
     else
@@ -228,39 +233,44 @@ for isub=1:nsub_proc
       pfilt.include.all.RUN = targruns;
       pdata = ensemble_filter(pdata,pfilt);
       
+      if isempty(pdata.data{1})
+        error('Target run ID (%d) not found in Presentation file (%s)', targruns, presfname)
+      end
+      
       % set pdata.data{PL.RUN} to the run # in sinfo
       pdata.data{PL.RUN} = ones(length(pdata.data{1}),1)*runs(irun);
       
-      % init sdata vars with pdata vars if no info in sdata
-      if isempty(sdata.vars)
-        sdata.vars = pdata.vars;
-        for iv = 1:length(sdata.vars)
-          if ischar(pdata.data{iv})
-            sdata.data{iv} = {};
-          else
-            sdata.data{iv} = [];
-          end
-        end
+      % 22Oct2014 PJ - reversed order of sdata and pdata in this call since
+      % it was choking the other way, and since the accumulating variable
+      % should be on the left
+      if irun == 1
+        sdata = pdata;
+      else
+        sdata = ensemble_concat_datastruct({sdata,pdata},ecdparams);
       end
-      
-      sdata = ensemble_concat_datastruct({pdata,sdata},ecdparams);
       
     end % for irun
     
     % concatenate sdata with outdata
+    if isfield(defs.present, 'encapsulateEnsembleIDInCell')
+      ensemble_id = {sess.ensemble_id};
+    else
+      ensemble_id = sess.ensemble_id;
+    end
+    
     outdata.data{pdata_idx} = ensemble_add_data_struct_row(...
         outdata.data{pdata_idx},'subject_id',subid,'session',sess.id,...
-        'ensemble_id',sess.ensemble_id,'presdata',sdata);
+        'ensemble_id',ensemble_id,'presdata',sdata);
     
     % write out sdata
     if WRITE2FILE
       mat_fname = fullfile(behav_outdir,sprintf('%s_%s_present.mat',...
-          subid,sess.id));
+        subid,sess.id));
       save(mat_fname,'-struct','sdata');
       
       outdata.data{ppaths_idx} = ensemble_add_data_struct_row(...
           outdata.data{ppaths_idx},'subject_id',subid,'session',sess.id,...
-          'ensemble_id',sess.ensemble_id,'path',mat_fname);
+          'ensemble_id',ensemble_id,'path',mat_fname);
       
       xdefs = defs.present.export_params;
       xdefs.export.fname = fullfile(anal_outdir,...

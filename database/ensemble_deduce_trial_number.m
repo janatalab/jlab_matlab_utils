@@ -18,9 +18,11 @@ function out_st = ensemble_deduce_trial_number(resp_st,params)
 % 
 
 % 03Sep2014 Petr Janata
+% 24Jan2014 PJ - added handling of successive numbering across multiple
+%                sessions within a single subject
 
 % Make sure we have the columns we need
-requiredVars = {'subject_id','response_order','form_order'};
+requiredVars = {'subject_id','response_order','form_order','session_id'};
 if ~all(ismember(requiredVars, resp_st.vars))
   error('Required variables (%s) not in data struct', cell2str(requiredVars,','))
 end
@@ -45,8 +47,9 @@ for isub = 1:nsubs
   
   newro = [1; diff(rofo(submask,1))>0];
   newsamefo = [1; diff(rofo(submask,2))<1];
+  newsess = [1; diff(resp_st.data{rcols.session_id}(submask))~=0];
   
-  rofomask = newro & newsamefo;
+  rofomask = newro & newsamefo | newsess;
   
   resp_st.data{rcols.trial_number}(submask) = cumsum(rofomask);
   

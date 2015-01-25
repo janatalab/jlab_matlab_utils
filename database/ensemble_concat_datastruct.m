@@ -27,6 +27,8 @@ function result_st = ensemble_concat_datastruct(data_st,params)
 % 31Aug2014 PJ - Added checking/conversion of strings to cells to handle
 %                cases where there is only 1 row per data structure and
 %                strings are not enclosed in cells
+% 30Dec2014 PJ - added initialization of empty params struct in the event
+%                that none was passed in
 
 % return '' if data_st{1} == struct('name','return_outdir')
 if (iscell(data_st) && ~isempty(data_st) && isfield(data_st{1},'task') && ...
@@ -35,6 +37,10 @@ if (iscell(data_st) && ~isempty(data_st) && isfield(data_st{1},'task') && ...
     ~isempty(strmatch('return_outdir',data_st.task)))
   result_st = '';
   return
+end
+
+if nargin < 2
+  params = struct;
 end
 
 result_st = ensemble_init_data_struct;

@@ -122,14 +122,22 @@ if isfield(params,'heuristic')
       ordinalTbl = cell(1,2);
       for ids = 1:2
         [~,idxs] = ismember(intersectVars,dst{ids}.vars);
-        tbl{ids} = dst{ids}.data(idxs);
-        for iint = 1:length(intersectVars)
-          ordinalTbl{ids}(:,iint) = ordinal(tbl{ids}{iint});
+        tbl = dst{ids}.data(idxs);
+        
+        % Convert tbl into a table type if possible
+        if exist('table','class')
+          ordinalTbl{ids} = table(tbl{:});
+          usingTableClass = true;
+        else
+          usingTableClass = false;
+          for iint = 1:length(intersectVars)
+            ordinalTbl{ids}(:,iint) = ordinal(tbl{iint});
+          end
         end
         
         % Check for uniqueness of rows
         uniqueRows = unique(ordinalTbl{ids},'rows');
-        numNonUnique = length(ordinalTbl{ids}) - length(uniqueRows);
+        numNonUnique = size(ordinalTbl{ids},1) - size(uniqueRows,1);
         if numNonUnique
           fprintf('Found %d non-unique rows in data struct: %s\n',numNonUnique,dst{1}.name);
           % Find the non-unique rows
@@ -148,7 +156,11 @@ if isfield(params,'heuristic')
       
       % Convert our ordinal table to a nominal table in order to accomplish
       % the following ismember operation
-      [matchMask, srcIdxs] = ismember(nominal(ordinalTbl{1}),nominal(ordinalTbl{2}),'rows');
+      if ~usingTableClass
+        [matchMask, srcIdxs] = ismember(nominal(ordinalTbl{1}),nominal(ordinalTbl{2}),'rows');
+      else
+        [matchMask, srcIdxs] = ismember(ordinalTbl{1},ordinalTbl{2},'rows');
+      end
       
       d1cols = set_var_col_const(dst{1}.vars);
       d2cols = set_var_col_const(dst{2}.vars);

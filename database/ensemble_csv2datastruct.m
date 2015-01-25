@@ -1,7 +1,30 @@
-function data_st = ensemble_csv2datastruct(fname)
+function data_st = ensemble_csv2datastruct(in_st,params)
 % Loads a CSV file into an Ensemble data structure
+%
+% USAGE:
+% Either 
+%    data_st = ensemble_csv2datastruct(fname)
+% or
+%    data_st = ensemble_csv2datastruct([],params)
+%    where there is a field params.fname
+%
 
 % 09Aug2014 Petr Janata
+% 26Jan2014 PJ - made compatible with ensemble_jobman
+
+if nargin < 2
+  if ischar(in_st)
+    fname = in_st;
+  else
+    error('%s: argument must be string if only one argument is passed in', mfilename)
+  end
+elseif nargin == 2
+  if ~isfield(params, 'fname')
+    error('%s: name of file to load must be provided in fname field in 2nd argument', mfilename)
+  else
+    fname = params.fname;
+  end
+end
 
 data_st = ensemble_init_data_struct;
 
@@ -35,7 +58,7 @@ while ~feof(fid)
   numRows = numRows+1;
   
   % Parse the line, taking care to preserve commas in quotes
-  pat = '(".+")|([^,]*)';
+  pat = '(".+")|([^,]*)'; %  '(".+")|([^,]*)'
   tokens = regexp(cl,pat,'match');
   
   % Replace double quotes
@@ -44,7 +67,14 @@ while ~feof(fid)
   
   % Make sure the number of tokens is equal to the number of variables
   if ntok ~= nvars
-    error('%s: Number of tokens (%d) does not match number of variables (%d)', mfilename, ntok, nvars)
+    % Check whether the data for the last variable is simply empty. This
+    % would be true if the last character in the current line is a comma
+    if ntok == (nvars-1) && strcmp(',',cl(end))
+      tokens{end+1} = ' ';
+      ntok = length(tokens);
+    else
+      error('%s: Number of tokens (%d) does not match number of variables (%d)', mfilename, ntok, nvars)
+    end
   end
   
   % Determine whether variables are numeric or not

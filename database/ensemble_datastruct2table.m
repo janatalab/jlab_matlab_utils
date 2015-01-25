@@ -3,6 +3,7 @@ function ds = ensemble_datastruct2table(data_st)
 
 % 17Sep2014 Petr Janata
 
-ds = table(data_st.data{:},'VarNames',data_st.vars);
+ds = table(data_st.data{:},'VariableNames',data_st.vars);
+ds.Properties.Description = data_st.name;
 
 end
