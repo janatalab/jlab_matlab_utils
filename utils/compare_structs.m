@@ -56,7 +56,9 @@ function [structsAreEqual,firstViolation,violationReason] = compare_structs(stru
 % 01Nov2011 - Petr Janata, added ability to specify those fieldnames for
 %             which specification of a subset of values is OK. 
 % 30Oct2012 - Improved handling of ignore_fieldnames; eliminated instances
-% of strmatch()
+%             of strmatch()
+% 29Dec2014 - PJ - made field type mismatch non-fatal if both fields are
+%             empty
 
 numberTypes = {'int8','uint8','int16','uint16','int32','uint32','int64','uint64','double'};
 firstViolation = {};
@@ -170,7 +172,11 @@ for iField = 1:struct1_nFields
     %see if the fields are of the same type
     %if both checkTypes and checkValues are turned off, then bypass
     if(~strcmp(struct1_fieldType,struct2_fieldType) &&...
-       (checkTypes || checkValues))
+        (checkTypes || checkValues))
+      % If both are empty, don't worry about it
+      if isempty(struct1_val) && isempty(struct2_val)
+        continue
+      end
       firstViolation = {struct1_fieldName};
       violationReason = 'type_differs';
       structsAreEqual = 0;
@@ -180,7 +186,7 @@ for iField = 1:struct1_nFields
     %if we are not comparing values and the type of field is anything
     %but a struct, set them to equal and move on to the next
     %field. Otherwise, we will compare their values in the switch statement
-    if(~checkValues && ~strcmp(struct1_fieldType,'struct'))
+    if ~checkValues && ~isstruct(struct1_val)
       fieldsAreEqual = 1;
       continue;
     end
@@ -192,17 +198,17 @@ for iField = 1:struct1_nFields
     switch struct1_fieldType
       
       case numberTypes
-        if(size(struct1_val) == size(struct2_val))
+        if size(struct1_val) == size(struct2_val)
           fieldsAreEqual = all(struct1_val(:) == struct2_val(:));
         else
-          fieldsAreEqual = 0; 
-				end
-				
-				if ~fieldsAreEqual && ismember(struct1_fieldName, subsetIsOK)
-					if all(ismember(struct1_val, struct2_val))
-						fieldsAreEqual = 1;
-					end
-				end
+          fieldsAreEqual = 0;
+        end
+        
+        if ~fieldsAreEqual && ismember(struct1_fieldName, subsetIsOK)
+          if all(ismember(struct1_val, struct2_val))
+            fieldsAreEqual = 1;
+          end
+        end
  
       case 'char' 
         fieldsAreEqual = strcmp(struct1_val,struct2_val);
@@ -231,13 +237,13 @@ for iField = 1:struct1_nFields
         fieldsAreEqual = strcmp(struct1_str,struct2_str);
             
       otherwise
-        error(sprintf('Fieldtype %s not supported.',struct1_fieldType));
+        error('Fieldtype %s not supported.',struct1_fieldType);
 
 
     end % switch struct1
 
-    if (~fieldsAreEqual)
-        if(strcmp(struct1_fieldType,'struct'))
+    if ~fieldsAreEqual
+        if isstruct(struct1_val) 
           firstViolation = strcat(struct1_fieldName,'.',subFieldViolation);
         else
           firstViolation = {struct1_fieldName};

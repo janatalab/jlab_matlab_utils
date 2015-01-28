@@ -37,7 +37,7 @@ else
 end
 status = -1;
 
-if exist(outdir) ~= 7
+if ~exist(outdir,'dir')
   if verbose
     fprintf('Making directory: %s\n', outdir);
   end

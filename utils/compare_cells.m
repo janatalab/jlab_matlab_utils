@@ -46,11 +46,12 @@ function [cellsAreEqual,firstViolation,violationReason] = compare_cells(cell1,ce
 % 
 % NOTE: if one cell is a transposition of the other, they will be found
 % unequal, either by size, or by contents
-% 
+ 
 % Copyright (c) 2009-2012 The Regents of the University of California
 % All Rights Reserved.
 %
 % FB 2009.02.24
+% PJ 29Dec2014 - added check to see if both cells are empty
 
 % 
 % initialize variables
@@ -90,6 +91,16 @@ elseif ~iscell(cell1)
   return
 elseif ~iscell(cell2)
   violationReason = 'cell2 is not of type ''cell''';
+  return
+end
+
+%
+% Check to see if they are both empty
+% It turns out that empty cells can have different sizes, e.g. 0x0 or 1x0
+%
+% Both are empty, return equality
+if isempty(cell1) && isempty(cell2)
+  cellsAreEqual = 1;
   return
 end
 

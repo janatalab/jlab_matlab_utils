@@ -84,19 +84,19 @@ for istim = 1:nstims
       check_dir(curr_dir, VERBOSE);
       
       if MAKE_SYMLINK
-	srcfile = fullfile(srcroot,stimlist{istim});
-	linkname = fullfile(curr_dir,tok);
-	if ~exist(linkname)
-      srcfile = regexprep(srcfile,'[()'',& ]','\\$0');
-      linkname_escaped = regexprep(linkname,'[()'',& ]','\\$0');
-	  unix_str = sprintf('ln -s %s %s >& /dev/null', srcfile, linkname_escaped);
-	  if VERBOSE
-	    fprintf('%s\n', unix_str);
-	  end
-	  status = unix(unix_str);
-      
-	end
-	new_stimlist(end+1) = {linkname};
+        srcfile = fullfile(srcroot,stimlist{istim});
+        linkname = fullfile(curr_dir,tok);
+        if ~exist(linkname)
+          srcfile = regexprep(srcfile,'[()'',& ]','\\$0');
+          linkname_escaped = regexprep(linkname,'[()'',& ]','\\$0');
+          unix_str = sprintf('ln -s %s %s >& /dev/null', srcfile, linkname_escaped);
+          if VERBOSE
+            fprintf('%s\n', unix_str);
+          end
+          status = unix(unix_str);
+          
+        end
+        new_stimlist(end+1) = {linkname};
       end
     end
   end
