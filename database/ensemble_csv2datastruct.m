@@ -8,9 +8,15 @@ function data_st = ensemble_csv2datastruct(in_st,params)
 %    data_st = ensemble_csv2datastruct([],params)
 %    where there is a field params.fname
 %
+% KNOWN ISSUES:
+%   Fields containing strings with more than one comma will not parse
+%   correctly. Need to improve the regexp statement.
 
 % 09Aug2014 Petr Janata
 % 26Jan2014 PJ - made compatible with ensemble_jobman
+% 08Feb2015 PJ - parsing of input lines is now better able to handle empty
+%                values, while retaining ability to preserve commas in
+%                quotes
 
 if nargin < 2
   if ischar(in_st)
@@ -53,13 +59,25 @@ data_st.vars = vars;
 data  = cell(1,nvars);
 numRows = 0;
 
+USE_MATCH_HEURISTIC = 0;
+
 while ~feof(fid)
   cl = fgetl(fid); % read the line
   numRows = numRows+1;
   
+  % Split the string on commas, but not those occuring in quotes
+  % KNOWN ISSUE: Will give an erroneous result if the string within quotes
+  % contains more than one comma. Need a better lookaround assertion in
+  % the regexp pattern.
+  tokens = regexp(cl,'(?!(?=,[\w\d\s]+")),','split');
+  
   % Parse the line, taking care to preserve commas in quotes
-  pat = '(".+")|([^,]*)'; %  '(".+")|([^,]*)'
-  tokens = regexp(cl,pat,'match');
+  % The problem with this approach is that if there is a missing value, the
+  % number of tokens is less than the number of columns
+  if USE_MATCH_HEURISTIC
+    pat = '(".+")|([^,]*)'; %  '(".+")|([^,]*)'
+    tokens = regexp(cl,pat,'match');
+  end
   
   % Replace double quotes
   tokens = regexprep(tokens,'"','');

@@ -1,6 +1,8 @@
 function sorted_st = ensemble_sort(data_st, sort_var, sort_dir)
 % Sorts an Ensemble datastruct 
 %
+% sorted_st = ensemble_sort(data_st, sort_var, sort_dir)
+%
 % INPUT:
 %   data_st: the Ensemble data structure to be sorted
 %   sort_var: the name of the variable to be sorted by
@@ -8,6 +10,7 @@ function sorted_st = ensemble_sort(data_st, sort_var, sort_dir)
 %   is 'ascend'
 
 % 26Jun2014 - Petr Janata
+% 09Feb2015 - PJ fixed handling for cells
 
 % Check to make sure that the variable we want to sort by exists
 if ~strcmp(sort_var,data_st.vars)
@@ -25,7 +28,11 @@ sorted_st = data_st;
 sorted_st.data = cell(size(sorted_st.data)); % Zero out the data portion
 
 % Get the sorted indices
-[~,sort_idxs] = sort(data_st.data{cols.(sort_var)},sort_dir);
+if iscell(data_st.data{cols.(sort_var)})
+  [~,sort_idxs] = sort(data_st.data{cols.(sort_var)});
+else
+  [~,sort_idxs] = sort(data_st.data{cols.(sort_var)},sort_dir);
+end
 
 % Loop over all the variables and apply the sort
 nvar = length(data_st.vars);
