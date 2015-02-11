@@ -48,6 +48,9 @@ function [data_st] = ensemble_filter(data_st,filt)
 %                variable during evaluation of lt gt criteria
 % 09Jan2014 PJ - expanded list of wildcards that trigger regexp usage to
 %                '[*^$]' from '[*]'
+% 10Feb2015 PJ - added gt, gte, lt, lte for greater than, greater than
+%                equal to, less than, less than equal to logic. Previously,
+%                only use start, start_inc, stop, stop_inc
 
 %deal with the possibility that params struct was specified
 %directly rather than passing "params.filt"
@@ -140,13 +143,13 @@ for itype = 1:ntypes
 					end
 					
 					switch limit_str
-						case 'start'
+						case {'start','gt'}
 							tmp2 = data_st.data{data_col} > crit_val;
-						case 'start_inc'
+						case {'start_inc','gte'}
 							tmp2 = data_st.data{data_col} >= crit_val;
-						case 'stop'
+						case {'stop','lt'}
 							tmp2 = data_st.data{data_col} < crit_val;
-						case 'stop_inc'
+						case {'stop_inc','lte'}
 							tmp2 = data_st.data{data_col} <= crit_val;
             otherwise
               error('Unknown limit string: %s', limit_str)
