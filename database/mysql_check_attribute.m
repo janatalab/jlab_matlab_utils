@@ -17,6 +17,7 @@ function attrib_id = mysql_check_attribute(attrib_tag, params)
 % missing attributes are indicated by NaNs in the attribute ID vector.
 
 % 07/18/09 Petr Janata
+% 19May2015 PJ - added clean handling of class
 
 % Check for connection to database
 try 
@@ -34,7 +35,17 @@ if mysql_check_conn(conn_id)
 end
 
 % Check to see if we are creating missing attributes
-try create = params.create; catch create=false; end
+if isfield(params,'create')
+  create = params.create; 
+else
+  create=false; 
+end
+
+if isfield(params,'class')
+  attrib_class = params.class;
+else
+  attrib_class = 'stim_set';
+end
 
 % Check to see if attrib_tag is a cell array
 if ~iscell(attrib_tag)
@@ -47,17 +58,17 @@ for iattrib = 1:num_attrib
   curr_tag = attrib_tag{iattrib};
         
   % Check to see if the attribute tag already exists
-  mysql_str = sprintf('SELECT attribute_id FROM attribute WHERE name="%s";', curr_tag);
+  mysql_str = sprintf('SELECT attribute_id FROM attribute WHERE name="%s" AND class="%s";', curr_tag, attrib_class);
   [curr_id] = mysql(conn_id, mysql_str);
 
   if isempty(curr_id) && create
     % Create the attribute if necessary
     mysql_str = sprintf(['INSERT INTO attribute (name,class) ' ...
-	  'VALUES ("%s","stim_set");'], curr_tag);
+	  'VALUES ("%s","%s");'], curr_tag, attrib_class);
     mysql(conn_id,mysql_str);
 
     % Get the attribute ID
-    mysql_str = sprintf('SELECT attribute_id FROM attribute WHERE name="%s";', curr_tag);
+    mysql_str = sprintf('SELECT attribute_id FROM attribute WHERE name="%s" AND class="%s";', curr_tag, attrib_class);
     [attrib_id(iattrib)] = mysql(conn_id, mysql_str);
     fprintf('Created attribute (%s), ID=%d\n', curr_tag, attrib_id(iattrib));
   elseif isempty(curr_id) && ~create
