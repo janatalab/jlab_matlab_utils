@@ -88,6 +88,12 @@ ntypes = length(crit_types_to_proc);
 
 nvars = length(data_st.vars);
 
+% Make sure we have data to filter
+if all(cellfun('isempty', data_st.data))
+  fprintf('%s: data structure contains no data\n', mfilename);
+  return
+end
+      
 % Loop over include and exclude structures
 for itype = 1:ntypes
 	type_str = crit_types_to_proc{itype};
@@ -119,8 +125,10 @@ for itype = 1:ntypes
 			if isempty(data_col)
 				fprintf('ensemble_filter: Did not find criterion field (%s) in list of variables\n',fld_str);
 				continue
-			end
+      end
 			
+
+      
 			% Check to see if fld_str is a structure containing limits
 			if isstruct(filt.(type_str).(logic_str).(fld_str))
 				limit_flds = fieldnames(filt.(type_str).(logic_str).(fld_str));
