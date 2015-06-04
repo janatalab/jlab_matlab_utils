@@ -7,17 +7,19 @@ function [sig,fs,nbits,opts] = read_audio_stim(stimulus_id,varargin)
 % to read), mono (set to 1 to convert output to mono, 0 if no conversion), and
 % downsamp, the downsampling factor
 %
+% The parameter values can either be passed into the function in the fixed
+% order shown above, or alternatively, as tag/value pairs
+%
 % Optionally, a mysql connection ID (mysql_conn_id) can be passed
 % for communicating with the database. If this is omitted, the
 % function will still be able to connect with the database, but
 % this connection will result in connection information printing on
 % the matlab console each time the function is called.
 %
-%
 % The output variables are the same as those for wavread: sig (the signal 
 % vector or matrix), fs (the sampling rate), nbits (number of bits per sample),
 % and opts (a format info string).
-%
+
 % July 8, 2005 Original Version S.T.
 % Sept. 15, 2005 Modified by S.T. use mp3read matlab function instead of sox 
 % Dec. 7, 2005 Mod. by S.T. read stims from nfs space rather than copy to localhost using scp
@@ -26,16 +28,77 @@ function [sig,fs,nbits,opts] = read_audio_stim(stimulus_id,varargin)
 %                    to a value other than one and a wav file was specified
 % 06/15/10 PJ - mysql_make_conn sanitization.  Input variable handling
 %               still needs cleanup
+% 03Jun2015 PJ - improved handling of input variables
   
 ensemble_globals;
 
-if(nargin < 5)
-  mysql_conn_id = 7;
-else
-  mysql_conn_id = varargin{4};  % doesn't this defy the purpose of varargin?
+% Try to determine if we are calling the function using tag/value pairs or
+% specific values in specific positions
+using_dict_input = false;
+
+if nargin > 1 && all(cellfun(@ischar, varargin(1:2:end)))
+  using_dict_input = true;
 end
 
-if nargin > 5
+% Initialize parameters
+mysql_conn_id = [];
+mono = 0;
+downsamp = 1;
+N = [];
+
+if using_dict_input
+  for iarg = 1:2:length(varargin)
+    switch varargin{iarg}
+      case 'conn_id'
+        mysql_conn_id = varargin{iarg+1};
+        
+      case 'stimulus_root'
+        stimulus_root = varargin{iarg+1};
+        
+      case 'mono'
+        mono = varargin{iarg+1};
+        
+      case 'downsamp'
+        downsamp = varargin{iarg+1};
+        
+      case 'N'
+        N = varargin{iar+1};
+    end
+  end
+else
+  switch(nargin)
+    case 1
+      N = [];
+      mono = 0;
+      downsamp = 1;
+    case 2
+      N = varargin{1};
+      mono = 0;
+      downsamp = 1;
+    case 3
+      N = varargin{1};
+      mono = varargin{2};
+      downsamp = 1;
+    case {4,5,6}
+      N = varargin{1};
+      mono = varargin{2};
+      if(isempty(varargin{3}))
+        downsamp = 1;
+      else
+        downsamp = varargin{3};
+      end
+  end
+end
+
+if isempty(mysql_conn_id)
+  if(nargin < 5)
+    mysql_conn_id = 7;
+  else
+    mysql_conn_id = varargin{4};  % doesn't this defy the purpose of varargin?
+  end
+end
+
+if ~using_dict_input && nargin > 5
   params = varargin{5};
 else
   params = [];
@@ -115,34 +178,7 @@ switch(ext)
   error('Did not recognize sound file name extension');
 end
 
-
-
 %read the mp3 file
-switch(nargin)
- case 1
-  N = [];
-  mono = 0;
-  downsamp = 1;
- case 2
-  N = varargin{1};
-  mono = 0;
-  downsamp = 1;
- case 3
-  N = varargin{1};
-  mono = varargin{2};
-  downsamp = 1;
- case {4,5,6}
-  N = varargin{1};
-  mono = varargin{2};
-  if(isempty(varargin{3}))
-    downsamp = 1;
-  else
-    downsamp = varargin{3};
-  end
-  
-end
-
-
 if((downsamp ~= 1) && (strcmp(ext,'.wav')))
   error('This function doesn''t support downsampling of wav files. Wav files must be downsampled in the calling function.');
 end
