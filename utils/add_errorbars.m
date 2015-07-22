@@ -12,6 +12,7 @@ function add_errorbars(h,errordata,linecolor,orientation)
 % 11/11/06 PJ -- Fixed handling of single barseries object
 % 05/06/07 PJ -- Added support for horizontal bargraphs
 % 03/09/11 PJ -- added auto-dection of bar orientation
+% 22Jul2015 PJ -- made compatible with MATLAB version >= 2014b
 
 ncond = length(h);
 
@@ -26,9 +27,11 @@ if nargin < 4
 	end
 end
 
+groupwidth = 0.8;
+
 obj_type =  get(h(1),'Type');
 switch obj_type
-  case 'patch'
+  case {'patch','bar'}
     
   case 'hggroup'
     % The patch object is actually buried deeper down. It is a child of the
@@ -47,16 +50,20 @@ switch obj_type
 end
 
 if size(errordata,2) ~= ncond
-  error(sprintf('Number of conditions (columns) does not match: expected %d, found %d', ncond,size(errordata,2)))
+  error('Number of conditions (columns) does not match: expected %d, found %d', ncond,size(errordata,2))
 end
 
 if size(get(h(1),'XData'),2) ~= size(errordata,1)
-  error(sprintf('Number of rows does not match: expected %d, found %d', size(get(h(1),'XData'),2), size(errordata,1)))
+  error('Number of rows does not match: expected %d, found %d', size(get(h(1),'XData'),2), size(errordata,1))
 end
 
 figure(gcf)
 axes(gca)
 hold on
+
+% based on makebars.m
+groupwidth = min(groupwidth, ncond/(ncond+1.5));
+widthPerCond = groupwidth/ncond;
 
 for icond = 1:ncond
   xdata = get(h(icond),'XData');
@@ -64,15 +71,27 @@ for icond = 1:ncond
   
   nbar = size(xdata,2);
   
+  condOffset = (icond-mean(1:ncond))*widthPerCond;
+ 
   for ibar = 1:nbar
     switch orientation
       case 'vertical'
         ylength = errordata(ibar,icond);
-        cap_length = diff(xdata([2 3], ibar))/2;
+        
+        if strcmp(obj_type,'bar')
+          xoffset = xdata(ibar)+condOffset;
+          ystart = ydata(ibar);
+          cap_length = widthPerCond*get(h(icond),'BarWidth')/2;
+         
+        else
+          currXData = xdata([2 3], ibar);
+          cap_length = diff(currXData)/2;
 
-        % Draw the vertical section
-        xoffset = mean(xdata([2 3],ibar));
-        ystart = ydata(2,ibar);
+          % Draw the vertical section
+          xoffset = mean(currXData);
+          ystart = ydata(2,ibar);
+        end
+        
         if ystart >= 0
           ystop = ystart + ylength;
         else
