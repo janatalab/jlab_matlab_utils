@@ -20,6 +20,8 @@ function [out_st, newVars] = ensemble_vals2vars(data_st, params)
 % 09Nov2011 Petr Janata
 % 22Aug2014 PJ - fixed handling of non-cell by_var; added carryover_vars
 %                option
+% 15Aug2015 PJ - fixed handling of missing numeric input when copying data
+%                to output
 
 if ~isfield(params,'src_vars')
 	error('%s: Variables whose values to transform not specified in params.src_vars', mfilename)
@@ -184,7 +186,10 @@ for ival = 1:nvals
 		% Assign the value
 		tmpval = data_st.data{srcCols.(valVar)}(compositeMask);
     if isempty(tmpval)
-      if isnumeric(out_st.data{outcols.(newVars{inew})}(1))
+      % 15Aug2015 PJ - changing what I think is erroneous assessment of
+      % output structure. Should be assessing type of source data
+      % if isnumeric(out_st.data{outcols.(newVars{inew})}(1))
+      if isnumeric(data_st.data{srcCols.(valVar)}(1))
         tmpval = NaN;
       else
         tmpval = '';
