@@ -24,6 +24,7 @@ if nargin < 2
   else
     error('%s: argument must be string if only one argument is passed in', mfilename)
   end
+  params = struct;
 elseif nargin == 2
   if ~isfield(params, 'fname')
     error('%s: name of file to load must be provided in fname field in 2nd argument', mfilename)
@@ -59,17 +60,16 @@ data_st.vars = vars;
 data  = cell(1,nvars);
 numRows = 0;
 
-USE_MATCH_HEURISTIC = 0;
+if isfield(params,'USE_MATCH_HEURISTIC')
+  USE_MATCH_HEURISTIC = params.USE_MATCH_HEURISTIC;
+else
+  USE_MATCH_HEURISTIC = 0;
+end
 
 while ~feof(fid)
   cl = fgetl(fid); % read the line
   numRows = numRows+1;
   
-  % Split the string on commas, but not those occuring in quotes
-  % KNOWN ISSUE: Will give an erroneous result if the string within quotes
-  % contains more than one comma. Need a better lookaround assertion in
-  % the regexp pattern.
-  tokens = regexp(cl,'(?!(?=,[\w\d\s]+")),','split');
   
   % Parse the line, taking care to preserve commas in quotes
   % The problem with this approach is that if there is a missing value, the
@@ -77,6 +77,14 @@ while ~feof(fid)
   if USE_MATCH_HEURISTIC
     pat = '(".+")|([^,]*)'; %  '(".+")|([^,]*)'
     tokens = regexp(cl,pat,'match');
+  else
+    % Split the string on commas, but not those occuring in quotes
+    % KNOWN ISSUE: Will give an erroneous result if the string within quotes
+    % contains more than one comma. Need a better lookaround assertion in
+    % the regexp pattern.
+    pat = '(?!(?=,[\w\d\s]+")),';
+    tokens = regexp(cl,pat,'split');
+
   end
   
   % Replace double quotes

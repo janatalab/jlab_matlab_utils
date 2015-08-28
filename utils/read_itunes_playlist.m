@@ -39,8 +39,9 @@ data_st.data = cell(1,nvars);
 
 % Convert variables to desired types. Keep them as strings by default
 vartypes.numeric = {'size','disc_number','disc_count','track_number','track_count', ...
-  'bit_rate','sample_rate','plays','year','time','skips'};
+  'bit_rate','sample_rate','plays','year','skips'};
 vartypes.date = {'date_modified','date_added','last_played','last_skipped'};
+vartypes.time = {'time'};
 
 for ivar = 1:nvars
   currVar = vars{ivar};
@@ -65,6 +66,19 @@ for ivar = 1:nvars
       
       data_st.data{ivar} = tmpdatenum;
       
+    case vartypes.time
+      % Check to see if we have a number in seconds or in MM:SS format
+      val = data_st.data{ivar}{1};
+      
+      % Replace empty values with NaNs
+      [data_st.data{ivar}{emptyMask}] = deal('NaN');
+
+      if ~isempty(regexp(val,':'))
+        data_st.data{ivar} = cellfun(@convert_datetime, data_st.data{ivar});
+      else
+        data_st.data{ivar} = cellfun(@str2num, data_st.data{ivar});
+      end
+      
     case vartypes.numeric
       % Replace empty values with NaNs
       [data_st.data{ivar}{emptyMask}] = deal('NaN');
@@ -80,3 +94,8 @@ end % for ivar=
 fclose(fid);
 
 return
+end
+
+function seconds = convert_datetime(dstr)
+seconds = etime(datevec(datenum(dstr,'MM:SS')),datevec(datenum('0:0','MM:SS')));
+end
