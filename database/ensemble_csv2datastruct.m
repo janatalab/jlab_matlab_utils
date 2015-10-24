@@ -17,6 +17,7 @@ function data_st = ensemble_csv2datastruct(in_st,params)
 % 08Feb2015 PJ - parsing of input lines is now better able to handle empty
 %                values, while retaining ability to preserve commas in
 %                quotes
+% 20Aug2015 PJ - enabled dynamic setting of USE_MATCH_HEURISTIC (default is false);
 
 if nargin < 2
   if ischar(in_st)
@@ -27,7 +28,11 @@ if nargin < 2
   params = struct;
 elseif nargin == 2
   if ~isfield(params, 'fname')
-    error('%s: name of file to load must be provided in fname field in 2nd argument', mfilename)
+    if ~isempty(in_st)
+      fname = in_st;
+    else
+      error('%s: name of file to load must be provided in 1st argument or as the fname field in 2nd argument', mfilename)
+    end
   else
     fname = params.fname;
   end
@@ -60,7 +65,7 @@ data_st.vars = vars;
 data  = cell(1,nvars);
 numRows = 0;
 
-if isfield(params,'USE_MATCH_HEURISTIC')
+if isfield(params, 'USE_MATCH_HEURISTIC')
   USE_MATCH_HEURISTIC = params.USE_MATCH_HEURISTIC;
 else
   USE_MATCH_HEURISTIC = 0;
