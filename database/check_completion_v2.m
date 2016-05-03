@@ -38,6 +38,8 @@ function outData = check_completion_v2(varargin)
 %                mysql. Added reporting of subject names and start and stop
 %                times
 % 03Nov2013 PJ - Added optional reporting of more details for incomplete sessions
+% 03May2016 PJ - fixed minor bug to handle situation where no response data
+%                are present for a session
 
 outData = [];
 
@@ -283,6 +285,11 @@ function result = incomplete_details(data_st, params)
       currSubID, ...
       sprintf('%s %s', sub_st.data{subCols.name_first}{submask}, sub_st.data{subCols.name_last}{submask}), ...
       datestr(sess_st.data{sessCols.date_time}(isess)));
+    
+    % Check to see whether there is any response data for this session ID
+    if isempty(lastTimeStamp)
+      continue
+    end
     
     % Provide information about last form submitted
     formID = currData.data{respCols.form_id}(lastEntryMask);
