@@ -6,6 +6,8 @@ function [stiminfo, stim_fields] = mysql_get_stim_attributes(stim_crit_fld, stim
 
 % 11/24/06 PJ modified to handle list of stim ids
 % 06/15/10 PJ msyql_make_conn handling
+% 23May2014 PJ - stimulus information is ordered in the order of the
+%                entering stimulus IDs
 
 % Check for valid connection to database
 if ~exist('conn_id','var') || isempty(conn_id) || mysql(conn_id,'status')
@@ -36,7 +38,7 @@ if ~iscell(stim_crit_fld)
 end
 
 sql_str = sprintf(['SELECT * FROM stimulus WHERE stimulus.%s ' ...
-      'IN (%s);'], stim_crit_fld{1}, stim_crit_str);
+      'IN (%s) ORDER BY FIELD(stimulus.%s, %s);'], stim_crit_fld{1}, stim_crit_str, stim_crit_fld{1}, stim_crit_str);
 [stiminfo{1:length(stim_fields)}] = mysql(conn_id,sql_str);
 
 if exist('tmp_conn_id','var')
