@@ -19,6 +19,8 @@ function [consess] = create_contrast_struct(spmmat_fname,cinfo)
 % 28Dec2014 PJ - added option of passing in an SPM structure instead of
 %                path to SPM.mat file
 %                Minor performance improvements per good coding practice
+% 29Aug2015 PJ - adapted to flexibly handle variable names as provided in
+%                SPM.xX.name or stripped out names.
 
 if ischar(spmmat_fname)
   if ~exist(spmmat_fname,'file')
@@ -63,6 +65,18 @@ consess = {};
 
 % Loop over the list of contrasts
 for ic = 1:nc
+  if isfield(cinfo,'use_orig_var_name')
+    useOrigVarName = cinfo.use_orig_var_name;
+  else
+    useOrigVarName = false;
+  end
+  
+  if useOrigVarName
+    cond_names = cond_names_detail;
+  else
+    cond_names = cond_names_stripped;
+  end
+  
   cont_type = cinfo(ic).cont_type;
   cont_name = cinfo(ic).cont_name;
   incl_code = cinfo(ic).incl_code;
@@ -71,11 +85,11 @@ for ic = 1:nc
 
       % First, try to grab the column index from the detailed list
       % This will pick up any regressors and condition components
-      cond_a_mask = ismember(cond_names_stripped, incl_code{1});
-      cond_b_mask = ismember(cond_names_stripped, incl_code{2});
+      cond_a_mask = ismember(cond_names, incl_code{1});
+      cond_b_mask = ismember(cond_names, incl_code{2});
       
-      cond_a_vect = zeros(1, length(cond_names_stripped));
-      cond_b_vect = zeros(1, length(cond_names_stripped));
+      cond_a_vect = zeros(1, length(cond_names));
+      cond_b_vect = zeros(1, length(cond_names));
       
       cond_a_vect(cond_a_mask) = 1;
       cond_b_vect(cond_b_mask) = 1;
@@ -106,14 +120,14 @@ for ic = 1:nc
       consess{ngood}.tcon.convec = convec;
       
     case 'F'
-      cols = zeros(1,length(cond_names_stripped));
-      col_mask = ismember(cond_names_stripped, incl_code{1});      
+      cols = zeros(1,length(cond_names));
+      col_mask = ismember(cond_names, incl_code{1});      
       cols(col_mask) = 1;
       
       if any(cols)
         ngood = ngood+1;
         convec = full(sparse(1:sum(cols),find(cols),1));  % actually a matrix
-        convec(end,length(cond_names_stripped)) = 0; % pad out with zeros
+        convec(end,length(cond_names)) = 0; % pad out with zeros
         consess{ngood}.fcon.name = cont_name;
         for irow = 1:size(convec,1)
           consess{ngood}.fcon.convec{irow} = num2str(convec(irow,:));

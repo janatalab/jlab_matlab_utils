@@ -29,6 +29,8 @@ function result_st = ensemble_concat_datastruct(data_st,params)
 %                strings are not enclosed in cells
 % 30Dec2014 PJ - added initialization of empty params struct in the event
 %                that none was passed in
+% 29Aug2015 PJ - made the appending of _concat to the name of the
+%                concatenated variable optional
 
 % return '' if data_st{1} == struct('name','return_outdir')
 if (iscell(data_st) && ~isempty(data_st) && isfield(data_st{1},'task') && ...
@@ -78,6 +80,12 @@ else
   type_as_var = false; 
 end
 
+if isfield(params,'append_concat_to_name')
+  append_concat_to_name = params.append_concat_to_name;
+else
+  append_concat_to_name = true;
+end
+
 % Original versions of this script did not operate based on type
 if ~type_as_var
   
@@ -123,7 +131,11 @@ else
     
     % Initialize a data struct for this particular data type
     curr_st = ensemble_init_data_struct;
-    curr_st.name = sprintf('%s_concat', curr_type);
+    if append_concat_to_name
+      curr_st.name = sprintf('%s_concat', curr_type);
+    else
+      curr_st.name = sprintf('%s', curr_type);      
+    end
     curr_st.type = curr_type;
     
     % Find all of the instances in the input data structures that match this type

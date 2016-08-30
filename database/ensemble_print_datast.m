@@ -55,6 +55,7 @@ function outdata = ensemble_print_datast(indata,defs)
 %             filtering
 % 25Jan2015 - added option of enclosing strings containing commas in
 %             quotes. This is now the default behavior when comma-delimited
+% 29Aug2016 - PJ added optional output of datatype row
 
 %% set variables
 outdata = indata;
@@ -165,6 +166,29 @@ end
 varstr = cell2str(indata.vars,delim);
 if print2screen, fprintf(1,'%s\n',varstr); end
 if fid, fprintf(fid,'%s\n',varstr); end
+
+% Check whether we are also writing a line of datatypes
+if isfield(defs, 'write_datatype') && defs.write_datatype
+  % Make sure we have a datatype field in the input data and that it
+  % matches vars in length
+  if isfield(indata, 'datatype') && length(indata.datatype) == length(indata.vars)
+    if isfield(defs, 'outputType')
+      outputType = defs.outputType;
+    else
+      outputType = 'R';
+    end
+    
+    if strcmp(outputType,'R')
+      datatype = strrep(indata.datatype,'n','numeric');
+      datatype = strrep(datatype,'l','logical');
+      datatype = strrep(datatype,'s','character');
+    end
+    datatypestr = cell2str(datatype,',');
+    
+    if print2screen, fprintf(1,'%s\n', dataypestr); end
+    if fid, fprintf(fid,'%s\n', datatypestr); end
+  end
+end % if isfield(params, 'write_datatype')
 
 % iterate over rows, print data
 for k=1:length(indata.data{1})
