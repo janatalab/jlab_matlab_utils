@@ -55,7 +55,7 @@ function outdata = ensemble_print_datast(indata,defs)
 %             filtering
 % 25Jan2015 - added option of enclosing strings containing commas in
 %             quotes. This is now the default behavior when comma-delimited
-% 29Aug2016 - PJ added optional output of datatype row
+% 29Aug2016 - PJ added optional output of datatype row and handling for R
 
 %% set variables
 outdata = indata;
@@ -96,6 +96,13 @@ if isfield(defs,'print2screen')
 else
   print2screen = 1;
 end
+
+if isfield(defs, 'outputType')
+  outputType = defs.outputType;
+else
+  outputType = 'SAS';
+end
+
 
 % Add quotes around field contents if they contain a comma?
 if isfield(defs,'enclose_commas')
@@ -168,15 +175,12 @@ if print2screen, fprintf(1,'%s\n',varstr); end
 if fid, fprintf(fid,'%s\n',varstr); end
 
 % Check whether we are also writing a line of datatypes
+haveDatatypeInfo = 0;
 if isfield(defs, 'write_datatype') && defs.write_datatype
   % Make sure we have a datatype field in the input data and that it
   % matches vars in length
-  if isfield(indata, 'datatype') && length(indata.datatype) == length(indata.vars)
-    if isfield(defs, 'outputType')
-      outputType = defs.outputType;
-    else
-      outputType = 'R';
-    end
+  if isfield(indata, 'datatype') && (length(indata.datatype) == length(indata.vars))
+    haveDatatypeInfo = 1;
     
     if strcmp(outputType,'R')
       datatype = strrep(indata.datatype,'n','numeric');
@@ -191,7 +195,7 @@ if isfield(defs, 'write_datatype') && defs.write_datatype
 end % if isfield(params, 'write_datatype')
 
 % iterate over rows, print data
-for k=1:length(indata.data{1})
+for k=1:size(indata.data{1},1)
   % generate data string for the given row
   inputstr = '';
   for l=1:nc
@@ -203,9 +207,38 @@ for k=1:length(indata.data{1})
         data = data{1};
       end
     end
-    if isnumeric(data) || islogical(data)
-      data = num2str(data); 
+    
+    if isnan(data)
+      if strcmp(outputType,'R')
+        data = 'NA';
+      end
+      
+    elseif isnumeric(data)
+      % Check whether we have datatype info and this is actually a logical
+      if haveDatatypeInfo && strcmp(outputType,'R') && strcmp(datatype{l},'logical')
+        if data
+          data = 'TRUE';
+        else
+          data = 'FALSE';
+        end
+      else
+        data = num2str(data);
+      end
+      
+    elseif islogical(data)
+      if strcmp(outputType,'R')
+        if ~data
+          data = 'FALSE';
+        else
+          data = 'TRUE';
+        end
+      else
+        data = num2str(data);
+      end
     end
+    
+    % If we are outputting for R, generate conversion if datatype is known
+    
     if l > 1, inputstr = [inputstr delim]; end
     
     if encloseCommas && any(data == ',')
