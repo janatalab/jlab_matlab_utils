@@ -23,7 +23,11 @@ end
 if nargin < 4
   orientation = 'vertical';
 	if strcmp(get(h(1),'Horizontal'),'on')
-		orientation = 'horizontal';
+    if verLessThan('matlab','8.4.0')
+      orientation = 'horizontal';
+    else
+      orientation = 'new_horizontal';
+    end
 	end
 end
 
@@ -32,7 +36,6 @@ groupwidth = 0.8;
 obj_type =  get(h(1),'Type');
 switch obj_type
   case {'patch','bar'}
-    
   case 'hggroup'
     % The patch object is actually buried deeper down. It is a child of the
     % hggroup object
@@ -137,7 +140,28 @@ for icond = 1:ncond
         else
           line([xstop xstop], [ystart ystop]);
         end
-
+      case 'new_horizontal'
+        xlength = errordata(ibar,icond);
+        xstart = ydata(ibar);
+        xstop = xstart + xlength;
+        
+        % Draw the errorbar
+        yoffset = xdata(ibar);
+        if ~isempty(linecolor)
+          line([xstart xstop], [yoffset yoffset],'color',linecolor);
+        else
+          line([xstart xstop], [yoffset yoffset]);
+        end   
+        
+        % Draw the cap
+        cap_length = widthPerCond*get(h(icond),'BarWidth')/2;
+        ystart = yoffset-cap_length/2;
+        ystop = ystart + cap_length;
+        if ~isempty(linecolor)
+          line([xstop xstop], [ystart ystop],'color',linecolor);
+        else
+          line([xstop xstop], [ystart ystop]);
+        end           
     end % switch
   end % for ibar=
 end % for icond=
