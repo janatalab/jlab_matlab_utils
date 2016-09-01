@@ -14,6 +14,9 @@ function analysis_list = ensemble_jobman(analysis_list,params)
 %                          listed will not run, but their results (from a
 %                          previous run) will be available.
 %
+% params.resultNameIsAnalysisName: if True, results.name will be set to the
+%                          name of the analysis
+%
 %
 %
 % This function serves as a controller for the Ensemble Matlab
@@ -37,6 +40,8 @@ function analysis_list = ensemble_jobman(analysis_list,params)
 %             results structure
 % 02Sep2014 - Fixed handling of run_analyses vector passed in as column
 %             rather than row vector
+% 01Sep2016 - Added option to force the name of the result structure to
+%             take on the analysis name
 
 
 %if conn_id is set in params, then open a mysql connection
@@ -164,6 +169,11 @@ for aidx = 1:length(idxs)
   
   result = fh(indata,analysisParams);
   
+  % Set the name to the analysis name if isfield(analysisParams,'resultNameIsAnalysisName')
+  if isfield(analysisParams,'resultNameIsAnalysisName') && analysisParams.resultNameIsAnalysisName
+    result.name = analysis_name;
+  end
+  
   analysis_list{ia}.results = result;
   
   % Check to see if the name of the result is empty, and if so, populate it
@@ -171,12 +181,12 @@ for aidx = 1:length(idxs)
   numResults = length(result);
   for ires = 1:numResults
     if isstruct(result(ires))
-      if ~isfield(result(ires),'name') || isempty(result(ires).name)
+      if ~isfield(result(ires),'name') || isempty(result(ires).name) || isfield(params,'resultNameIsAnalysisName') && params.resultNameIsAnalysisName
         analysis_list{ia}.results(ires).name = analysis_name;
       else
         continue
       end
-    elseif ~isfield(analysis_list{ia}.results{ires},'name') || isempty(analysis_list{ia}.results{ires}.name)
+    elseif ~isfield(analysis_list{ia}.results{ires},'name') || isempty(analysis_list{ia}.results{ires}.name) || isfield('params','resultNameIsAnalysisName') && params.resultNameIsAnalysisName
       analysis_list{ia}.results{ires}.name = analysis_name;
     end
   end

@@ -237,8 +237,6 @@ for k=1:size(indata.data{1},1)
       end
     end
     
-    % If we are outputting for R, generate conversion if datatype is known
-    
     if l > 1, inputstr = [inputstr delim]; end
     
     if encloseCommas && any(data == ',')

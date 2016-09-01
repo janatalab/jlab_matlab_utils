@@ -97,7 +97,20 @@ switch item_str
 end
 
 % Set the output structure name
-out_st.name = sprintf('by_%s', item_str);
+if isfield(params, 'outputNameType')
+  outputNameType = params.outputNameType;
+else
+  outputNameType = 'itemType';
+end
+
+switch outputNameType
+  case 'itemType'
+    out_st.name = sprintf('by_%s', item_str);
+  case 'analysisName'
+    out_st.name = '';  % allow ensemble_jobman to populate it
+  otherwise
+    out_st.name = '';
+end
 
 % Add item types to the list of output variables
 out_st.vars = [item_str out_st.vars];
