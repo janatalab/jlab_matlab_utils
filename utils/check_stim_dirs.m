@@ -28,10 +28,12 @@ function new_stimlist = check_stim_dirs(stimlist,varargin)
 % December 29, 2006 Petr Janata
 % April 30,2008 - Added escaping of irregular directory name
 %                 characters(space, parenthesis, etc.)
+% 08Jul2019 - added ability to copy source file from atonal via rsync
 
 destroot = '';
 srcroot = '';
 MAKE_SYMLINK = false;
+RSYNC = false;
 VERBOSE = false;
 new_stimlist = {};
 
@@ -43,7 +45,17 @@ for iarg = 1:2:narg
       destroot = varargin{iarg+1};
     case {'srcroot'}
       srcroot = varargin{iarg+1};
-      MAKE_SYMLINK = true;
+      
+      % Check whether the source is something we need to make an rsync copy
+      % from. This check is a bit of a hack right now, and should be made
+      % less machine-specific.
+      if ~isempty(regexp(srcroot,'atonal.ucdavis.edu','once'))
+        RSYNC = true;
+      else
+        MAKE_SYMLINK = true;
+      end
+      
+      
     case {'verbose'}
       VERBOSE = varargin{iarg+1};
     otherwise
@@ -83,13 +95,18 @@ for istim = 1:nstims
       curr_dir = fullfile(curr_dir,fext(2:end));
       check_dir(curr_dir, VERBOSE);
       
-      if MAKE_SYMLINK
+      if MAKE_SYMLINK || RSYNC
         srcfile = fullfile(srcroot,stimlist{istim});
         linkname = fullfile(curr_dir,tok);
-        if ~exist(linkname)
+        if ~exist(linkname) 
           srcfile = regexprep(srcfile,'[()'',& ]','\\$0');
           linkname_escaped = regexprep(linkname,'[()'',& ]','\\$0');
-          unix_str = sprintf('ln -s %s %s >& /dev/null', srcfile, linkname_escaped);
+          if MAKE_SYMLINK
+            unix_str = sprintf('ln -s %s %s >& /dev/null', srcfile, linkname_escaped);
+          else
+            unix_str = sprintf('rsync -a "%s" "%s" >& /dev/null', srcfile, linkname);
+          end
+          
           if VERBOSE
             fprintf('%s\n', unix_str);
           end
