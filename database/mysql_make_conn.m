@@ -54,7 +54,7 @@ end
 
 if ~isfield(mysql_info, 'conn_id') || isempty(mysql_info.conn_id)
   mysql_info.conn_id = 0;
-end;
+end
 
 if mysql(mysql_info.conn_id,'status')
   % Need to open a mysql connection
@@ -67,7 +67,7 @@ if mysql(mysql_info.conn_id,'status')
       isempty(mysql_info.database)
     error('%s: insufficient information specified to establish connection')
   else
-    status = mysql(mysql_info.conn_id,'open',mysql_info.host,mysql_info.user,mysql_info.passwd);
+    conn_id = mysql(mysql_info.conn_id,'open',mysql_info.host,mysql_info.user,mysql_info.passwd);
     database_str = sprintf('use %s', mysql_info.database);
     mysql(mysql_info.conn_id,database_str);
   end
